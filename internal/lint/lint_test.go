@@ -39,6 +39,7 @@ func TestRunRejectsBadInput(t *testing.T) {
 		{"invalid YAML", "invalid-yaml.yaml", []string{"invalid-yaml.yaml:7:10:"}},
 		{"invalid JSON", "invalid-json.json", []string{"invalid-json.json:4:23:"}},
 		{"spec without info", "invalid-spec-no-info.yaml", []string{"invalid-spec-no-info.yaml", "info"}},
+		{"undefined scheme does not hide another error", "invalid-spec-and-undefined-scheme.yaml", []string{"invalid-spec-and-undefined-scheme.yaml", "info"}},
 		{"Swagger 2.0", "swagger-2.0.yaml", []string{"swagger-2.0.yaml", "Swagger 2.0", "not supported yet"}},
 	}
 	for _, tt := range tests {

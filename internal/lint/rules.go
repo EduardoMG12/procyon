@@ -23,7 +23,7 @@ func (r Rule) DocsURL() string {
 }
 
 // rules is every rule Procyon runs, in ID order.
-var rules = []Rule{prc001}
+var rules = []Rule{prc001, prc002}
 
 var prc001 = Rule{
 	ID:       "PRC001",
@@ -99,4 +99,15 @@ func locate(origin *openapi3.Origin) Location {
 		return Location{}
 	}
 	return Location{File: origin.Key.File, Line: origin.Key.Line, Column: origin.Key.Column}
+}
+
+// locateField points at one field of an element (the url of a server), or at
+// the element itself when the field has no recorded location.
+func locateField(origin *openapi3.Origin, field string) Location {
+	if origin != nil {
+		if loc, ok := origin.Fields.Lookup(field); ok {
+			return Location{File: loc.File, Line: loc.Line, Column: loc.Column}
+		}
+	}
+	return locate(origin)
 }
