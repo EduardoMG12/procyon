@@ -1,0 +1,39 @@
+openapi: 3.1.0
+info:
+  title: Shop
+  version: 1.0.0
+security:
+  - bearer: []
+paths:
+  /notes:
+    get:
+      responses:
+        "200":
+          description: Every note
+          content:
+            application/json:
+              schema:
+                type: [array, "null"]
+                items:
+                  type: string
+                  maxLength: 10
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  maxLength: 10
+                body:
+                  type: [string, "null"]
+      responses:
+        "201":
+          description: Created
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
