@@ -1,5 +1,7 @@
 package lint
 
+import "fmt"
+
 // Severity is how serious a finding is. The order matters: a higher value is
 // more serious, which is how the fail threshold compares them.
 type Severity int
@@ -23,6 +25,16 @@ func (s Severity) String() string {
 		return "critical"
 	}
 	return "unknown"
+}
+
+// ParseSeverity reads a severity name as written in flags and config.
+func ParseSeverity(name string) (Severity, error) {
+	for s := Low; s <= Critical; s++ {
+		if s.String() == name {
+			return s, nil
+		}
+	}
+	return 0, fmt.Errorf("unknown severity %q (use critical, high, medium, low)", name)
 }
 
 // Location is where a finding points in the original spec files.
