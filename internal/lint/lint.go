@@ -87,10 +87,8 @@ func load(path string) (*openapi3.T, *specFiles, error) {
 		return nil, nil, fmt.Errorf("%s: Swagger 2.0 is not supported yet; convert it to OpenAPI 3 (support is tracked in issue #13)", path)
 	}
 
-	files, err := newSpecFiles(path, data)
-	if err != nil {
-		return nil, nil, fmt.Errorf("%s: %w", path, err)
-	}
+	files := newSpecFiles(path, data)
+	defer files.close()
 	loader := openapi3.NewLoader()
 	loader.IncludeOrigin = true
 	loader.ReadFromURIFunc = files.read

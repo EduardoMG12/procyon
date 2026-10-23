@@ -139,3 +139,73 @@ func TestRefThroughSymlinkCannotLeaveTheSpecDirectory(t *testing.T) {
 		t.Fatalf("Run = %v, want an error saying the $ref points outside", err)
 	}
 }
+
+// The attack found in review: an absolute $ref through a committed symlink
+// and "..", where the path checked and the path read used to differ.
+func TestRefCannotEscapeWithAbsolutePathThroughSymlink(t *testing.T) {
+	outside := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(outside, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stolen := "get:\n  description: STOLEN\n  responses:\n    \"200\":\n      description: OK\n"
+	if err := os.WriteFile(filepath.Join(outside, "secret.yaml"), []byte(stolen), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.Symlink(filepath.Join(outside, "sub"), filepath.Join(dir, "link")); err != nil {
+		t.Skipf("cannot create symlinks here: %v", err)
+	}
+	// A harmless decoy where the cleaned path points, so a check on the
+	// cleaned path passes while a read of the raw path follows the link.
+	decoy := "get:\n  responses:\n    \"200\":\n      description: OK\n"
+	if err := os.WriteFile(filepath.Join(dir, "secret.yaml"), []byte(decoy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ref := filepath.ToSlash(filepath.Join(dir, "link")) + "/../secret.yaml"
+	spec := filepath.Join(dir, "api.yaml")
+	body := "openapi: 3.0.3\ninfo:\n  title: Shop\n  version: 1.0.0\npaths:\n  /orders:\n    $ref: \"" + ref + "\"\n"
+	if err := os.WriteFile(spec, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	report, err := lint.Run(spec, lint.Options{})
+	for _, lines := range report.Sources {
+		if strings.Contains(strings.Join(lines, "\n"), "STOLEN") {
+			t.Fatal("Procyon read a file outside the spec's directory")
+		}
+	}
+	if err == nil && len(report.Findings) > 0 {
+		// Reading the decoy inside the directory is fine; the stolen file is not.
+		t.Logf("read the decoy: %s", report.Findings[0].Location.File)
+	}
+}
+
+// A $ref to an absolute path outside the allowed directories is refused
+// without touching the file system: same message whether the file exists or
+// not, so a spec cannot probe the machine running Procyon.
+func TestRefOutsideGivesTheSameErrorWhetherOrNotTheFileExists(t *testing.T) {
+	existing := filepath.Join(t.TempDir(), "exists.yaml")
+	if err := os.WriteFile(existing, []byte("get: {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	missing := filepath.Join(t.TempDir(), "missing.yaml")
+	var messages []string
+	for _, target := range []string{existing, missing} {
+		dir := t.TempDir()
+		spec := filepath.Join(dir, "api.yaml")
+		body := "openapi: 3.0.3\ninfo:\n  title: Shop\n  version: 1.0.0\npaths:\n  /orders:\n    $ref: \"" + filepath.ToSlash(target) + "\"\n"
+		if err := os.WriteFile(spec, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, err := lint.Run(spec, lint.Options{})
+		if err == nil || !strings.Contains(err.Error(), "outside") {
+			t.Fatalf("Run = %v, want an error saying the $ref points outside", err)
+		}
+		messages = append(messages, strings.ReplaceAll(err.Error(), filepath.ToSlash(target), "TARGET"))
+	}
+	for i := range messages {
+		messages[i] = messages[i][strings.Index(messages[i], "$ref"):]
+	}
+	if messages[0] != messages[1] {
+		t.Errorf("messages differ, revealing whether the file exists:\n %s\n %s", messages[0], messages[1])
+	}
+}
