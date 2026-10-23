@@ -23,7 +23,7 @@ func (r Rule) DocsURL() string {
 }
 
 // rules is every rule Procyon runs, in ID order.
-var rules = []Rule{prc001}
+var rules = []Rule{prc001, prc005}
 
 var prc001 = Rule{
 	ID:       "PRC001",

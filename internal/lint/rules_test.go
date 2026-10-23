@@ -26,6 +26,16 @@ func TestRules(t *testing.T) {
 			"PRC001 prc001-no-auth-tabs.json:9:4 GET /orders",
 		}},
 		{"prc001-global-security.yaml", []string{}},
+		{"prc005-secrets.yaml", []string{
+			"PRC005 prc005-secrets.yaml:39:25 GET /sessions",
+			"PRC005 prc005-secrets.yaml:70:9 GET /sessions",
+			"PRC005 prc005-secrets.yaml:72:9 GET /sessions",
+			"PRC005 prc005-secrets.yaml:74:9 GET /sessions",
+			"PRC005 prc005-secrets.yaml:76:9 GET /sessions",
+			"PRC005 prc005-secrets.yaml:78:9 GET /sessions",
+			"PRC005 prc005-secrets.yaml:88:9 GET /sessions",
+			"PRC005 prc005-secrets.yaml:95:13 GET /sessions",
+		}},
 		{"prc001-empty-override.yaml", []string{
 			"PRC001 prc001-empty-override.yaml:13:5 DELETE /orders",
 		}},
