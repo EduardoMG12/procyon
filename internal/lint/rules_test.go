@@ -26,6 +26,15 @@ func TestRules(t *testing.T) {
 			"PRC001 prc001-no-auth-tabs.json:9:4 GET /orders",
 		}},
 		{"prc001-global-security.yaml", []string{}},
+		{"prc009-mass-assignment.yaml", []string{
+			"PRC009 prc009-mass-assignment.yaml:34:17 PATCH /users/{id}",
+			"PRC009 prc009-mass-assignment.yaml:66:9 POST /users",
+			"PRC009 prc009-mass-assignment.yaml:68:9 POST /users",
+			"PRC009 prc009-mass-assignment.yaml:70:9 POST /users",
+			"PRC009 prc009-mass-assignment.yaml:74:9 POST /users",
+			"PRC009 prc009-mass-assignment.yaml:78:9 POST /users",
+			"PRC009 prc009-mass-assignment.yaml:90:13 POST /users",
+		}},
 		{"prc005-secrets.yaml", []string{
 			"PRC005 prc005-secrets.yaml:39:25 GET /sessions",
 			"PRC005 prc005-secrets.yaml:70:9 GET /sessions",
