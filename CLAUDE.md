@@ -97,4 +97,9 @@ lazily. See `docs/agents/domain.md`.
 
 Planning done on 2026-10-23: vision ([0000](docs/prds/0000-vision.md)) and
 v0.1 PRD ([0001](docs/prds/0001-v0.1-spec-lint.md)) written, glossary in
-`CONTEXT.md`. No code yet. Next: the v0.1 spec issue and its tickets.
+`CONTEXT.md`. No code yet. v0.1 is tracked in spec issue #2 with tickets
+#3–#21 (sub-issues of #2, blocking edges set on GitHub). Start with #3
+(skeleton), then #4 (PRC001 end to end); after #4 most tickets can run in
+parallel. #14 vendors the deliberately vulnerable crAPI and VAmPI specs as
+known-bad fixtures with an answer key, to catch false negatives; their
+running apps are candidate targets for v0.2.
