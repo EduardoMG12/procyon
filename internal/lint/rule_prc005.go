@@ -31,11 +31,11 @@ func checkPRC005(doc *openapi3.T) []Finding {
 		if method == http.MethodGet {
 			lists = append(lists, credentialWords)
 		}
-		forEachResponseProperty(op, func(name string, prop *openapi3.Schema) {
-			if prop.Type.Is("boolean") || !matchesAny(name, lists) {
+		forEachResponseProperty(op, func(name string, prop *openapi3.SchemaRef) {
+			if booleanOnly(prop.Value) || !matchesAny(name, lists) {
 				return // hasPassword, passwordSet: about the secret, not the secret
 			}
-			loc := locate(prop.Origin)
+			loc := propertyLocation(prop)
 			if reported[loc] {
 				return
 			}
@@ -52,6 +52,32 @@ func checkPRC005(doc *openapi3.T) []Finding {
 	return findings
 }
 
+// booleanOnly reports whether a schema can only be a boolean (or null):
+// type: boolean, or OpenAPI 3.1's type: [boolean, "null"].
+func booleanOnly(s *openapi3.Schema) bool {
+	if s.Type == nil || !s.Type.Includes("boolean") {
+		return false
+	}
+	for _, t := range s.Type.Slice() {
+		if t != "boolean" && t != "null" {
+			return false
+		}
+	}
+	return true
+}
+
+// propertyLocation points where a property is written. For a $ref property
+// that is the property itself, not the shared schema it refers to: two
+// properties referring to one schema are two findings, each in its place.
+func propertyLocation(prop *openapi3.SchemaRef) Location {
+	if prop.Ref != "" {
+		if loc := locate(prop.Origin); loc.Line > 0 {
+			return loc
+		}
+	}
+	return locate(prop.Value.Origin)
+}
+
 func matchesAny(name string, lists [][][]string) bool {
 	for _, list := range lists {
 		if matches(name, list) {
@@ -65,7 +91,7 @@ func matchesAny(name string, lists [][][]string) bool {
 // operation's responses can return, following nested objects, array items,
 // allOf/oneOf/anyOf and additionalProperties. Each schema is visited once,
 // so recursive schemas (a User with a manager User) terminate.
-func forEachResponseProperty(op *openapi3.Operation, fn func(name string, prop *openapi3.Schema)) {
+func forEachResponseProperty(op *openapi3.Operation, fn func(name string, prop *openapi3.SchemaRef)) {
 	if op.Responses == nil {
 		return
 	}
@@ -84,7 +110,7 @@ func forEachResponseProperty(op *openapi3.Operation, fn func(name string, prop *
 		sort.Strings(names)
 		for _, name := range names {
 			if prop := s.Properties[name]; prop != nil && prop.Value != nil {
-				fn(name, prop.Value)
+				fn(name, prop)
 				walk(prop)
 			}
 		}

@@ -28,34 +28,54 @@ var (
 		{"token"}, {"apikey"}, {"api", "key"}, {"access", "key"},
 	}
 
-	// metadataWords, after a matched word, mean the field describes the
-	// secret rather than holding it: passwordPolicy, tokenExpiresAt,
-	// tokenType, senhaValidade.
-	metadataWords = []string{
+	// describingWords, right after a matched word, mean the field
+	// describes the secret instead of holding it: passwordPolicy,
+	// tokenExpiresAt, apiKeyId, senhaValidade. Only the next word counts:
+	// senhaEmTextoPlano still holds a password.
+	describingWords = []string{
 		"policy", "rules", "type", "format", "url", "uri", "endpoint",
-		"expires", "expiry", "expiration", "expired", "at", "date", "time",
-		"length", "count", "hint", "required", "set", "changed", "updated",
-		"created", "last", "status",
-		"politica", "regras", "tipo", "validade", "expira", "expiracao", "em", "data",
+		"expires", "expiry", "expiration", "expired", "length", "count",
+		"hint", "required", "set", "changed", "updated", "created", "last",
+		"status", "id", "ids", "identifier", "name", "prefix", "suffix",
+		"arn", "label", "description", "date", "time",
+		"politica", "regras", "tipo", "validade", "expira", "expiracao", "nome",
+	}
+
+	// referenceWords, right before a matched word, make it something other
+	// than a credential: nextPageToken and syncToken are paging cursors,
+	// csrfToken is meant to be handed to the page.
+	referenceWords = []string{
+		"page", "next", "previous", "prev", "continuation", "sync", "cursor",
+		"pagination", "csrf", "xsrf",
 	}
 )
 
 // matches reports whether the field name holds one of the words in list:
-// the word appears whole, and no metadata word follows it.
+// the word appears whole (or as a plural), the word before it does not make
+// it a reference, and the word after it does not make it a description.
 func matches(name string, list [][]string) bool {
 	words := splitWords(name)
 	for i := range words {
 		for _, entry := range list {
 			end := i + len(entry)
-			if end > len(words) || !slices.Equal(words[i:end], entry) {
+			if end > len(words) || !slices.EqualFunc(words[i:end], entry, sameWord) {
 				continue
 			}
-			if !slices.ContainsFunc(words[end:], func(w string) bool { return slices.Contains(metadataWords, w) }) {
-				return true
+			if i > 0 && slices.Contains(referenceWords, words[i-1]) {
+				continue
 			}
+			if end < len(words) && slices.Contains(describingWords, words[end]) {
+				continue
+			}
+			return true
 		}
 	}
 	return false
+}
+
+// sameWord matches a listed word and its plural: tokens, apiKeys, senhas.
+func sameWord(word, listed string) bool {
+	return word == listed || word == listed+"s"
 }
 
 // splitWords splits a field name into lowercase words: userPassword,
