@@ -1,0 +1,26 @@
+openapi: 3.0.3
+info:
+  title: Shop
+  version: 1.0.0
+security:
+  - queryKey: []
+  - headerKey: []
+  - basic: []
+  - bearer: []
+paths: {}
+components:
+  securitySchemes:
+    queryKey:
+      type: apiKey
+      in: query
+      name: api_key
+    headerKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    basic:
+      type: http
+      scheme: basic
+    bearer:
+      type: http
+      scheme: bearer
