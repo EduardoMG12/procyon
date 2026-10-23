@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/goccy/go-yaml"
@@ -55,14 +56,29 @@ func load(path string) (*openapi3.T, error) {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 
+	var version struct {
+		Swagger string `yaml:"swagger"`
+	}
+	if err := yaml.Unmarshal(data, &version); err == nil && version.Swagger != "" {
+		return nil, fmt.Errorf("%s: Swagger 2.0 is not supported yet; convert it to OpenAPI 3 (support is tracked in issue #13)", path)
+	}
+
 	loader := openapi3.NewLoader()
 	loader.IncludeOrigin = true
 	doc, err := loader.LoadFromDataWithPath(data, &url.URL{Path: path})
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	if err := doc.Validate(context.Background()); err != nil {
-		return nil, fmt.Errorf("%s: invalid spec: %w", path, err)
+	// Wrong examples and defaults are documentation mistakes, not security
+	// problems, and common in real specs: they must not stop a lint.
+	err = doc.Validate(context.Background(),
+		openapi3.DisableExamplesValidation(),
+		openapi3.DisableSchemaDefaultsValidation())
+	if err != nil {
+		// Some validation errors append the schema and value on extra lines;
+		// the first line says what is wrong.
+		msg, _, _ := strings.Cut(err.Error(), "\n")
+		return nil, fmt.Errorf("%s: invalid spec: %s", path, msg)
 	}
 	return doc, nil
 }

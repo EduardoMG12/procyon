@@ -13,6 +13,8 @@ func TestRunAcceptsValidSpecs(t *testing.T) {
 		"valid-3.1.yaml",
 		"valid-3.0.json",
 		"valid-3.1.json",
+		"valid-wrong-example.yaml", // examples and defaults are not security: never block a lint
+		"valid-wrong-default.yaml",
 	}
 	for _, name := range specs {
 		t.Run(name, func(t *testing.T) {
@@ -37,6 +39,7 @@ func TestRunRejectsBadInput(t *testing.T) {
 		{"invalid YAML", "invalid-yaml.yaml", []string{"invalid-yaml.yaml:7:10:"}},
 		{"invalid JSON", "invalid-json.json", []string{"invalid-json.json:4:23:"}},
 		{"spec without info", "invalid-spec-no-info.yaml", []string{"invalid-spec-no-info.yaml", "info"}},
+		{"Swagger 2.0", "swagger-2.0.yaml", []string{"swagger-2.0.yaml", "Swagger 2.0", "not supported yet"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
