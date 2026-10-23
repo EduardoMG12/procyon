@@ -39,9 +39,16 @@ paths:
                   readOnly: true
                 tags:
                   type: array
+                  maxItems: 5
                   items:
                     type: string
-                    maxLength: 30
+                avatar:
+                  type: string
+                  format: byte
+                  maxLength: 100000
+                photo:
+                  type: string
+                  format: byte
                 lines:
                   type: array
                   maxItems: 100
@@ -80,6 +87,51 @@ paths:
       responses:
         "200":
           description: A page of customers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+  /bulk:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+                maxLength: 50
+      responses:
+        "202":
+          description: Accepted
+  /odata/orders:
+    get:
+      parameters:
+        - name: $top
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: A page of orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+  /stats:
+    get:
+      parameters:
+        - name: count
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Every stat
           content:
             application/json:
               schema:
