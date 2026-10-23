@@ -34,7 +34,14 @@ func TestRules(t *testing.T) {
 			"PRC008 prc008-limits.yaml:9:5 GET /orders",
 			"PRC008 prc008-limits.yaml:26:17 POST /orders",
 			"PRC008 prc008-limits.yaml:40:17 POST /orders",
-			"PRC008 prc008-limits.yaml:51:23 POST /orders",
+			"PRC008 prc008-limits.yaml:49:17 POST /orders",
+			"PRC008 prc008-limits.yaml:58:23 POST /orders",
+			"PRC008 prc008-limits.yaml:101:13 POST /bulk",
+			"PRC008 prc008-limits.yaml:126:5 GET /stats",
+		}},
+		{"prc008-nullable-3.1.yaml", []string{"PRC008"}, []string{
+			"PRC008 prc008-nullable-3.1.yaml:9:5 GET /notes",
+			"PRC008 prc008-nullable-3.1.yaml:30:17 POST /notes",
 		}},
 		{"prc009-mass-assignment.yaml", []string{"PRC009"}, []string{
 			"PRC009 prc009-mass-assignment.yaml:34:17 PATCH /users/{id}",
