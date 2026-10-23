@@ -61,3 +61,37 @@ func TestRunRejectsBadInput(t *testing.T) {
 		})
 	}
 }
+
+func TestRunKeepsSourceLinesWithoutCarriageReturns(t *testing.T) {
+	report, err := lint.Run(spec("crlf.yaml"), lint.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := report.Sources[spec("crlf.yaml")]
+	if len(lines) != 10 {
+		t.Fatalf("got %d source lines, want 10", len(lines))
+	}
+	if got, want := lines[6], "    get:"; got != want {
+		t.Errorf("line 7 = %q, want %q", got, want)
+	}
+}
+
+// kin-openapi records each element's file as a URL ("dir%20with%20space",
+// "%5C" for Windows backslashes). Findings must use the path as the user
+// wrote it, and it must be the key of the report's source lines.
+func TestFindingsUseThePathAsGiven(t *testing.T) {
+	path := spec("dir with space/no-auth.yaml")
+	report, err := lint.Run(path, lint.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Findings) != 1 {
+		t.Fatalf("got %d findings, want 1", len(report.Findings))
+	}
+	if got := report.Findings[0].Location.File; got != path {
+		t.Errorf("finding file = %q, want %q", got, path)
+	}
+	if _, ok := report.Sources[report.Findings[0].Location.File]; !ok {
+		t.Errorf("no source lines for %q", report.Findings[0].Location.File)
+	}
+}

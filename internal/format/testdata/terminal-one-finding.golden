@@ -1,0 +1,15 @@
+HIGH    PRC001  Operation has no authentication
+        specs/shop.yaml:9:5  GET /orders
+
+           7 | paths:
+           8 |   /orders:
+        >  9 |     get:
+          10 |       responses:
+          11 |         "200":
+
+        Why:  Anyone who can reach the API can call this operation, without
+              proving who they are.
+        Fix:  Add a security requirement to the operation or to the whole spec.
+        More: https://github.com/EduardoMG12/procyon/blob/main/docs/rules/PRC001.md
+
+FAILED  1 high · 0 medium · 0 low  (fails at: high)
