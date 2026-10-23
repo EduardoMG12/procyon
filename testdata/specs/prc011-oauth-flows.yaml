@@ -1,0 +1,23 @@
+openapi: 3.0.3
+info:
+  title: Shop
+  version: 1.0.0
+paths: {}
+components:
+  securitySchemes:
+    legacy:
+      type: oauth2
+      flows:
+        implicit:
+          authorizationUrl: https://auth.example.com/authorize
+          scopes: {}
+        password:
+          tokenUrl: https://auth.example.com/token
+          scopes: {}
+    modern:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://auth.example.com/authorize
+          tokenUrl: https://auth.example.com/token
+          scopes: {}

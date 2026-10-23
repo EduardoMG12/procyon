@@ -28,6 +28,7 @@ func TestRules(t *testing.T) {
 		{"prc001-global-security.yaml", []string{}},
 		{"public-operation.yaml", []string{
 			"PRC001 public-operation.yaml:13:5 GET /orders",
+		}},
 		// 2 schemes × 70 regions × 3 versions: more combinations than
 		// Procyon expands, and http must still be found, on every run.
 		{"prc004-many-values.yaml", []string{
@@ -43,6 +44,22 @@ func TestRules(t *testing.T) {
 			"PRC004 prc004-servers.yaml:12:5 ",
 			"PRC004 prc004-servers.yaml:22:9 ",
 			"PRC004 prc004-servers.yaml:25:11 GET /orders",
+		}},
+		{"prc002-undefined-scheme.yaml", []string{
+			"PRC002 prc002-undefined-scheme.yaml:10:7 GET /orders",
+		}},
+		// OpenAPI 3.2 allows a URI reference as the scheme name: not undefined.
+		{"prc002-uri-reference-3.2.yaml", []string{}},
+		{"prc002-undefined-global.yaml", []string{
+			"PRC002 prc002-undefined-global.yaml:5:1 ",
+		}},
+		{"prc003-weak-schemes.yaml", []string{
+			"PRC003 prc003-weak-schemes.yaml:13:5 ",
+			"PRC003 prc003-weak-schemes.yaml:21:5 ",
+		}},
+		{"prc011-oauth-flows.yaml", []string{
+			"PRC011 prc011-oauth-flows.yaml:11:9 ",
+			"PRC011 prc011-oauth-flows.yaml:14:9 ",
 		}},
 		{"prc001-empty-override.yaml", []string{
 			"PRC001 prc001-empty-override.yaml:13:5 DELETE /orders",
