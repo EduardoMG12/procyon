@@ -1,0 +1,41 @@
+name: Bug report
+description: Procyon crashed, printed a wrong location, or does not behave as documented.
+labels: [needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A wrong or missing finding? Use the *False positive or false negative* template.
+        A security problem in Procyon itself? Do not open an issue: see SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Procyon version
+      description: "`procyon --version`"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: Ubuntu 24.04 / macOS 15 / Windows 11 / GitHub Actions ubuntu-latest
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command and spec
+      description: The exact command, and the smallest spec that reproduces it (remove anything private).
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what happened
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Procyon's output
+      render: text
