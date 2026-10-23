@@ -33,7 +33,7 @@ var prc001 = Rule{
 	check: func(doc *openapi3.T) []Finding {
 		var findings []Finding
 		forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-			if !unauthenticated(doc, op) {
+			if !unauthenticated(doc, op) || publicReason(op) != "" {
 				return
 			}
 			findings = append(findings, Finding{
