@@ -19,6 +19,12 @@ func TestRules(t *testing.T) {
 		{"prc001-no-auth.yaml", []string{
 			"PRC001 prc001-no-auth.yaml:7:5 GET /orders",
 		}},
+		{"prc001-no-auth.json", []string{
+			"PRC001 prc001-no-auth.json:6:7 GET /orders",
+		}},
+		{"prc001-no-auth-tabs.json", []string{
+			"PRC001 prc001-no-auth-tabs.json:9:4 GET /orders",
+		}},
 		{"prc001-global-security.yaml", []string{}},
 		{"prc001-empty-override.yaml", []string{
 			"PRC001 prc001-empty-override.yaml:13:5 DELETE /orders",

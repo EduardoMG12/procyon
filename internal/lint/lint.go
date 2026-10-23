@@ -86,7 +86,11 @@ func load(path string) (*openapi3.T, error) {
 
 	loader := openapi3.NewLoader()
 	loader.IncludeOrigin = true
-	doc, err := loader.LoadFromDataWithPath(data, &url.URL{Path: path})
+	// kin-openapi records locations only on its YAML path, and it tries JSON
+	// first. A trailing YAML comment makes the JSON attempt fail while the
+	// file stays valid YAML (JSON is YAML) with every line and column
+	// unchanged, so JSON specs get locations too.
+	doc, err := loader.LoadFromDataWithPath(append(data, "\n# procyon\n"...), &url.URL{Path: path})
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
