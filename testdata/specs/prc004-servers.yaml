@@ -1,0 +1,33 @@
+openapi: 3.0.3
+info:
+  title: Shop
+  version: 1.0.0
+servers:
+  - url: http://api.example.com
+  - url: https://api.example.com
+  - url: http://localhost:8080
+  - url: http://127.0.0.1
+  - url: http://[::1]:3000
+  - url: /v1
+  - url: "{scheme}://api.example.com"
+    variables:
+      scheme:
+        default: https
+        enum: [https, http]
+security:
+  - bearer: []
+paths:
+  /orders:
+    servers:
+      - url: http://orders.example.com
+    get:
+      servers:
+        - url: http://get.example.com
+      responses:
+        "200":
+          description: Orders
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
