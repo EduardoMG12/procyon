@@ -60,6 +60,14 @@ experience, not on the number of checks.
 | **v0.2 — Runtime tests** | Starts a disposable copy of the API (Docker) with seeded test accounts, checks that user A's objects are unreachable by user B and by anonymous callers (BOLA), checks TLS, checks that malformed input is rejected, then tears everything down. Only tests operations changed in the PR. Posts a PR comment with an authorization matrix | CI, on every PR | not written |
 | **v0.3 — Security QA environment** | Runs continuously against a permanent security-QA environment (next to staging and prod), keeps history and trends, reads the spec from a URL | A long-lived environment | not written |
 
+**Benchmark against known-vulnerable APIs.** v0.2 is validated against every
+well-known deliberately vulnerable API that runs in Docker (OWASP crAPI,
+VAmPI, OWASP Juice Shop, dvws-node, vAPI, …), plus a small vulnerable API of
+our own with a fixed twin. A scheduled CI job (not every PR, these are heavy)
+runs Procyon against each one and publishes a table of known vulnerabilities
+found versus missed. GPL-licensed projects are only run as external images,
+never copied into this repository.
+
 v0.2 is the differentiator: existing runtime tools expect the user to provide
 a running API; Procyon will start the throwaway environment itself. v0.1 is
 useful on its own and lays the foundation (spec loading, locations, rules,
