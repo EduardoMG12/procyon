@@ -63,9 +63,9 @@ func runLint(args []string, stdout, stderr io.Writer) int {
 }
 
 // useColor reports whether w is a terminal and the user has not opted out
-// with NO_COLOR (https://no-color.org).
+// with a non-empty NO_COLOR (https://no-color.org).
 func useColor(w io.Writer) bool {
-	if _, set := os.LookupEnv("NO_COLOR"); set {
+	if os.Getenv("NO_COLOR") != "" {
 		return false
 	}
 	f, ok := w.(*os.File)

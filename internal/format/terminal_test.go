@@ -69,6 +69,20 @@ func TestTerminal(t *testing.T) {
 				Why: "Nothing limits how big a response can be.", Fix: "Add paging."},
 		}}, false},
 	}
+	// A minified JSON spec: everything on line 1. The excerpt must show a
+	// window around the column, not the whole file once per finding.
+	minified := filepath.Join("specs", "min.json")
+	long := `{"openapi":"3.0.3","info":{"title":"Shop","version":"1.0.0"},"paths":{"/orders":{"get":{"responses":{"200":{"description":"Orders"}}},"post":{"responses":{"201":{"description":"Created"}}}},"/users":{"get":{"responses":{"200":{"description":"Users"}}}}}}`
+	tests = append(tests, struct {
+		golden string
+		report lint.Report
+		color  bool
+	}{"long-line", lint.Report{FailOn: lint.High, Failed: true,
+		Sources: map[string][]string{minified: {long}},
+		Findings: []lint.Finding{{Rule: prc001, Location: lint.Location{File: minified, Line: 1, Column: 150},
+			Operation: "POST /orders", Why: "Anyone can call it.", Fix: "Add security."}},
+	}, false})
+
 	for _, tt := range tests {
 		t.Run(tt.golden, func(t *testing.T) {
 			var got bytes.Buffer

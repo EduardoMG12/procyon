@@ -23,7 +23,9 @@ const (
 	indent       = "        " // under the rule ID in a finding's header
 	labelWidth   = 6          // "Why:  ", "Fix:  "
 	lineWidth    = 80
-	contextLines = 2 // spec lines shown above and below a finding
+	contextLines = 2   // spec lines shown above and below a finding
+	excerptWidth = 100 // longest spec line shown whole
+	excerptLead  = 30  // characters kept before the column in a long line
 
 	reset = "\x1b[0m"
 	bold  = "\x1b[1m"
@@ -88,7 +90,7 @@ func (t *terminal) finding(f lint.Finding, source []string) {
 	t.line(indent + loc)
 	t.line("")
 
-	if t.excerpt(source, f.Location.Line) {
+	if t.excerpt(source, f.Location.Line, f.Location.Column) {
 		t.line("")
 	}
 	t.labelled("Why:", f.Why)
@@ -99,7 +101,7 @@ func (t *terminal) finding(f lint.Finding, source []string) {
 
 // excerpt prints the spec lines around line, marking it. It reports whether
 // it printed anything: a location outside the known source prints nothing.
-func (t *terminal) excerpt(source []string, line int) bool {
+func (t *terminal) excerpt(source []string, line, column int) bool {
 	if line < 1 || line > len(source) {
 		return false
 	}
@@ -111,7 +113,7 @@ func (t *terminal) excerpt(source []string, line int) bool {
 		if n == line {
 			mark = "> "
 		}
-		s := fmt.Sprintf("%s%s%*d | %s", indent, mark, width, n, source[n-1])
+		s := fmt.Sprintf("%s%s%*d | %s", indent, mark, width, n, window(source[n-1], column))
 		if n == line {
 			s = t.paint(bold, s)
 		}
@@ -163,4 +165,25 @@ func wrap(text string, width int) []string {
 		}
 	}
 	return append(lines, current)
+}
+
+// window cuts a long line (a minified JSON spec is one line) to excerptWidth
+// characters around column, marking the cut ends with "…". Shorter lines are
+// returned whole.
+func window(line string, column int) string {
+	runes := []rune(line)
+	if len(runes) <= excerptWidth {
+		return line
+	}
+	start := max(0, column-1-excerptLead)
+	end := min(len(runes), start+excerptWidth)
+	start = max(0, end-excerptWidth)
+	cut := string(runes[start:end])
+	if start > 0 {
+		cut = "…" + cut
+	}
+	if end < len(runes) {
+		cut += "…"
+	}
+	return cut
 }

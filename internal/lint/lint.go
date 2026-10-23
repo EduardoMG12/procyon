@@ -26,6 +26,9 @@ func Run(path string, opts Options) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
+	// kin-openapi records each element's file as a URL: spaces become %20,
+	// Windows backslashes %5C. Findings use the path as the user wrote it.
+	files := map[string]string{specURL(path).String(): path}
 	report := Report{
 		FailOn:  High,
 		Sources: map[string][]string{path: splitLines(data)},
@@ -33,6 +36,9 @@ func Run(path string, opts Options) (Report, error) {
 	for _, rule := range rules {
 		for _, f := range rule.check(doc) {
 			f.Rule = rule
+			if given, ok := files[f.Location.File]; ok {
+				f.Location.File = given
+			}
 			report.Findings = append(report.Findings, f)
 		}
 	}
@@ -93,7 +99,7 @@ func load(path string) (*openapi3.T, []byte, error) {
 	// first. A trailing YAML comment makes the JSON attempt fail while the
 	// file stays valid YAML (JSON is YAML) with every line and column
 	// unchanged, so JSON specs get locations too.
-	doc, err := loader.LoadFromDataWithPath(append(data, "\n# procyon\n"...), &url.URL{Path: path})
+	doc, err := loader.LoadFromDataWithPath(append(data, "\n# procyon\n"...), specURL(path))
 	if err != nil {
 		return nil, nil, fmt.Errorf("%s: %w", path, err)
 	}
@@ -116,4 +122,10 @@ func load(path string) (*openapi3.T, []byte, error) {
 func splitLines(data []byte) []string {
 	text := strings.ReplaceAll(string(data), "\r\n", "\n")
 	return strings.Split(strings.TrimSuffix(text, "\n"), "\n")
+}
+
+// specURL is the location kin-openapi is given for the spec at path, and so
+// the one its origins report.
+func specURL(path string) *url.URL {
+	return &url.URL{Path: path}
 }
