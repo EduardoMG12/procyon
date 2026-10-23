@@ -1,0 +1,7 @@
+openapi: 3.0.3
+info:
+  title: Shop
+  version: 1.0.0
+paths:
+  /orders:
+    $ref: "https://example.com/orders.yaml"

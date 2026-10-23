@@ -1,6 +1,8 @@
 package lint_test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -39,6 +41,9 @@ func TestRunRejectsBadInput(t *testing.T) {
 		{"invalid YAML", "invalid-yaml.yaml", []string{"invalid-yaml.yaml:7:10:"}},
 		{"invalid JSON", "invalid-json.json", []string{"invalid-json.json:4:23:"}},
 		{"spec without info", "invalid-spec-no-info.yaml", []string{"invalid-spec-no-info.yaml", "info"}},
+		{"remote $ref", "ref-remote.yaml", []string{"ref-remote.yaml", "https://example.com/orders.yaml", "never fetches"}},
+		{"missing local $ref", "ref-missing.yaml", []string{"ref-missing.yaml", "missing.yaml"}},
+		{"$ref escaping the working directory", "ref-escapes.yaml", []string{"ref-escapes.yaml", "outside"}},
 		{"Swagger 2.0", "swagger-2.0.yaml", []string{"swagger-2.0.yaml", "Swagger 2.0", "not supported yet"}},
 	}
 	for _, tt := range tests {
@@ -91,5 +96,46 @@ func TestFindingsUseThePathAsGiven(t *testing.T) {
 	}
 	if _, ok := report.Sources[report.Findings[0].Location.File]; !ok {
 		t.Errorf("no source lines for %q", report.Findings[0].Location.File)
+	}
+}
+
+func TestSpecsSplitAcrossLocalFiles(t *testing.T) {
+	path := spec("split/api.yaml")
+	report, err := lint.Run(path, lint.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Findings) != 1 {
+		t.Fatalf("got %d findings, want 1 (PRC001 on GET /orders)", len(report.Findings))
+	}
+	f := report.Findings[0]
+	// The operation is written in paths/orders.yaml, line 1, column 1.
+	want := spec("split/paths/orders.yaml")
+	if f.Location.File != want || f.Location.Line != 1 || f.Location.Column != 1 {
+		t.Errorf("location = %s:%d:%d, want %s:1:1", f.Location.File, f.Location.Line, f.Location.Column, want)
+	}
+	if _, ok := report.Sources[want]; !ok {
+		t.Errorf("no source lines for %s, so no excerpt", want)
+	}
+}
+
+// A symlink inside the spec's directory must not become a way out of it.
+func TestRefThroughSymlinkCannotLeaveTheSpecDirectory(t *testing.T) {
+	secret := filepath.Join(t.TempDir(), "secret.yaml")
+	if err := os.WriteFile(secret, []byte("get:\n  responses: {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.Symlink(secret, filepath.Join(dir, "orders.yaml")); err != nil {
+		t.Skipf("cannot create symlinks here: %v", err)
+	}
+	spec := filepath.Join(dir, "api.yaml")
+	body := "openapi: 3.0.3\ninfo:\n  title: Shop\n  version: 1.0.0\npaths:\n  /orders:\n    $ref: \"./orders.yaml\"\n"
+	if err := os.WriteFile(spec, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := lint.Run(spec, lint.Options{})
+	if err == nil || !strings.Contains(err.Error(), "outside") {
+		t.Fatalf("Run = %v, want an error saying the $ref points outside", err)
 	}
 }

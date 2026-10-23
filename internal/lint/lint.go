@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"net/url"
 	"os"
 	"slices"
 	"strings"
@@ -22,21 +21,16 @@ type Options struct{}
 
 // Run lints the spec at path.
 func Run(path string, opts Options) (Report, error) {
-	doc, data, err := load(path)
+	doc, files, err := load(path)
 	if err != nil {
 		return Report{}, err
 	}
-	// kin-openapi records each element's file as a URL: spaces become %20,
-	// Windows backslashes %5C. Findings use the path as the user wrote it.
-	files := map[string]string{specURL(path).String(): path}
-	report := Report{
-		FailOn:  High,
-		Sources: map[string][]string{path: splitLines(data)},
-	}
+	report := Report{FailOn: High, Sources: files.lines}
 	for _, rule := range rules {
 		for _, f := range rule.check(doc) {
 			f.Rule = rule
-			if given, ok := files[f.Location.File]; ok {
+			// kin-openapi records files as URLs; findings use the path read.
+			if given, ok := files.paths[f.Location.File]; ok {
 				f.Location.File = given
 			}
 			report.Findings = append(report.Findings, f)
@@ -61,7 +55,7 @@ func Run(path string, opts Options) (Report, error) {
 
 // load reads the spec at path, recording the file, line and column of every
 // element so findings can point at the original file.
-func load(path string) (*openapi3.T, []byte, error) {
+func load(path string) (*openapi3.T, *specFiles, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -93,13 +87,14 @@ func load(path string) (*openapi3.T, []byte, error) {
 		return nil, nil, fmt.Errorf("%s: Swagger 2.0 is not supported yet; convert it to OpenAPI 3 (support is tracked in issue #13)", path)
 	}
 
+	files, err := newSpecFiles(path, data)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s: %w", path, err)
+	}
 	loader := openapi3.NewLoader()
 	loader.IncludeOrigin = true
-	// kin-openapi records locations only on its YAML path, and it tries JSON
-	// first. A trailing YAML comment makes the JSON attempt fail while the
-	// file stays valid YAML (JSON is YAML) with every line and column
-	// unchanged, so JSON specs get locations too.
-	doc, err := loader.LoadFromDataWithPath(append(data, "\n# procyon\n"...), specURL(path))
+	loader.ReadFromURIFunc = files.read
+	doc, err := loader.LoadFromDataWithPath(withLocations(data), specURL(path))
 	if err != nil {
 		return nil, nil, fmt.Errorf("%s: %w", path, err)
 	}
@@ -114,7 +109,7 @@ func load(path string) (*openapi3.T, []byte, error) {
 		msg, _, _ := strings.Cut(err.Error(), "\n")
 		return nil, nil, fmt.Errorf("%s: invalid spec: %s", path, msg)
 	}
-	return doc, data, nil
+	return doc, files, nil
 }
 
 // splitLines splits a file into lines without their line endings, LF or
@@ -122,10 +117,4 @@ func load(path string) (*openapi3.T, []byte, error) {
 func splitLines(data []byte) []string {
 	text := strings.ReplaceAll(string(data), "\r\n", "\n")
 	return strings.Split(strings.TrimSuffix(text, "\n"), "\n")
-}
-
-// specURL is the location kin-openapi is given for the spec at path, and so
-// the one its origins report.
-func specURL(path string) *url.URL {
-	return &url.URL{Path: path}
 }
