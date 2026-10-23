@@ -59,3 +59,17 @@ func TestRunRejectsBadInput(t *testing.T) {
 		})
 	}
 }
+
+func TestRunKeepsSourceLinesWithoutCarriageReturns(t *testing.T) {
+	report, err := lint.Run(spec("crlf.yaml"), lint.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := report.Sources[spec("crlf.yaml")]
+	if len(lines) != 10 {
+		t.Fatalf("got %d source lines, want 10", len(lines))
+	}
+	if got, want := lines[6], "    get:"; got != want {
+		t.Errorf("line 7 = %q, want %q", got, want)
+	}
+}

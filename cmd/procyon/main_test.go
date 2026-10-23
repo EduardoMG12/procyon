@@ -139,3 +139,10 @@ func TestLintFindingsExitOneAndPrintThem(t *testing.T) {
 		}
 	}
 }
+
+func TestNoColorWhenStdoutIsNotATerminal(t *testing.T) {
+	r := run(t, "lint", spec("prc001-no-auth.yaml"))
+	if strings.Contains(r.stdout, "\x1b[") {
+		t.Errorf("stdout to a pipe contains ANSI escape codes: %q", r.stdout)
+	}
+}

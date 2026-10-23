@@ -22,11 +22,14 @@ type Options struct{}
 
 // Run lints the spec at path.
 func Run(path string, opts Options) (Report, error) {
-	doc, err := load(path)
+	doc, data, err := load(path)
 	if err != nil {
 		return Report{}, err
 	}
-	var report Report
+	report := Report{
+		FailOn:  High,
+		Sources: map[string][]string{path: splitLines(data)},
+	}
 	for _, rule := range rules {
 		for _, f := range rule.check(doc) {
 			f.Rule = rule
@@ -43,7 +46,7 @@ func Run(path string, opts Options) (Report, error) {
 		)
 	})
 	for _, f := range report.Findings {
-		if f.Rule.Severity >= High {
+		if f.Rule.Severity >= report.FailOn {
 			report.Failed = true
 		}
 	}
@@ -52,17 +55,17 @@ func Run(path string, opts Options) (Report, error) {
 
 // load reads the spec at path, recording the file, line and column of every
 // element so findings can point at the original file.
-func load(path string) (*openapi3.T, error) {
+func load(path string) (*openapi3.T, []byte, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("%s: file not found", path)
+			return nil, nil, fmt.Errorf("%s: file not found", path)
 		}
 		var pathErr *fs.PathError
 		if errors.As(err, &pathErr) {
 			err = pathErr.Err
 		}
-		return nil, fmt.Errorf("%s: %w", path, err)
+		return nil, nil, fmt.Errorf("%s: %w", path, err)
 	}
 
 	// kin-openapi's own syntax errors are off by a line for some YAML
@@ -72,16 +75,16 @@ func load(path string) (*openapi3.T, error) {
 		var syntaxErr *yaml.SyntaxError
 		if errors.As(err, &syntaxErr) && syntaxErr.Token != nil {
 			pos := syntaxErr.Token.Position
-			return nil, fmt.Errorf("%s:%d:%d: %s", path, pos.Line, pos.Column, syntaxErr.Message)
+			return nil, nil, fmt.Errorf("%s:%d:%d: %s", path, pos.Line, pos.Column, syntaxErr.Message)
 		}
-		return nil, fmt.Errorf("%s: %w", path, err)
+		return nil, nil, fmt.Errorf("%s: %w", path, err)
 	}
 
 	var version struct {
 		Swagger string `yaml:"swagger"`
 	}
 	if err := yaml.Unmarshal(data, &version); err == nil && version.Swagger != "" {
-		return nil, fmt.Errorf("%s: Swagger 2.0 is not supported yet; convert it to OpenAPI 3 (support is tracked in issue #13)", path)
+		return nil, nil, fmt.Errorf("%s: Swagger 2.0 is not supported yet; convert it to OpenAPI 3 (support is tracked in issue #13)", path)
 	}
 
 	loader := openapi3.NewLoader()
@@ -92,7 +95,7 @@ func load(path string) (*openapi3.T, error) {
 	// unchanged, so JSON specs get locations too.
 	doc, err := loader.LoadFromDataWithPath(append(data, "\n# procyon\n"...), &url.URL{Path: path})
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+		return nil, nil, fmt.Errorf("%s: %w", path, err)
 	}
 	// Wrong examples and defaults are documentation mistakes, not security
 	// problems, and common in real specs: they must not stop a lint.
@@ -103,7 +106,14 @@ func load(path string) (*openapi3.T, error) {
 		// Some validation errors append the schema and value on extra lines;
 		// the first line says what is wrong.
 		msg, _, _ := strings.Cut(err.Error(), "\n")
-		return nil, fmt.Errorf("%s: invalid spec: %s", path, msg)
+		return nil, nil, fmt.Errorf("%s: invalid spec: %s", path, msg)
 	}
-	return doc, nil
+	return doc, data, nil
+}
+
+// splitLines splits a file into lines without their line endings, LF or
+// CRLF, so excerpts look the same for specs written on any system.
+func splitLines(data []byte) []string {
+	text := strings.ReplaceAll(string(data), "\r\n", "\n")
+	return strings.Split(strings.TrimSuffix(text, "\n"), "\n")
 }

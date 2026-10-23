@@ -52,7 +52,7 @@ func runLint(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "procyon: %v\n", err)
 		return exitUsage
 	}
-	if err := format.Terminal(stdout, report); err != nil {
+	if err := format.Terminal(stdout, report, format.TerminalOptions{Color: useColor(stdout)}); err != nil {
 		fmt.Fprintf(stderr, "procyon: writing report: %v\n", err)
 		return exitUsage
 	}
@@ -60,6 +60,20 @@ func runLint(args []string, stdout, stderr io.Writer) int {
 		return exitFail
 	}
 	return exitPass
+}
+
+// useColor reports whether w is a terminal and the user has not opted out
+// with NO_COLOR (https://no-color.org).
+func useColor(w io.Writer) bool {
+	if _, set := os.LookupEnv("NO_COLOR"); set {
+		return false
+	}
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := f.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
 const usage = `Usage:

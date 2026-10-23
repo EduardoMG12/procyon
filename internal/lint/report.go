@@ -47,4 +47,9 @@ type Report struct {
 	// Failed is true when at least one finding is at or above the fail
 	// threshold.
 	Failed bool
+	// FailOn is the fail threshold the run used.
+	FailOn Severity
+	// Sources holds the lines of every spec file read, by the same path
+	// findings use, so formats can show excerpts without reading files.
+	Sources map[string][]string
 }
