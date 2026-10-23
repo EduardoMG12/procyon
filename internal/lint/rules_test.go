@@ -26,6 +26,16 @@ func TestRules(t *testing.T) {
 			"PRC001 prc001-no-auth-tabs.json:9:4 GET /orders",
 		}},
 		{"prc001-global-security.yaml", []string{}},
+		// /admin/users inherits the default: reported. /admin/orders has
+		// its own scope: not. /internal/metrics repeats the default: reported.
+		// /debug-tools has "debug" as a word: reported. /administrators-guide
+		// is not "admin". /management has no auth at all: PRC001, not PRC010.
+		{"prc010-admin.yaml", []string{
+			"PRC010 prc010-admin.yaml:9:5 GET /admin/users",
+			"PRC010 prc010-admin.yaml:21:5 GET /internal/metrics",
+			"PRC010 prc010-admin.yaml:28:5 DELETE /debug-tools/cache",
+			"PRC001 prc010-admin.yaml:38:5 GET /management",
+		}},
 		{"prc001-empty-override.yaml", []string{
 			"PRC001 prc001-empty-override.yaml:13:5 DELETE /orders",
 		}},

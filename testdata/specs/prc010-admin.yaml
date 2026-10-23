@@ -1,0 +1,54 @@
+openapi: 3.0.3
+info:
+  title: Shop
+  version: 1.0.0
+security:
+  - bearer: []
+paths:
+  /admin/users:
+    get:
+      responses:
+        "200":
+          description: Users
+  /admin/orders:
+    get:
+      security:
+        - oauth: [orders:admin]
+      responses:
+        "200":
+          description: Orders
+  /internal/metrics:
+    get:
+      security:
+        - bearer: []
+      responses:
+        "200":
+          description: Metrics
+  /debug-tools/cache:
+    delete:
+      responses:
+        "204":
+          description: Cleared
+  /administrators-guide:
+    get:
+      responses:
+        "200":
+          description: Guide
+  /management:
+    get:
+      security: []
+      responses:
+        "200":
+          description: Management
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+    oauth:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth.example.com/token
+          scopes:
+            orders:admin: Manage orders
