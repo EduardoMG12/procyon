@@ -96,7 +96,13 @@ func parseInterspersed(flags *flag.FlagSet, args []string) ([]string, error) {
 		if err := flags.Parse(args); err != nil {
 			return nil, err
 		}
-		args = flags.Args()
+		rest := flags.Args()
+		// Parse consumes "--" and stops there: everything after it is
+		// positional, even if it looks like a flag.
+		if len(rest) < len(args) && args[len(args)-len(rest)-1] == "--" {
+			return append(positional, rest...), nil
+		}
+		args = rest
 		if len(args) == 0 {
 			return positional, nil
 		}

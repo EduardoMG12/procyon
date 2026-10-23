@@ -159,6 +159,7 @@ func TestFailOnSetsTheThreshold(t *testing.T) {
 		{"critical lets high pass", []string{"lint", "--fail-on", "critical", high}, 0},
 		{"flag after the spec", []string{"lint", high, "--fail-on", "critical"}, 0},
 		{"low still fails on high", []string{"lint", "--fail-on=low", high}, 1},
+		{"nothing after -- is a flag", []string{"lint", "--", high, "--fail-on", "critical"}, 2},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -195,7 +196,7 @@ func TestConfigFile(t *testing.T) {
 		{"flag wins over the file", "fail-on: critical\n", []string{"--fail-on", "high"}, 1, ""},
 		{"unknown key is an error", "fail_on: critical\n", nil, 2, "fail_on"},
 		{"ignores do not belong here", "ignores: []\n", nil, 2, "ignores"},
-		{"invalid severity", "fail-on: severe\n", nil, 2, `"severe"`},
+		{"invalid severity points at the file", "fail-on: severe\n", nil, 2, `.procyon.yaml: fail-on: unknown severity "severe"`},
 		{"invalid YAML", "fail-on: [\n", nil, 2, ".procyon.yaml:"},
 	}
 	for _, tt := range tests {

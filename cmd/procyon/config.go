@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 
+	"github.com/EduardoMG12/procyon/internal/lint"
 	"github.com/goccy/go-yaml"
 	"github.com/goccy/go-yaml/token"
 )
@@ -44,6 +45,11 @@ func loadConfig() (config, error) {
 			return cfg, fmt.Errorf("%s:%d:%d: %s", configFile, pos.Line, pos.Column, posErr.GetMessage())
 		}
 		return cfg, fmt.Errorf("%s: %w", configFile, err)
+	}
+	if cfg.FailOn != "" {
+		if _, err := lint.ParseSeverity(cfg.FailOn); err != nil {
+			return cfg, fmt.Errorf("%s: fail-on: %w", configFile, err)
+		}
 	}
 	return cfg, nil
 }
