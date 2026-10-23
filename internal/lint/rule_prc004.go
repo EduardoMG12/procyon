@@ -3,6 +3,7 @@ package lint
 import (
 	"net"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -53,19 +54,34 @@ func checkPRC004(doc *openapi3.T) []Finding {
 
 // plaintext reports whether any URL the server can take is http:// to a
 // host other than the local machine. A URL built from variables
-// ("{scheme}://api.example.com") is checked with every value the variables
-// allow: their enum, or their default when there is no enum.
+// ("{scheme}://{region}.example.com") is checked with every value the
+// variables allow: their enum, or their default when there is no enum.
+//
+// The scheme and the host are expanded separately, each with only the
+// variables that appear in it, so path variables never multiply the work.
+// When a part still has too many combinations to check, Procyon assumes the
+// worst and reports: a security check must fail closed, never pass by
+// running out of patience.
 func plaintext(server *openapi3.Server) bool {
-	for _, candidate := range expand(server.URL, server.Variables) {
-		u, err := url.Parse(candidate)
-		if err != nil || !strings.EqualFold(u.Scheme, "http") {
-			continue
-		}
-		if !loopback(u.Hostname()) {
-			return true
-		}
+	scheme, rest, ok := strings.Cut(server.URL, "://")
+	if !ok {
+		return false // relative URL: inherits the scheme it is served from
 	}
-	return false
+	authority, _, _ := strings.Cut(rest, "/")
+
+	schemes, complete := expand(scheme, server.Variables)
+	if complete && !slices.ContainsFunc(schemes, isHTTP) {
+		return false
+	}
+	hosts, complete := expand(authority, server.Variables)
+	return !complete || slices.ContainsFunc(hosts, func(authority string) bool {
+		u, err := url.Parse("http://" + authority)
+		return err == nil && !loopback(u.Hostname())
+	})
+}
+
+func isHTTP(scheme string) bool {
+	return strings.EqualFold(scheme, "http")
 }
 
 func loopback(host string) bool {
@@ -76,28 +92,38 @@ func loopback(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-// maxExpansions caps how many URLs a templated server expands to, so a
-// hostile spec cannot make Procyon build millions of strings.
-// ponytail: 64 covers any real spec; past it the rest goes unchecked.
-const maxExpansions = 64
+// maxExpansions caps how many strings one part of a templated URL expands
+// to, so a hostile spec cannot make Procyon build millions of them.
+const maxExpansions = 1024
 
-// expand returns every URL the template can produce from its variables.
-func expand(template string, vars map[string]*openapi3.ServerVariable) []string {
-	urls := []string{template}
-	for name, v := range vars {
-		values := v.Enum
+// expand returns every string template can produce from the variables it
+// uses, visiting them in name order so the result never depends on map
+// order. complete is false when there were more than maxExpansions.
+func expand(template string, vars map[string]*openapi3.ServerVariable) (out []string, complete bool) {
+	names := make([]string, 0, len(vars))
+	for name := range vars {
+		if strings.Contains(template, "{"+name+"}") {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+
+	out = []string{template}
+	for _, name := range names {
+		values := vars[name].Enum
 		if len(values) == 0 {
-			values = []string{v.Default}
+			values = []string{vars[name].Default}
+		}
+		if len(out)*len(values) > maxExpansions {
+			return nil, false
 		}
 		var next []string
-		for _, u := range urls {
+		for _, s := range out {
 			for _, value := range values {
-				if len(next) < maxExpansions {
-					next = append(next, strings.ReplaceAll(u, "{"+name+"}", value))
-				}
+				next = append(next, strings.ReplaceAll(s, "{"+name+"}", value))
 			}
 		}
-		urls = next
+		out = next
 	}
-	return urls
+	return out, true
 }
