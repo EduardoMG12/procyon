@@ -112,11 +112,17 @@ func load(path string) (*openapi3.T, error) {
 }
 
 // withoutUndefinedSchemes removes kin-openapi's "undefined security scheme"
-// errors from a validation error, returning nil when nothing else is left.
+// errors that PRC002 reports from a validation error, returning nil when
+// nothing else is left.
 func withoutUndefinedSchemes(err error) error {
 	switch e := err.(type) {
-	case nil, *openapi3.SecurityRequirementSchemeUndefinedError:
+	case nil:
 		return nil
+	case *openapi3.SecurityRequirementSchemeUndefinedError:
+		if coveredByPRC002(e.JSONPointer) {
+			return nil
+		}
+		return err
 	case openapi3.MultiError:
 		var kept openapi3.MultiError
 		for _, inner := range e {
@@ -138,4 +144,13 @@ func withoutUndefinedSchemes(err error) error {
 		return nil
 	}
 	return err
+}
+
+// coveredByPRC002 reports whether PRC002 checks the requirement at pointer:
+// the global one and those of path operations. Webhooks and callbacks are
+// not checked, so their undefined schemes must stay errors rather than
+// vanish.
+func coveredByPRC002(pointer string) bool {
+	return strings.HasPrefix(pointer, "/security/") ||
+		(strings.HasPrefix(pointer, "/paths/") && !strings.Contains(pointer, "/callbacks/"))
 }

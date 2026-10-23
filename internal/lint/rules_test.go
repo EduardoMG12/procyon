@@ -29,6 +29,8 @@ func TestRules(t *testing.T) {
 		{"prc002-undefined-scheme.yaml", []string{
 			"PRC002 prc002-undefined-scheme.yaml:10:7 GET /orders",
 		}},
+		// OpenAPI 3.2 allows a URI reference as the scheme name: not undefined.
+		{"prc002-uri-reference-3.2.yaml", []string{}},
 		{"prc002-undefined-global.yaml", []string{
 			"PRC002 prc002-undefined-global.yaml:5:1 ",
 		}},

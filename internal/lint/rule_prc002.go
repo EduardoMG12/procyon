@@ -3,6 +3,7 @@ package lint
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
 )
@@ -53,6 +54,9 @@ func undefinedSchemes(doc *openapi3.T, reqs openapi3.SecurityRequirements) []str
 	var names []string
 	for _, req := range reqs {
 		for name := range req {
+			if uriReference(doc, name) {
+				continue
+			}
 			if _, ok := defined[name]; !ok && !seen[name] {
 				seen[name] = true
 				names = append(names, name)
@@ -61,4 +65,13 @@ func undefinedSchemes(doc *openapi3.T, reqs openapi3.SecurityRequirements) []str
 	}
 	sort.Strings(names)
 	return names
+}
+
+// uriReference reports whether name is a URI reference to a scheme rather
+// than a key of components.securitySchemes. OpenAPI 3.2 allows those;
+// resolving them would mean reading other documents, so they are not
+// checked. Component keys can only contain letters, digits, ".", "-" and
+// "_", so anything with "/", "#" or ":" is a reference.
+func uriReference(doc *openapi3.T, name string) bool {
+	return doc.IsOpenAPI32OrLater() && strings.ContainsAny(name, "/#:")
 }
