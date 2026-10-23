@@ -30,6 +30,12 @@ func TestRules(t *testing.T) {
 		// its own scope: not. /internal/metrics repeats the default: reported.
 		// /debug-tools has "debug" as a word: reported. /administrators-guide
 		// is not "admin". /management has no auth at all: PRC001, not PRC010.
+		// No default security: /admin/users is protected exactly like /orders
+		// (same alternatives and scopes, in another order). /admin/orders asks
+		// for a scope no regular operation uses.
+		{"prc010-no-default.yaml", []string{
+			"PRC010 prc010-no-default.yaml:15:5 GET /admin/users",
+		}},
 		{"prc010-admin.yaml", []string{
 			"PRC010 prc010-admin.yaml:9:5 GET /admin/users",
 			"PRC010 prc010-admin.yaml:21:5 GET /internal/metrics",
