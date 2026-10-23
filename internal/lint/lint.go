@@ -105,5 +105,8 @@ func load(path string) (*openapi3.T, error) {
 		msg, _, _ := strings.Cut(err.Error(), "\n")
 		return nil, fmt.Errorf("%s: invalid spec: %s", path, msg)
 	}
+	if err := checkExtensions(doc); err != nil {
+		return nil, err
+	}
 	return doc, nil
 }
