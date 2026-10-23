@@ -53,7 +53,7 @@ func runLint(args []string, stderr io.Writer) int {
 }
 
 const usage = `Usage:
-  procyon lint <spec>   Check an OpenAPI or Swagger spec for security problems
+  procyon lint <spec>   Check an OpenAPI 3 spec for security problems
   procyon --version     Print the version
 
 Exit codes: 0 passed, 1 findings at or above the fail threshold, 2 usage or input error.
