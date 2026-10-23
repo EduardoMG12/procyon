@@ -24,3 +24,5 @@ components:
     bearer:
       type: http
       scheme: bearer
+    legacyKey:
+      $ref: "#/components/securitySchemes/queryKey"

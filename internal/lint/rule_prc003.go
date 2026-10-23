@@ -34,13 +34,15 @@ func checkPRC003(doc *openapi3.T) []Finding {
 	return findings
 }
 
-// forEachScheme calls fn for every defined security scheme.
+// forEachScheme calls fn once for every defined security scheme. An alias
+// ($ref to another scheme) is skipped: it is the same scheme, and its
+// finding belongs where the scheme is written.
 func forEachScheme(doc *openapi3.T, fn func(name string, scheme *openapi3.SecurityScheme)) {
 	if doc.Components == nil {
 		return
 	}
 	for name, ref := range doc.Components.SecuritySchemes {
-		if ref != nil && ref.Value != nil {
+		if ref != nil && ref.Ref == "" && ref.Value != nil {
 			fn(name, ref.Value)
 		}
 	}
