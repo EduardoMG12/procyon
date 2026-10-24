@@ -53,6 +53,14 @@ func TestRules(t *testing.T) {
 		{"prc002-undefined-global.yaml", []string{
 			"PRC002 prc002-undefined-global.yaml:5:1 ",
 		}},
+		{"prc003-weak-schemes.yaml", []string{
+			"PRC003 prc003-weak-schemes.yaml:13:5 ",
+			"PRC003 prc003-weak-schemes.yaml:21:5 ",
+		}},
+		{"prc011-oauth-flows.yaml", []string{
+			"PRC011 prc011-oauth-flows.yaml:11:9 ",
+			"PRC011 prc011-oauth-flows.yaml:14:9 ",
+		}},
 		{"prc001-empty-override.yaml", []string{
 			"PRC001 prc001-empty-override.yaml:13:5 DELETE /orders",
 		}},
