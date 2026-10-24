@@ -3,6 +3,8 @@ crapi PRC008 41
 crapi PRC010 2
 petstore PRC001 10
 petstore PRC005 1
+petstore PRC006 4
+petstore PRC007 5
 petstore PRC008 15
 petstore PRC011 1
 twilio-chat PRC003 1
@@ -17,4 +19,6 @@ uspto PRC005 1
 uspto PRC008 1
 vampi PRC001 8
 vampi PRC005 2
+vampi PRC006 3
+vampi PRC007 1
 vampi PRC008 10

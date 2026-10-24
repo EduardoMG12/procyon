@@ -30,6 +30,18 @@ func TestRules(t *testing.T) {
 			"PRC001 prc001-no-auth-tabs.json:9:4 GET /orders",
 		}},
 		{"prc001-global-security.yaml", []string{"PRC001"}, []string{}},
+		// Authenticated: nothing. Unauthenticated (/profiles) and public (/team)
+		// operations: both rules. /docs/{version}: version is not an object ID.
+		{"prc006-prc007.yaml", []string{"PRC006", "PRC007"}, []string{
+			"PRC007 prc006-prc007.yaml:24:5 GET /profiles/{username}",
+			"PRC007 prc006-prc007.yaml:39:5 GET /team/{order_id}/contacts",
+			"PRC006 prc006-prc007.yaml:57:21 GET /team/{order_id}/contacts",
+			"PRC006 prc006-prc007.yaml:82:9 GET /profiles/{username}",
+			"PRC006 prc006-prc007.yaml:86:9 GET /profiles/{username}",
+			"PRC006 prc006-prc007.yaml:88:9 GET /profiles/{username}",
+			"PRC006 prc006-prc007.yaml:90:9 GET /profiles/{username}",
+			"PRC006 prc006-prc007.yaml:95:9 GET /profiles/{username}",
+		}},
 		{"public-operation.yaml", []string{"PRC001"}, []string{
 			"PRC001 public-operation.yaml:13:5 GET /orders",
 		}},

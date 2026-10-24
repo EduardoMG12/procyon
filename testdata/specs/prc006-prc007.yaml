@@ -1,0 +1,96 @@
+openapi: 3.0.3
+info:
+  title: Shop
+  version: 1.0.0
+paths:
+  /users/{userId}:
+    get:
+      security:
+        - bearer: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Person"
+  /profiles/{username}:
+    get:
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A public profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Person"
+  /team/{order_id}/contacts:
+    get:
+      x-procyon-public: "The team page is public"
+      parameters:
+        - name: order_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Contacts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    telefone:
+                      type: string
+  /docs/{version}:
+    get:
+      x-procyon-public: "Documentation"
+      parameters:
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Docs
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+  schemas:
+    Person:
+      type: object
+      properties:
+        nickname:
+          type: string
+        email:
+          type: string
+        emailVerified:
+          type: boolean
+        phoneNumber:
+          type: string
+        cpf:
+          type: string
+        birthDate:
+          type: string
+          format: date
+        addressId:
+          type: string
+        dataNascimento:
+          type: string
