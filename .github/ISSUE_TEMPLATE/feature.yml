@@ -1,0 +1,22 @@
+name: Feature or new rule
+description: Suggest a new rule, format or option.
+labels: [needs-triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What security problem in an API design should Procyon catch, or what can't you do today?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: For a new rule, a spec that should trigger it and one that should not.
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Helping
+      options:
+        - label: I could open a PR for this (see CONTRIBUTING.md first)
