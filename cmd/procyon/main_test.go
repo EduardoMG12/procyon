@@ -337,3 +337,18 @@ func TestOutputSARIF(t *testing.T) {
 		t.Errorf("unexpected results: %+v", log.Runs)
 	}
 }
+
+func TestOutputMarkdown(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "summary.md")
+	r := run(t, "lint", "--output", "markdown="+out, spec("prc001-no-auth.yaml"))
+	if r.code != 1 {
+		t.Fatalf("exit code = %d, want 1; stderr: %s", r.code, r.stderr)
+	}
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(data), "## Procyon: ❌ failed") || !strings.Contains(string(data), "PRC001") {
+		t.Errorf("unexpected summary:\n%s", data)
+	}
+}
