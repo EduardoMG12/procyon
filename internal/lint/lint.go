@@ -62,6 +62,9 @@ func Run(path string, opts Options) (Report, error) {
 // load reads the spec at path, recording the file, line and column of every
 // element so findings can point at the original file.
 func load(path string, opts Options) (*openapi3.T, *specFiles, error) {
+	if info, err := os.Stat(path); err == nil && info.Size() > maxSpecSize {
+		return nil, nil, fmt.Errorf("%s: larger than %d MiB", path, maxSpecSize>>20)
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {

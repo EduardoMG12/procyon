@@ -9,16 +9,22 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-// maxRefSize caps a file read through a $ref, so a reference to a huge
-// generated file cannot exhaust a CI runner's memory.
+// maxRefSize caps one file read through a $ref, and maxRefTotal all of
+// them together, so references to huge or numerous files cannot exhaust a
+// CI runner's memory. maxRefTotal is a variable only so a test can lower it.
 const maxRefSize = 10 << 20 // 10 MiB
+
+var maxRefTotal int64 = 64 << 20 // 64 MiB
+
+// maxSpecSize caps the spec file itself. A variable only so a test can
+// lower it.
+var maxSpecSize int64 = 64 << 20 // 64 MiB
 
 // specFiles is every file one spec was read from: the spec itself and the
 // local files its $refs point to.
@@ -40,6 +46,8 @@ type specFiles struct {
 	// specRel is the spec's directory relative to root ("." when they are
 	// the same). Hidden parts are only refused after it.
 	specRel string
+	// total counts the bytes read through $refs, against maxRefTotal.
+	total int64
 }
 
 func newSpecFiles(path, refRoot string, data []byte) *specFiles {
@@ -97,10 +105,10 @@ func (f *specFiles) read(_ *openapi3.Loader, location *url.URL) ([]byte, error) 
 	if err != nil {
 		return nil, fmt.Errorf("$ref %q: %w", path, err)
 	}
-	rel, err := filepath.Rel(f.root.Name(), abs)
-	if err != nil || !filepath.IsLocal(rel) && rel != "." {
+	rel, ok := within(f.root.Name(), abs)
+	if !ok {
 		return nil, fmt.Errorf("$ref %q points outside %s; Procyon only reads files there "+
-			"(use --ref-root, or Options.RefRoot, to allow a directory containing both, such as the repository root)", path, f.root.Name())
+			"(set RefRoot to a directory containing both, such as the repository root)", path, f.root.Name())
 	}
 	if reason := refusedPart(rel, f.specRel); reason != "" {
 		return nil, fmt.Errorf("$ref %q: %s", path, reason)
@@ -109,6 +117,9 @@ func (f *specFiles) read(_ *openapi3.Loader, location *url.URL) ([]byte, error) 
 	if err != nil {
 		return nil, fmt.Errorf("$ref %q: %w", path, err)
 	}
+	if f.total += int64(len(data)); f.total > maxRefTotal {
+		return nil, fmt.Errorf("$ref %q: the spec's $refs read more than %d MiB in total", path, maxRefTotal>>20)
+	}
 	f.add(location, path, data)
 	f.cache[path] = withLocations(data)
 	return f.cache[path], nil
@@ -116,7 +127,8 @@ func (f *specFiles) read(_ *openapi3.Loader, location *url.URL) ([]byte, error) 
 
 // refusedPart explains why a path relative to the root may not be read
 // as text, or returns "": a hidden part (.git, .env) after the spec's own
-// directory, or, on Windows, a short 8.3 name (GIT~1) that could alias one.
+// directory, or a short 8.3 name (GIT~1) that could alias one. Short names
+// exist on Windows, and also on FAT drives and SMB shares mounted anywhere.
 func refusedPart(rel, specRel string) string {
 	parts := strings.Split(rel, string(filepath.Separator))
 	own := 0 // parts that belong to the spec's own directory
@@ -127,7 +139,7 @@ func refusedPart(rel, specRel string) string {
 		}
 	}
 	for i, part := range parts {
-		if runtime.GOOS == "windows" && strings.Contains(part, "~") {
+		if strings.Contains(part, "~") {
 			return "short (8.3) names are not allowed in $refs; use the full name"
 		}
 		if i >= own && strings.HasPrefix(part, ".") && part != "." {
@@ -139,13 +151,17 @@ func refusedPart(rel, specRel string) string {
 
 // readRegular reads a regular file of at most maxRefSize through root. Every
 // part of the path is checked with Lstat first: symlinks are never followed
-// (a link with an ordinary name could lead to .git), and anything other
-// than a regular file is refused before it is opened (a FIFO would block).
+// (a link with an ordinary name could lead to .git), every part but the
+// last must be a plain directory (not a Windows junction), and the last
+// must be a regular file, checked before opening (a FIFO would block).
+// After opening, the file must still be the one checked, so swapping it
+// between the check and the read is caught.
 func readRegular(root *os.Root, rel string) ([]byte, error) {
 	if rel == "." {
 		return nil, errors.New("not a regular file")
 	}
 	parts := strings.Split(rel, string(filepath.Separator))
+	var checked fs.FileInfo
 	for i := range parts {
 		info, err := root.Lstat(filepath.Join(parts[:i+1]...))
 		if errors.Is(err, fs.ErrNotExist) {
@@ -154,23 +170,26 @@ func readRegular(root *os.Root, rel string) ([]byte, error) {
 		if err != nil {
 			return nil, errors.New("cannot be read")
 		}
-		if info.Mode()&fs.ModeSymlink != 0 {
+		switch last := i == len(parts)-1; {
+		case info.Mode()&fs.ModeSymlink != 0:
 			return nil, errors.New("symlinks are not followed in $refs; refer to the file itself")
+		case !last && !info.IsDir():
+			return nil, errors.New("cannot be read (a part of the path is not a plain directory)")
+		case last && !info.Mode().IsRegular():
+			return nil, errors.New("not a regular file")
+		case last && info.Size() > maxRefSize:
+			return nil, fmt.Errorf("larger than %d MiB", maxRefSize>>20)
 		}
-		if i == len(parts)-1 {
-			if !info.Mode().IsRegular() {
-				return nil, errors.New("not a regular file")
-			}
-			if info.Size() > maxRefSize {
-				return nil, fmt.Errorf("larger than %d MiB", maxRefSize>>20)
-			}
-		}
+		checked = info
 	}
 	file, err := root.Open(rel)
 	if err != nil {
 		return nil, errors.New("cannot be read")
 	}
 	defer file.Close()
+	if opened, err := file.Stat(); err != nil || !os.SameFile(opened, checked) {
+		return nil, errors.New("cannot be read (it changed while being checked)")
+	}
 	data, err := io.ReadAll(io.LimitReader(file, maxRefSize+1))
 	if err != nil {
 		return nil, errors.New("cannot be read")
@@ -183,9 +202,11 @@ func readRegular(root *os.Root, rel string) ([]byte, error) {
 
 // openRefRoot opens the one directory $refs may read from: refRoot when
 // given (it must contain the spec), otherwise the spec's directory, and
-// returns the spec's directory relative to it. It
-// refuses a directory that would expose the whole machine: the file
-// system's root, or the user's home directory or one containing it.
+// returns the spec's directory relative to it. It refuses a directory that
+// would expose the whole machine: the file system's root, or the user's
+// home directory or one containing it. That check runs on the directory
+// actually opened, by identity, so another name for home (a symlink, a bind
+// mount, a macOS firmlink, a Windows subst drive) is refused too.
 func openRefRoot(spec, refRoot string) (*os.Root, string, error) {
 	specDir, err := filepath.Abs(filepath.Dir(spec))
 	if err != nil {
@@ -197,37 +218,67 @@ func openRefRoot(spec, refRoot string) (*os.Root, string, error) {
 			return nil, "", err
 		}
 	}
-	specRel, err := filepath.Rel(dir, specDir)
-	if err != nil || !filepath.IsLocal(specRel) && specRel != "." {
+	specRel, ok := within(dir, specDir)
+	if !ok {
+		// The same directories written another way (/tmp vs /private/tmp,
+		// a symlinked checkout): compare them resolved, then name the root
+		// the way the spec's path names it, since $ref paths are built from
+		// the spec's path and checked against the root's name as text.
+		if specRel, ok = within(evalSymlinks(dir), evalSymlinks(specDir)); ok {
+			dir = specDir
+			for range strings.Split(specRel, string(filepath.Separator)) {
+				if specRel != "." {
+					dir = filepath.Dir(dir)
+				}
+			}
+		}
+	}
+	if !ok {
 		return nil, "", fmt.Errorf("the $ref root %s does not contain the spec", dir)
 	}
-	if reason := tooBroad(dir); reason != "" {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, "", err
+	}
+	if reason := tooBroad(root); reason != "" {
+		root.Close()
 		return nil, "", fmt.Errorf("refusing $refs: %s is %s, and reading from it would expose the whole machine; "+
 			"move the spec into a project directory", dir, reason)
 	}
-	root, err := os.OpenRoot(dir)
-	return root, specRel, err
+	return root, specRel, nil
 }
 
-// tooBroad explains why dir may not be a $ref root, or returns "". Paths
-// are compared with symlinks resolved, and without case on Windows and
-// macOS.
-func tooBroad(dir string) string {
-	real := resolved(dir)
-	if filepath.Dir(real) == real {
+// tooBroad explains why an opened root may not serve $refs, or returns "":
+// it is the user's home directory, one of its ancestors, or the root of its
+// file system. Directories are compared by identity, not by name.
+func tooBroad(root *os.Root) string {
+	opened, err := root.Stat(".")
+	if err != nil {
+		return "unreadable"
+	}
+	if fsRoot := filepath.VolumeName(root.Name()) + string(filepath.Separator); sameDir(opened, fsRoot) {
 		return "the file system's root"
 	}
 	home := homeDir()
 	if home == "" {
-		return "" // unknown home: the root checks above still apply
+		return "" // unknown home: only the root check above applies
 	}
-	if rel, err := filepath.Rel(real, resolved(home)); err == nil && (rel == "." || filepath.IsLocal(rel)) {
-		if rel == "." {
-			return "your home directory"
+	if sameDir(opened, home) {
+		return "your home directory"
+	}
+	for dir := filepath.Dir(home); ; dir = filepath.Dir(dir) {
+		if sameDir(opened, dir) {
+			return "a directory containing your home directory"
 		}
-		return "a directory containing your home directory"
+		if filepath.Dir(dir) == dir {
+			return ""
+		}
 	}
-	return ""
+}
+
+func sameDir(opened fs.FileInfo, dir string) bool {
+	info, err := os.Stat(dir)
+	return err == nil && os.SameFile(opened, info)
 }
 
 func homeDir() string {
@@ -240,17 +291,23 @@ func homeDir() string {
 	return ""
 }
 
-// resolved returns dir with symlinks resolved, or dir itself if it cannot.
-func resolved(dir string) string {
-	if real, err := filepath.EvalSymlinks(dir); err == nil {
-		dir = real
+// within reports whether child is parent or inside it, as text, and its
+// path relative to parent.
+func within(parent, child string) (rel string, ok bool) {
+	rel, err := filepath.Rel(parent, child)
+	if err != nil || rel != "." && !filepath.IsLocal(rel) {
+		return "", false
 	}
-	// Windows and macOS file systems usually ignore case: /Users/me and
-	// /users/me are the same home directory.
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		return strings.ToLower(dir)
+	return rel, true
+}
+
+// evalSymlinks returns path with symlinks resolved, or path itself if it
+// cannot be.
+func evalSymlinks(path string) string {
+	if real, err := filepath.EvalSymlinks(path); err == nil {
+		return real
 	}
-	return dir
+	return path
 }
 
 // withLocations returns data with a trailing YAML comment. kin-openapi

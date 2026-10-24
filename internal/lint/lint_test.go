@@ -356,3 +356,32 @@ func TestRefToTheRootDirectoryIsNotAFile(t *testing.T) {
 		t.Fatalf("Run = %v, want an error saying it is not a regular file", err)
 	}
 }
+
+// Short 8.3 names (GIT~1 for .git) exist on Windows, but also on FAT drives
+// and SMB shares mounted on Linux and macOS: refused everywhere.
+func TestRefsRefuseShortNamesOnEverySystem(t *testing.T) {
+	setHome(t, t.TempDir())
+	dir := t.TempDir()
+	spec := filepath.Join(dir, "api.yaml")
+	writeSpec(t, spec, "./GIT~1/config")
+	_, err := lint.Run(spec, lint.Options{})
+	if err == nil || !strings.Contains(err.Error(), "short") {
+		t.Fatalf("Run = %v, want an error refusing a short name", err)
+	}
+}
+
+// A RefRoot written another way (through a symlink) still contains the spec.
+func TestRefRootThroughASymlinkStillContainsTheSpec(t *testing.T) {
+	setHome(t, t.TempDir())
+	real := t.TempDir()
+	writeFile(t, filepath.Join(real, "common", "orders.yaml"), pathItem)
+	spec := filepath.Join(real, "specs", "api.yaml")
+	writeSpec(t, spec, "../common/orders.yaml")
+	alias := filepath.Join(t.TempDir(), "alias")
+	if err := os.Symlink(real, alias); err != nil {
+		t.Skipf("cannot create symlinks here: %v", err)
+	}
+	if _, err := lint.Run(spec, lint.Options{RefRoot: alias}); err != nil {
+		t.Fatalf("RefRoot through a symlink: %v", err)
+	}
+}
