@@ -17,7 +17,8 @@ import (
 const configFile = ".procyon.yaml"
 
 type config struct {
-	FailOn string `yaml:"fail-on"`
+	FailOn  string `yaml:"fail-on"`
+	RefRoot string `yaml:"ref-root"`
 }
 
 // positionedError is implemented by goccy/go-yaml's syntax and decoding

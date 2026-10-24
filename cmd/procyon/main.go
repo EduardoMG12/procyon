@@ -53,6 +53,7 @@ func runLint(args []string, stdout, stderr io.Writer) int {
 	flags.SetOutput(io.Discard) // errors are printed below, once
 	failOn := flags.String("fail-on", cfg.FailOn, "")
 	stdoutFormat := flags.String("format", "terminal", "")
+	refRoot := flags.String("ref-root", cfg.RefRoot, "")
 	var extra outputs
 	flags.Var(&extra, "output", "")
 	specs, err := parseInterspersed(flags, args)
@@ -70,7 +71,7 @@ func runLint(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 
-	var opts lint.Options
+	opts := lint.Options{RefRoot: *refRoot}
 	if *failOn != "" {
 		if opts.FailOn, err = lint.ParseSeverity(*failOn); err != nil {
 			fmt.Fprintf(stderr, "procyon: --fail-on: %v\n", err)
@@ -159,6 +160,9 @@ const usage = `Usage:
     --format <format>         What to print: terminal (default), json, sarif
                               or markdown.
     --output <format>=<path>  Also write a format to a file. Repeatable.
+    --ref-root <dir>          Let $refs read files anywhere under dir, not only
+                              in the spec's directory (for monorepos). Can also
+                              be set as ref-root in .procyon.yaml.
   procyon --version     Print the version
 
 Exit codes: 0 passed, 1 findings at or above the fail threshold, 2 usage or input error.
