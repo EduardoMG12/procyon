@@ -58,8 +58,8 @@ func spec(name string) string {
 	return filepath.Join("..", "..", "testdata", "specs", name)
 }
 
-func TestLintValidSpecExitsZero(t *testing.T) {
-	r := run(t, "lint", spec("valid-3.0.yaml"))
+func TestLintSpecWithoutFindingsExitsZero(t *testing.T) {
+	r := run(t, "lint", spec("prc001-global-security.yaml"))
 	if r.code != 0 {
 		t.Fatalf("exit code = %d, want 0; stderr: %s", r.code, r.stderr)
 	}
@@ -125,5 +125,17 @@ func TestHelpExitsZeroAndShowsUsage(t *testing.T) {
 				t.Errorf("stdout does not show usage: %q", r.stdout)
 			}
 		})
+	}
+}
+
+func TestLintFindingsExitOneAndPrintThem(t *testing.T) {
+	r := run(t, "lint", spec("prc001-no-auth.yaml"))
+	if r.code != 1 {
+		t.Fatalf("exit code = %d, want 1; stderr: %s", r.code, r.stderr)
+	}
+	for _, want := range []string{"high", "PRC001", "prc001-no-auth.yaml:7:5", "GET /orders", "docs/rules/PRC001.md"} {
+		if !strings.Contains(r.stdout, want) {
+			t.Errorf("stdout does not contain %q:\n%s", want, r.stdout)
+		}
 	}
 }

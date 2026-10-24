@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/EduardoMG12/procyon/internal/format"
 	"github.com/EduardoMG12/procyon/internal/lint"
 )
 
@@ -13,6 +14,7 @@ import (
 // could not run" (2).
 const (
 	exitPass  = 0
+	exitFail  = 1
 	exitUsage = 2
 )
 
@@ -33,21 +35,29 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, versionString())
 		return exitPass
 	case "lint":
-		return runLint(args[1:], stderr)
+		return runLint(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "procyon: unknown command %q\n\n%s", args[0], usage)
 		return exitUsage
 	}
 }
 
-func runLint(args []string, stderr io.Writer) int {
+func runLint(args []string, stdout, stderr io.Writer) int {
 	if len(args) != 1 {
 		fmt.Fprintf(stderr, "procyon lint: expected exactly one spec file\n\n%s", usage)
 		return exitUsage
 	}
-	if _, err := lint.Run(args[0], lint.Options{}); err != nil {
+	report, err := lint.Run(args[0], lint.Options{})
+	if err != nil {
 		fmt.Fprintf(stderr, "procyon: %v\n", err)
 		return exitUsage
+	}
+	if err := format.Terminal(stdout, report); err != nil {
+		fmt.Fprintf(stderr, "procyon: writing report: %v\n", err)
+		return exitUsage
+	}
+	if report.Failed {
+		return exitFail
 	}
 	return exitPass
 }
