@@ -3,6 +3,7 @@ package format_test
 import (
 	"bytes"
 	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -36,7 +37,7 @@ func sarifReport() lint.Report {
 
 func TestSARIF(t *testing.T) {
 	var got bytes.Buffer
-	if err := format.SARIF(&got, sarifReport(), []lint.Rule{
+	if err := format.SARIF(&got, sarifReport(), "", []lint.Rule{
 		{ID: "PRC001", Title: "Operation has no authentication", Severity: lint.High, OWASP: "API2:2023 Broken Authentication"},
 		{ID: "PRC004", Title: "Server URL does not use TLS", Severity: lint.High, OWASP: "API8:2023 Security Misconfiguration"},
 	}); err != nil {
@@ -62,7 +63,7 @@ func TestSARIF(t *testing.T) {
 // open-source one), so these are the requirements that matter.
 func TestSARIFMeetsWhatGitHubRequires(t *testing.T) {
 	var got bytes.Buffer
-	if err := format.SARIF(&got, sarifReport(), lint.Rules()); err != nil {
+	if err := format.SARIF(&got, sarifReport(), "", lint.Rules()); err != nil {
 		t.Fatal(err)
 	}
 	var log struct {
@@ -117,6 +118,46 @@ func TestSARIFMeetsWhatGitHubRequires(t *testing.T) {
 			if p.ArtifactLocation.URI == "" || p.Region.StartLine < 1 || p.Region.StartColumn < 1 {
 				t.Errorf("result %s: bad location %+v", r.RuleID, p)
 			}
+		}
+	}
+}
+
+// GitHub resolves artifact URIs against the repository root: paths are made
+// relative to the base directory and escaped; anything outside it becomes
+// an absolute file URI.
+func TestSARIFArtifactURIs(t *testing.T) {
+	base := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "other.yaml")
+	cases := map[string]string{
+		filepath.Join(base, "specs", "api.yaml"):       "specs/api.yaml",
+		filepath.Join(base, "specs", "my api#v2.yaml"): "specs/my%20api%23v2.yaml",
+		outside: "file://" + (&url.URL{Path: filepath.ToSlash(outside)}).EscapedPath(),
+	}
+	for file, want := range cases {
+		report := lint.Report{Findings: []lint.Finding{{
+			Rule:     lint.Rule{ID: "PRC001", Severity: lint.High},
+			Location: lint.Location{File: file, Line: 1, Column: 1},
+		}}}
+		var got bytes.Buffer
+		if err := format.SARIF(&got, report, base, lint.Rules()); err != nil {
+			t.Fatal(err)
+		}
+		var log struct {
+			Runs []struct {
+				Results []struct {
+					Locations []struct {
+						PhysicalLocation struct {
+							ArtifactLocation struct{ URI string } `json:"artifactLocation"`
+						} `json:"physicalLocation"`
+					} `json:"locations"`
+				} `json:"results"`
+			} `json:"runs"`
+		}
+		if err := json.Unmarshal(got.Bytes(), &log); err != nil {
+			t.Fatal(err)
+		}
+		if uri := log.Runs[0].Results[0].Locations[0].PhysicalLocation.ArtifactLocation.URI; uri != want {
+			t.Errorf("%s: uri = %q, want %q", file, uri, want)
 		}
 	}
 }

@@ -3,6 +3,7 @@ package format
 import (
 	"encoding/json"
 	"io"
+	"net/url"
 	"path"
 	"path/filepath"
 	"strings"
@@ -14,12 +15,16 @@ import (
 // SARIF writes the report as SARIF 2.1.0, the format GitHub code scanning
 // reads: findings show up in the repository's Security tab and as
 // annotations on pull requests. rules is every rule Procyon has, declared
-// in the log so results can point at their help.
+// in the log so results can point at their help. base is the directory
+// file paths are made relative to: GitHub resolves them against the
+// repository root, so the CLI passes the directory it runs in. An empty
+// base keeps paths as they are.
 //
 // Ignored findings are results with an in-source suppression and its
 // reason, so GitHub shows them as dismissed instead of losing them. Notes
 // are tool notifications, not results.
-func SARIF(w io.Writer, report lint.Report, rules []lint.Rule) error {
+func SARIF(w io.Writer, report lint.Report, base string, rules []lint.Rule) error {
+	uri := artifactURI(base)
 	index := map[string]int{}
 	driver := sarifDriver{
 		Name:           "Procyon",
@@ -48,14 +53,14 @@ func SARIF(w io.Writer, report lint.Report, rules []lint.Rule) error {
 	}
 	for _, n := range report.Notes {
 		run.Invocations[0].Notifications = append(run.Invocations[0].Notifications, sarifNotification{
-			Level: "note", Message: sarifText{n.Message}, Locations: []sarifLocation{sarifLoc(n.Location)},
+			Level: "note", Message: sarifText{n.Message}, Locations: []sarifLocation{sarifLoc(n.Location, uri)},
 		})
 	}
 	for _, f := range report.Findings {
-		run.Results = append(run.Results, sarifFinding(f, index))
+		run.Results = append(run.Results, sarifFinding(f, index, uri))
 	}
 	for _, i := range report.Ignored {
-		r := sarifFinding(i.Finding, index)
+		r := sarifFinding(i.Finding, index, uri)
 		r.Suppressions = []sarifSuppression{{Kind: "inSource", Justification: i.Reason}}
 		run.Results = append(run.Results, r)
 	}
@@ -69,7 +74,7 @@ func SARIF(w io.Writer, report lint.Report, rules []lint.Rule) error {
 	})
 }
 
-func sarifFinding(f lint.Finding, index map[string]int) sarifResult {
+func sarifFinding(f lint.Finding, index map[string]int, uri func(string) string) sarifResult {
 	text := f.Why + " Fix: " + f.Fix
 	if f.Operation != "" {
 		text = f.Operation + ": " + text
@@ -79,17 +84,38 @@ func sarifFinding(f lint.Finding, index map[string]int) sarifResult {
 		RuleIndex: index[f.Rule.ID],
 		Level:     sarifLevel(f.Rule.Severity),
 		Message:   sarifText{text},
-		Locations: []sarifLocation{sarifLoc(f.Location)},
+		Locations: []sarifLocation{sarifLoc(f.Location, uri)},
 	}
 }
 
-// sarifLoc points at a file relative to where Procyon ran, which in CI is
-// the repository root GitHub resolves it against.
-func sarifLoc(l lint.Location) sarifLocation {
+func sarifLoc(l lint.Location, uri func(string) string) sarifLocation {
 	return sarifLocation{sarifPhysical{
-		ArtifactLocation: sarifArtifact{URI: path.Clean(filepath.ToSlash(l.File))},
+		ArtifactLocation: sarifArtifact{URI: uri(l.File)},
 		Region:           sarifRegion{StartLine: max(l.Line, 1), StartColumn: max(l.Column, 1)},
 	}}
+}
+
+// artifactURI returns how to write a file's path as a SARIF URI: relative
+// to base, each segment escaped (a space or "#" would break the URI), or an
+// absolute file:// URI when the file is outside base.
+func artifactURI(base string) func(file string) string {
+	return func(file string) string {
+		rel := file
+		if base != "" {
+			abs, err := filepath.Abs(file)
+			if err == nil {
+				rel, err = filepath.Rel(base, abs)
+			}
+			if err != nil || !filepath.IsLocal(rel) {
+				return "file://" + (&url.URL{Path: filepath.ToSlash(abs)}).EscapedPath()
+			}
+		}
+		segments := strings.Split(path.Clean(filepath.ToSlash(rel)), "/")
+		for i, s := range segments {
+			segments[i] = url.PathEscape(s)
+		}
+		return strings.Join(segments, "/")
+	}
 }
 
 func sarifLevel(s lint.Severity) string {

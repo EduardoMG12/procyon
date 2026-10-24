@@ -18,8 +18,13 @@ var formats = map[string]render{
 	"terminal": func(w io.Writer, r lint.Report, color bool) error {
 		return format.Terminal(w, r, format.TerminalOptions{Color: color})
 	},
-	"json":  func(w io.Writer, r lint.Report, _ bool) error { return format.JSON(w, r) },
-	"sarif": func(w io.Writer, r lint.Report, _ bool) error { return format.SARIF(w, r, lint.Rules()) },
+	"json": func(w io.Writer, r lint.Report, _ bool) error { return format.JSON(w, r) },
+	"sarif": func(w io.Writer, r lint.Report, _ bool) error {
+		// GitHub resolves paths against the repository root, which is where
+		// CI runs Procyon.
+		wd, _ := os.Getwd()
+		return format.SARIF(w, r, wd, lint.Rules())
+	},
 }
 
 func formatNames() string {
