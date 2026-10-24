@@ -83,6 +83,21 @@ func TestTerminal(t *testing.T) {
 			Operation: "POST /orders", Why: "Anyone can call it.", Fix: "Add security."}},
 	}, false})
 
+	// Ignored findings and notes stay visible, in their own sections.
+	tests = append(tests, struct {
+		golden string
+		report lint.Report
+		color  bool
+	}{"ignored-and-notes", lint.Report{FailOn: lint.High, Sources: sources,
+		Ignored: []lint.IgnoredFinding{
+			{Finding: noAuth, Reason: "Load balancer health check, returns no data"},
+			{Finding: lint.Finding{Rule: prc004, Location: lint.Location{File: shop, Line: 6, Column: 12}}, Reason: "Internal mirror", Expires: "2027-01-31"},
+		},
+		Notes: []lint.Note{
+			{Location: lint.Location{File: shop, Line: 9, Column: 5}, Message: "ignore of PRC010 on GET /orders matches no finding; remove it"},
+		},
+	}, false})
+
 	for _, tt := range tests {
 		t.Run(tt.golden, func(t *testing.T) {
 			var got bytes.Buffer
