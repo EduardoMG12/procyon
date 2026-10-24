@@ -1,0 +1,120 @@
+openapi: 3.0.3
+info:
+  title: Shop
+  version: 1.0.0
+security:
+  - key: []
+paths:
+  /items:
+    get:
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          description: Items
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 100
+                items:
+                  type: string
+                  maxLength: 10
+  /orders:
+    get:
+      parameters:
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            maximum: 100
+        - name: size
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Orders
+  /search:
+    parameters:
+      - name: maxResults
+        in: query
+        schema:
+          type: integer
+    get:
+      responses:
+        "200":
+          description: Results
+  /exports:
+    parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+    post:
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            maximum: 10
+        - name: pagesize
+          in: query
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Exported
+  /reports:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                number_of_repeats:
+                  type: number
+                retryCount:
+                  type: integer
+                  maximum: 5
+                limitPrice:
+                  type: number
+                depth:
+                  type: integer
+                  enum: [1, 2, 3]
+                tentativas:
+                  type: integer
+                tentativa:
+                  type: integer
+                creditLimit:
+                  type: number
+                marginTop:
+                  type: integer
+                waterDepth:
+                  type: number
+                stockCount:
+                  type: integer
+                retryAfter:
+                  type: integer
+                repeatEvery:
+                  type: integer
+                quantidade:
+                  type: integer
+      responses:
+        "201":
+          description: Created
+components:
+  securitySchemes:
+    key:
+      type: apiKey
+      in: header
+      name: X-Key

@@ -31,8 +31,9 @@ var pagingParameters = []string{
 // checkPRC008 reports where the spec lets a client send or receive an
 // unbounded amount of data: request strings without maxLength (a whole
 // body, a property, or the items of a list), request arrays without
-// maxItems, and GET operations returning a whole list with no way to ask
-// for a page.
+// maxItems, numbers that set how much work a request makes (a page size, a
+// number of repeats) without maximum, and GET operations returning a whole
+// list with no way to ask for a page.
 func checkPRC008(doc *openapi3.T) []Finding {
 	var found onePerPlace
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
@@ -43,6 +44,11 @@ func checkPRC008(doc *openapi3.T) []Finding {
 			add(locate(op.Origin),
 				"This operation returns a whole list with no way to ask for one page, so one request can make the server read and send every record.",
 				"Add paging query parameters (limit and cursor, or page and per_page) and a maximum page size.")
+		}
+		for _, p := range operationParameters(doc, path, op) {
+			if p.In == openapi3.ParameterInQuery && p.Schema != nil && unboundedCount(p.Name, p.Schema.Value, true) {
+				add(locate(p.Origin), unboundedCountWhy, unboundedCountFix)
+			}
 		}
 		if op.RequestBody == nil || op.RequestBody.Value == nil {
 			return
@@ -63,6 +69,9 @@ func checkPRC008(doc *openapi3.T) []Finding {
 				return false
 			}
 			check(prop.Value, propertyLocation(prop))
+			if unboundedCount(name, prop.Value, false) {
+				add(propertyLocation(prop), unboundedCountWhy, unboundedCountFix)
+			}
 			return true
 		})
 	})
@@ -84,6 +93,50 @@ func unbounded(s *openapi3.Schema) (why, fix string) {
 			"Add maxLength to the list's items."
 	}
 	return "", ""
+}
+
+const (
+	unboundedCountWhy = "Nothing limits this number, and it sets how much work one request makes the server do " +
+		"(items per page, repeats, retries): a client can ask for millions."
+	unboundedCountFix = "Add maximum with the largest value the operation really needs."
+)
+
+// unboundedCount reports whether a field or parameter is a number that sets
+// how much work a request makes (countWords, and countQueryWords for a query
+// parameter) and has no maximum.
+func unboundedCount(name string, s *openapi3.Schema, query bool) bool {
+	if s == nil || !(s.Type.Includes("integer") || s.Type.Includes("number")) {
+		return false
+	}
+	if s.Max != nil || s.ExclusiveMax.Value != nil || len(s.Enum) > 0 {
+		return false
+	}
+	words := countWords
+	if query {
+		words = append(slices.Clone(countWords), countQueryWords...)
+	}
+	return matchesWith(name, words, countDescribingWords, countReferenceWords)
+}
+
+// operationParameters returns the parameters that apply to an operation:
+// its own, and its path's that it does not redefine (same name and in).
+func operationParameters(doc *openapi3.T, path string, op *openapi3.Operation) []*openapi3.Parameter {
+	var params []*openapi3.Parameter
+	own := map[[2]string]bool{}
+	for _, p := range op.Parameters {
+		if p != nil && p.Value != nil {
+			params = append(params, p.Value)
+			own[[2]string{p.Value.Name, p.Value.In}] = true
+		}
+	}
+	if item := doc.Paths.Value(path); item != nil {
+		for _, p := range item.Parameters {
+			if p != nil && p.Value != nil && !own[[2]string{p.Value.Name, p.Value.In}] {
+				params = append(params, p.Value)
+			}
+		}
+	}
+	return params
 }
 
 func unboundedString(s *openapi3.Schema) bool {

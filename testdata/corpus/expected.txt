@@ -23,6 +23,9 @@ vampi PRC005 620:21 GET /books/v1/{book_title}
 crapi PRC010 855:7 DELETE /identity/api/v2/admin/videos/{video_id}
 # crAPI: the workshop's management listing of all users, same problem.
 crapi PRC010 2201:7 GET /workshop/api/management/users/all
+# crAPI challenge 6: contact_mechanic repeats the call number_of_repeats
+# times, with no maximum (a layer 7 DoS).
+crapi PRC008 2394:19 POST /workshop/api/merchant/contact_mechanic
 
 # VAmPI: GET /users/v1 lists every user's email with no authentication
 # (excessive data exposure).
