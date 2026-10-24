@@ -1,0 +1,12 @@
+openapi: 3.1.0
+info:
+  title: Shop
+  version: 1.0.0
+webhooks:
+  orderPaid:
+    post:
+      security:
+        - missing: []
+      responses:
+        "200":
+          description: Received
