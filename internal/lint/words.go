@@ -81,7 +81,8 @@ func matchesWith(name string, list [][]string, describing, reference []string) b
 // sameWord matches a listed word and its plural: tokens, apiKeys, senhas,
 // addresses, celulares.
 func sameWord(word, listed string) bool {
-	return word == listed || word == listed+"s" || word == listed+"es"
+	rest, ok := strings.CutPrefix(word, listed) // no word+"s" built on each call
+	return ok && (rest == "" || rest == "s" || rest == "es")
 }
 
 // splitWords splits a field name into lowercase words: userPassword,
