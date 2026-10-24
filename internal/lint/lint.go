@@ -119,6 +119,9 @@ func load(path string, opts Options) (*openapi3.T, *specFiles, error) {
 			return nil, nil, fmt.Errorf("%s: swagger %q is not a version Procyon knows; use Swagger 2.0 or OpenAPI 3", path, v)
 		}
 		if toLoad, back, err = fromSwagger(data); err != nil {
+			if placed, ok := errors.AsType[*positionError](err); ok && placed.at.line > 0 {
+				return nil, nil, fmt.Errorf("%s:%w", path, err) // file:line:col: message
+			}
 			return nil, nil, fmt.Errorf("%s: %w", path, err)
 		}
 	}

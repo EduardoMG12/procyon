@@ -1,0 +1,28 @@
+swagger: "2.0"
+info:
+  title: Shop
+  version: 1.0.0
+host: shop.example.com
+schemes: [https]
+parameters:
+  role:
+    name: role
+    in: formData
+    type: string
+    maxLength: 5
+paths:
+  x-shared:
+    $ref: "#/definitions/Note"
+  /profile:
+    post:
+      security: []
+      x-procyon-public: "Sign-up form"
+      consumes: [application/x-www-form-urlencoded]
+      parameters:
+        - $ref: "#/parameters/role"
+      responses:
+        "200":
+          description: Saved
+definitions:
+  Note:
+    type: object

@@ -1,0 +1,13 @@
+swagger: "2.0"
+info:
+  title: Shop
+  version: 1.0.0
+x-shared:
+  users:
+    get:
+      responses:
+        "200":
+          description: Users
+paths:
+  /users:
+    $ref: "#/x-shared/users"

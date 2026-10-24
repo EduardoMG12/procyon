@@ -31,9 +31,24 @@ func TestRules(t *testing.T) {
 		}},
 		{"prc001-global-security.yaml", []string{"PRC001"}, []string{}},
 		// Swagger 2.0: findings point at the original file, not the
-		// OpenAPI 3 document it is converted to. In JSON, with the request body as a "body" parameter.
+		// OpenAPI 3 document it is converted to.
+		// Swagger 2.0 in JSON, with the request body as a "body" parameter.
 		{"swagger-2.0-body.json", []string{"PRC009"}, []string{
 			"PRC009 swagger-2.0-body.json:18:17 POST /users",
+		}},
+		// Swagger 2.0: formData fields, an operation-level http scheme, a
+		// path-level body whose POST copy is ignored but PUT copy is not,
+		// and nulls inside examples and x- extensions (valid).
+		{"swagger-2.0-forms.yaml", []string{"PRC004", "PRC008", "PRC009"}, []string{
+			"PRC009 swagger-2.0-forms.yaml:19:11 POST /profile",
+			"PRC008 swagger-2.0-forms.yaml:23:11 POST /profile",
+			"PRC004 swagger-2.0-forms.yaml:31:7 POST /login",
+			"PRC009 swagger-2.0-forms.yaml:42:13 PUT /accounts",
+		}},
+		// Swagger 2.0: an x- extension under paths is not a path item, and a
+		// formData field given by $ref points at that $ref.
+		{"swagger-2.0-extensions.yaml", []string{"PRC009"}, []string{
+			"PRC009 swagger-2.0-extensions.yaml:22:11 POST /profile",
 		}},
 		// Two undefined schemes in one requirement are two findings.
 		{"prc002-two-undefined.yaml", []string{"PRC002"}, []string{
