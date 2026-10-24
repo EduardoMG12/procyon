@@ -73,6 +73,14 @@ func TestRules(t *testing.T) {
 			"PRC007 item.yaml:1:1 GET /admins/{id}",
 			"PRC007 item.yaml:1:1 GET /users/{id}",
 		}},
+		// Numbers that set how much work a request makes (repeats, page size,
+		// retries) need a maximum; prices, enums and other sizes do not.
+		{"prc008-counts.yaml", []string{"PRC008"}, []string{
+			"PRC008 prc008-counts.yaml:11:11 GET /items",
+			"PRC008 prc008-counts.yaml:48:9 GET /search",
+			"PRC008 prc008-counts.yaml:64:17 POST /reports",
+			"PRC008 prc008-counts.yaml:74:17 POST /reports",
+		}},
 		// Two undefined schemes in one requirement are two findings.
 		{"prc002-two-undefined.yaml", []string{"PRC002"}, []string{
 			"PRC002 prc002-two-undefined.yaml:5:1 ",
@@ -159,7 +167,9 @@ func TestRules(t *testing.T) {
 			"PRC008 prc008-limits.yaml:40:17 POST /orders",
 			"PRC008 prc008-limits.yaml:49:17 POST /orders",
 			"PRC008 prc008-limits.yaml:58:23 POST /orders",
+			"PRC008 prc008-limits.yaml:83:11 GET /customers", // per_page without maximum
 			"PRC008 prc008-limits.yaml:101:13 POST /bulk",
+			"PRC008 prc008-limits.yaml:112:11 GET /odata/orders", // $top without maximum
 			"PRC008 prc008-limits.yaml:126:5 GET /stats",
 		}},
 		{"prc008-nullable-3.1.yaml", []string{"PRC008"}, []string{

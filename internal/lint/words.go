@@ -44,6 +44,23 @@ var (
 	// referenceWords, right before a matched word, make it something other
 	// than a credential: nextPageToken and syncToken are paging cursors,
 	// csrfToken is meant to be handed to the page.
+	// countWords name numbers that set how much work one request makes
+	// the server do: how many items, repeats or retries.
+	countWords = [][]string{
+		{"limit"}, {"count"}, {"repeat"}, {"repeats"}, {"retry"}, {"retries"},
+		{"attempts"}, {"iterations"}, {"depth"}, {"per", "page"}, {"page", "size"},
+		{"batch", "size"}, {"max", "results"}, {"top"}, {"take"},
+		{"limite"}, {"quantidade"}, {"repeticoes"}, {"tentativas"},
+		{"por", "pagina"}, {"tamanho", "pagina"},
+	}
+
+	// countDescribingWords, right after a count word, make the field
+	// something else: limitPrice is a price, countryCode is not a count.
+	countDescribingWords = []string{
+		"price", "amount", "value", "date", "time", "type", "id", "order", "reached",
+		"preco", "valor", "data", "tipo",
+	}
+
 	referenceWords = []string{
 		"page", "next", "previous", "prev", "continuation", "sync", "cursor",
 		"pagination", "csrf", "xsrf",
