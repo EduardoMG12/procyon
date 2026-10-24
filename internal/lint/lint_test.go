@@ -3,6 +3,7 @@ package lint_test
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -133,7 +134,7 @@ func TestSpecsSplitAcrossLocalFiles(t *testing.T) {
 	}
 	f := report.Findings[0]
 	// The operation is written in paths/orders.yaml, line 1, column 1.
-	want := spec("split/paths/orders.yaml")
+	want := filepath.Clean(spec("split/paths/orders.yaml")) // \ on Windows, like the location
 	if f.Location.File != want || f.Location.Line != 1 || f.Location.Column != 1 {
 		t.Errorf("location = %s:%d:%d, want %s:1:1", f.Location.File, f.Location.Line, f.Location.Column, want)
 	}
@@ -205,6 +206,8 @@ func TestRefCannotEscapeWithAbsolutePathThroughSymlink(t *testing.T) {
 // A $ref to an absolute path outside the allowed directories is refused
 // without touching the file system: same message whether the file exists or
 // not, so a spec cannot probe the machine running Procyon.
+var quotedRef = regexp.MustCompile(`\$ref "[^"]*"`)
+
 func TestRefOutsideGivesTheSameErrorWhetherOrNotTheFileExists(t *testing.T) {
 	existing := filepath.Join(t.TempDir(), "exists.yaml")
 	if err := os.WriteFile(existing, []byte("get: {}\n"), 0o644); err != nil {
@@ -223,7 +226,9 @@ func TestRefOutsideGivesTheSameErrorWhetherOrNotTheFileExists(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "outside") {
 			t.Fatalf("Run = %v, want an error saying the $ref points outside", err)
 		}
-		msg := strings.ReplaceAll(err.Error(), filepath.ToSlash(target), "TARGET")
+		// The $ref is quoted as the system writes it (c:\\Users\\… on
+		// Windows): compare everything but the path itself.
+		msg := quotedRef.ReplaceAllString(err.Error(), `$$ref "TARGET"`)
 		messages = append(messages, strings.ReplaceAll(msg, dir, "DIR"))
 	}
 	for i := range messages {
