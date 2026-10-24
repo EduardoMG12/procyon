@@ -29,7 +29,7 @@ func checkPRC003(doc *openapi3.T) []Finding {
 		default:
 			return
 		}
-		findings = append(findings, Finding{Location: locate(scheme.Origin), Why: why, Fix: fix})
+		findings = append(findings, Finding{Location: locate(scheme.Origin), Why: why, Fix: fix, about: scheme})
 	})
 	return findings
 }

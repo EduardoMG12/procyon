@@ -22,11 +22,12 @@ var prc002 = Rule{
 // documented protection does not exist.
 func checkPRC002(doc *openapi3.T) []Finding {
 	var findings []Finding
-	report := func(reqs openapi3.SecurityRequirements, origin *openapi3.Origin, operation string) {
+	report := func(reqs openapi3.SecurityRequirements, origin *openapi3.Origin, operation string, about any) {
 		for _, name := range undefinedSchemes(doc, reqs) {
 			findings = append(findings, Finding{
 				Location:  locateField(origin, "security"),
 				Operation: operation,
+				about:     about,
 				Why: fmt.Sprintf("The requirement names the scheme %q, which the spec never defines, "+
 					"so the protection it documents does not exist: clients and gateways built from the spec cannot authenticate, "+
 					"and nothing says how the operation is really protected.", name),
@@ -34,10 +35,10 @@ func checkPRC002(doc *openapi3.T) []Finding {
 			})
 		}
 	}
-	report(doc.Security, doc.Origin, "")
+	report(doc.Security, doc.Origin, "", doc)
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		if op.Security != nil {
-			report(*op.Security, op.Origin, method+" "+path)
+			report(*op.Security, op.Origin, method+" "+path, op)
 		}
 	})
 	return findings

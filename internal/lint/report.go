@@ -51,6 +51,11 @@ type Finding struct {
 	Operation string // "GET /orders"; empty when the finding is not about an operation
 	Why       string // why it is a risk, in plain words
 	Fix       string // how to fix it
+
+	// about is the spec element a finding without an operation belongs to
+	// (a security scheme, a server, an OAuth2 flow, the spec itself), so an
+	// x-procyon-ignore written on that element covers it and nothing else.
+	about any
 }
 
 // Report is everything one run produced.
@@ -59,6 +64,11 @@ type Report struct {
 	// Failed is true when at least one finding is at or above the fail
 	// threshold.
 	Failed bool
+	// Ignored are the findings an x-procyon-ignore matched.
+	Ignored []IgnoredFinding
+	// Notes are things to know that are not findings: expired and unused
+	// ignores.
+	Notes []Note
 	// FailOn is the fail threshold the run used.
 	FailOn Severity
 	// Sources holds the lines of every spec file read, by the same path

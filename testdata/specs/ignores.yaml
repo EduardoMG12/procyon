@@ -1,0 +1,56 @@
+openapi: 3.0.3
+info:
+  title: Shop
+  version: 1.0.0
+security:
+  - basic: []
+  - queryKey: []
+servers:
+  - url: http://mirror.internal.example.com
+    x-procyon-ignore:
+      - rule: PRC004
+        reason: "Internal mirror, reachable only inside the VPN"
+  - url: http://api.example.com
+paths:
+  /health:
+    get:
+      security: []
+      x-procyon-ignore:
+        - rule: PRC001
+          reason: "Load balancer health check, returns no data"
+      responses:
+        "200":
+          description: OK
+  /reports/{id}:
+    get:
+      security: []
+      x-procyon-ignore:
+        - rule: PRC001
+          reason: "Reports are public until the auth migration"
+          expires: 2026-01-31
+        - rule: PRC007
+          reason: "Report IDs are random UUIDs"
+        - rule: PRC010
+          reason: "Left over from an old admin path"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: A report
+components:
+  securitySchemes:
+    basic:
+      type: http
+      scheme: basic
+      x-procyon-ignore:
+        - rule: PRC003
+          reason: "Basic auth is only used by the legacy importer, behind the VPN"
+    queryKey:
+      type: apiKey
+      in: query
+      name: key

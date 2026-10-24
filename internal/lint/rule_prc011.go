@@ -24,6 +24,7 @@ func checkPRC011(doc *openapi3.T) []Finding {
 		if flows.Implicit != nil {
 			findings = append(findings, Finding{
 				Location: locateField(flows.Origin, "implicit"),
+				about:    flows.Implicit,
 				Why:      "The implicit flow returns the access token in the browser's URL, where history, logs and other scripts can read it, and it cannot prove who asked for the token.",
 				Fix:      "Use the authorizationCode flow with PKCE.",
 			})
@@ -31,6 +32,7 @@ func checkPRC011(doc *openapi3.T) []Finding {
 		if flows.Password != nil {
 			findings = append(findings, Finding{
 				Location: locateField(flows.Origin, "password"),
+				about:    flows.Password,
 				Why:      "The password flow makes the client collect the user's real password, so every client becomes a place where passwords leak, and it cannot support multi-factor login.",
 				Fix:      "Use the authorizationCode flow with PKCE for users, or clientCredentials for machine-to-machine access.",
 			})
