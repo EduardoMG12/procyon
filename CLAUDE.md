@@ -110,10 +110,9 @@ Linux only.
   (all green with every rule). #37 (PRC006/007) → #38 → #39 (ignores) →
   #40 → #41 (JSON, `--output`) → #42 (SARIF) → #43 (Markdown) build on it;
   retarget them to `main` once their bases are merged.
-- #12 (`$refs`, branch `feat/local-refs`) went through six security review
-  rounds; its rules and threat model are in `docs/refs.md`. Its PR is not
-  open yet. A CLI `--ref-root` flag still has to be added on top of the
-  integration branch.
+- #44 (`$refs`, stacked on #28) went through seven security review
+  rounds; its rules and threat model are in `docs/refs.md`. A CLI
+  `--ref-root` flag still has to be added once #26 and #44 are together.
 - After merges: update `testdata/corpus/counts.txt` and `expected.txt`
   (the integration branch has the values with every rule), PRD 0001
   *Discoveries* (deviations are listed in each PR), README example and
