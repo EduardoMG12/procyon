@@ -2,6 +2,7 @@ package main_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -221,5 +222,58 @@ func TestNoColorWhenStdoutIsNotATerminal(t *testing.T) {
 	r := run(t, "lint", spec("prc001-no-auth.yaml"))
 	if strings.Contains(r.stdout, "\x1b[") {
 		t.Errorf("stdout to a pipe contains ANSI escape codes: %q", r.stdout)
+	}
+}
+
+func TestFormatJSONOnStdout(t *testing.T) {
+	r := run(t, "lint", "--format", "json", spec("prc001-no-auth.yaml"))
+	if r.code != 1 {
+		t.Fatalf("exit code = %d, want 1 (same as the terminal format); stderr: %s", r.code, r.stderr)
+	}
+	var got struct {
+		Version  int `json:"version"`
+		Findings []struct {
+			Rule struct {
+				ID string `json:"id"`
+			} `json:"rule"`
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal([]byte(r.stdout), &got); err != nil {
+		t.Fatalf("stdout is not JSON: %v\n%s", err, r.stdout)
+	}
+	if got.Version != 1 || len(got.Findings) != 1 || got.Findings[0].Rule.ID != "PRC001" {
+		t.Errorf("unexpected JSON: %+v", got)
+	}
+}
+
+func TestOutputWritesExtraFormatsToFiles(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "report.json")
+	r := run(t, "lint", "--output", "json="+out, spec("prc001-no-auth.yaml"))
+	if r.code != 1 {
+		t.Fatalf("exit code = %d, want 1; stderr: %s", r.code, r.stderr)
+	}
+	if !strings.Contains(r.stdout, "PRC001") || strings.HasPrefix(strings.TrimSpace(r.stdout), "{") {
+		t.Errorf("stdout should still be the terminal format: %q", r.stdout)
+	}
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !json.Valid(data) {
+		t.Errorf("%s is not JSON", out)
+	}
+}
+
+func TestBadFormatsAreUsageErrors(t *testing.T) {
+	for _, args := range [][]string{
+		{"--format", "xml"},
+		{"--output", "json"},
+		{"--output", "xml=x.xml"},
+		{"--output", "json=" + filepath.Join(t.TempDir(), "missing", "dir", "r.json")},
+	} {
+		r := run(t, append(append([]string{"lint"}, args...), spec("prc001-no-auth.yaml"))...)
+		if r.code != 2 {
+			t.Errorf("%v: exit code = %d, want 2; stderr: %s", args, r.code, r.stderr)
+		}
 	}
 }

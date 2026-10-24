@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 
-	"github.com/EduardoMG12/procyon/internal/format"
 	"github.com/EduardoMG12/procyon/internal/lint"
 )
 
@@ -53,6 +52,9 @@ func runLint(args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("lint", flag.ContinueOnError)
 	flags.SetOutput(io.Discard) // errors are printed below, once
 	failOn := flags.String("fail-on", cfg.FailOn, "")
+	stdoutFormat := flags.String("format", "terminal", "")
+	var extra outputs
+	flags.Var(&extra, "output", "")
 	specs, err := parseInterspersed(flags, args)
 	if err != nil {
 		fmt.Fprintf(stderr, "procyon lint: %v\n\n%s", err, usage)
@@ -60,6 +62,11 @@ func runLint(args []string, stdout, stderr io.Writer) int {
 	}
 	if len(specs) != 1 {
 		fmt.Fprintf(stderr, "procyon lint: expected exactly one spec file\n\n%s", usage)
+		return exitUsage
+	}
+
+	if formats[*stdoutFormat] == nil {
+		fmt.Fprintf(stderr, "procyon: --format: unknown format %q (use %s)\n", *stdoutFormat, formatNames())
 		return exitUsage
 	}
 
@@ -76,9 +83,16 @@ func runLint(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "procyon: %v\n", err)
 		return exitUsage
 	}
-	if err := format.Terminal(stdout, report, format.TerminalOptions{Color: useColor(stdout)}); err != nil {
+	color := *stdoutFormat == "terminal" && useColor(stdout)
+	if err := formats[*stdoutFormat](stdout, report, color); err != nil {
 		fmt.Fprintf(stderr, "procyon: writing report: %v\n", err)
 		return exitUsage
+	}
+	for _, o := range extra {
+		if err := o.write(report); err != nil {
+			fmt.Fprintf(stderr, "procyon: --output %s=%s: %v\n", o.format, o.path, err)
+			return exitUsage
+		}
 	}
 	if report.Failed {
 		return exitFail
@@ -126,10 +140,13 @@ func useColor(w io.Writer) bool {
 }
 
 const usage = `Usage:
-  procyon lint [--fail-on <severity>] <spec>
+  procyon lint [flags] <spec>
                         Check an OpenAPI 3 spec for security problems.
-                        --fail-on: critical, high (default), medium or low.
-                        Can also be set as fail-on in .procyon.yaml.
+
+    --fail-on <severity>      critical, high (default), medium or low.
+                              Can also be set as fail-on in .procyon.yaml.
+    --format <format>         What to print: terminal (default) or json.
+    --output <format>=<path>  Also write a format to a file. Repeatable.
   procyon --version     Print the version
 
 Exit codes: 0 passed, 1 findings at or above the fail threshold, 2 usage or input error.
