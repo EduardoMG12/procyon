@@ -3,6 +3,7 @@ package lint_test
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -205,6 +206,8 @@ func TestRefCannotEscapeWithAbsolutePathThroughSymlink(t *testing.T) {
 // A $ref to an absolute path outside the allowed directories is refused
 // without touching the file system: same message whether the file exists or
 // not, so a spec cannot probe the machine running Procyon.
+var quotedRef = regexp.MustCompile(`\$ref "[^"]*"`)
+
 func TestRefOutsideGivesTheSameErrorWhetherOrNotTheFileExists(t *testing.T) {
 	existing := filepath.Join(t.TempDir(), "exists.yaml")
 	if err := os.WriteFile(existing, []byte("get: {}\n"), 0o644); err != nil {
@@ -223,7 +226,9 @@ func TestRefOutsideGivesTheSameErrorWhetherOrNotTheFileExists(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "outside") {
 			t.Fatalf("Run = %v, want an error saying the $ref points outside", err)
 		}
-		msg := strings.ReplaceAll(err.Error(), filepath.ToSlash(target), "TARGET")
+		// The $ref is quoted as the system writes it (c:\\Users\\… on
+		// Windows): compare everything but the path itself.
+		msg := quotedRef.ReplaceAllString(err.Error(), `$$ref "TARGET"`)
 		messages = append(messages, strings.ReplaceAll(msg, dir, "DIR"))
 	}
 	for i := range messages {
