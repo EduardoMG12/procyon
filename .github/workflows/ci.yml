@@ -29,3 +29,20 @@ jobs:
         run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
       - name: go test
         run: go test -race ./...
+
+  # Runs the README's GitHub Actions example (checkout, install from the
+  # checkout, lint with SARIF and Markdown outputs) so it cannot rot. The
+  # SARIF upload step is left out: it needs code scanning, which a private
+  # repository on a free plan does not have.
+  readme-example:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: procyon
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: procyon/go.mod
+      - run: cd procyon && go install ./cmd/procyon
+      - run: procyon lint procyon/testdata/specs/prc001-global-security.yaml --output sarif=procyon.sarif --output markdown=$GITHUB_STEP_SUMMARY
+      - run: test -s procyon.sarif

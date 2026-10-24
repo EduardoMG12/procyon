@@ -99,3 +99,19 @@ They apply equally to code written by people and by AI assistants.
   vision before starting an issue.
 - When implementation reveals something the PRD got wrong or did not know,
   add it to that PRD's **Discoveries** section in the same PR.
+
+## Releasing
+
+Only the owner releases.
+
+1. On an up-to-date `main` with a clean working tree, build and check the
+   binaries locally: `scripts/release.sh v0.1.0`, then
+   `(cd dist && sha256sum -c SHA256SUMS)` and
+   `dist/procyon_0.1.0_linux_amd64 --version` (the Windows binaries end in
+   `.exe`).
+2. Tag and push: `git tag v0.1.0 && git push origin v0.1.0`. The release
+   workflow runs the same script and publishes `dist/*` as a GitHub
+   release.
+3. Without Actions (a private repository on a free plan), publish from the
+   local build instead: `gh release create v0.1.0 dist/* --generate-notes`
+   (add `--prerelease` for a tag such as `v0.1.0-rc.1`).

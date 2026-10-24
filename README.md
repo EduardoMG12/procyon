@@ -26,7 +26,8 @@ your source code.
 
 ## Usage
 
-The repository is private for now, so build from a clone:
+Once a release is published, download the binary for your system from the
+releases page. The repository is private for now, so build from a clone:
 
 ```sh
 go install ./cmd/procyon
