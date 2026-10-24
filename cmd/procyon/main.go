@@ -52,7 +52,11 @@ func runLint(args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("lint", flag.ContinueOnError)
 	flags.SetOutput(io.Discard) // errors are printed below, once
 	failOn := flags.String("fail-on", cfg.FailOn, "")
-	stdoutFormat := flags.String("format", "terminal", "")
+	defaultFormat := "terminal"
+	if cfg.Format != "" {
+		defaultFormat = cfg.Format
+	}
+	stdoutFormat := flags.String("format", defaultFormat, "")
 	refRoot := flags.String("ref-root", cfg.RefRoot, "")
 	var extra outputs
 	flags.Var(&extra, "output", "")
@@ -64,6 +68,11 @@ func runLint(args []string, stdout, stderr io.Writer) int {
 	if len(specs) != 1 {
 		fmt.Fprintf(stderr, "procyon lint: expected exactly one spec file\n\n%s", usage)
 		return exitUsage
+	}
+	// --output flags replace the file's outputs instead of adding to them,
+	// like every other flag wins over the file.
+	if len(extra) == 0 {
+		extra = cfg.outputs
 	}
 
 	if formats[*stdoutFormat] == nil {
@@ -158,8 +167,10 @@ const usage = `Usage:
     --fail-on <severity>      critical, high (default), medium or low.
                               Can also be set as fail-on in .procyon.yaml.
     --format <format>         What to print: terminal (default), json, sarif
-                              or markdown.
-    --output <format>=<path>  Also write a format to a file. Repeatable.
+                              or markdown. Can also be set as format in
+                              .procyon.yaml.
+    --output <format>=<path>  Also write a format to a file. Repeatable. Can
+                              also be set as a list, output, in .procyon.yaml.
     --ref-root <dir>          Let $refs read files anywhere under dir, not only
                               in the spec's directory (for monorepos). Can also
                               be set as ref-root in .procyon.yaml.

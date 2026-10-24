@@ -199,6 +199,8 @@ func TestConfigFile(t *testing.T) {
 		{"ignores do not belong here", "ignores: []\n", nil, 2, "ignores"},
 		{"invalid severity points at the file", "fail-on: severe\n", nil, 2, `.procyon.yaml: fail-on: unknown severity "severe"`},
 		{"invalid YAML", "fail-on: [\n", nil, 2, ".procyon.yaml:"},
+		{"unknown format", "format: html\n", nil, 2, `.procyon.yaml: format: unknown format "html"`},
+		{"output without a path", "output: [json]\n", nil, 2, `.procyon.yaml: output: "json": want format=path`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -215,6 +217,42 @@ func TestConfigFile(t *testing.T) {
 				t.Errorf("stderr %q does not contain %q", r.stderr, tt.stderr)
 			}
 		})
+	}
+}
+
+func TestConfigFileFormats(t *testing.T) {
+	high, err := filepath.Abs(spec("prc001-no-auth.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	config := "format: json\noutput:\n  - markdown=summary.md\n"
+	if err := os.WriteFile(filepath.Join(dir, ".procyon.yaml"), []byte(config), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := runIn(t, dir, "lint", high)
+	if !strings.HasPrefix(r.stdout, "{") {
+		t.Errorf("stdout is not the json format from the file: %q", r.stdout)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "summary.md")); err != nil {
+		t.Errorf("the output from the file was not written: %v", err)
+	}
+
+	// Flags win: --format replaces format, and one --output replaces the
+	// file's whole list.
+	if err := os.Remove(filepath.Join(dir, "summary.md")); err != nil {
+		t.Fatal(err)
+	}
+	r = runIn(t, dir, "lint", "--format", "terminal", "--output", "sarif=procyon.sarif", high)
+	if strings.HasPrefix(r.stdout, "{") {
+		t.Errorf("--format terminal did not win over the file: %q", r.stdout)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "procyon.sarif")); err != nil {
+		t.Errorf("--output was not written: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "summary.md")); err == nil {
+		t.Error("--output added to the file's outputs instead of replacing them")
 	}
 }
 
