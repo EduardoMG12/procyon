@@ -10,18 +10,23 @@ request, a vendor, a public repository), it does so defensively.
    is refused. Download the file and refer to it by a local path.
 2. **One directory.** `$refs` read only from the spec's own directory, or,
    when you allow it, a directory that contains it (`RefRoot`, for monorepos
-   whose specs share files from a sibling folder). That directory may never
-   be the file system's root, your home directory, or a directory containing
-   it, whatever name it is reached by.
+   whose specs share files from a sibling folder). `RefRoot` and the spec's
+   path must be written the same way (both relative to the repository root,
+   say), not through different links to the same place. That directory may
+   never be the file system's root, your home directory, or a directory
+   containing it, whatever name it is reached by.
 3. **No hidden files.** `.git`, `.env`, `.aws` and every other name starting
-   with `.` are never read, nor short 8.3 names (`GIT~1`) that could alias
-   them. A spec that itself lives in a hidden directory (`.github/`) can
+   with `.` are never read, nor short 8.3 names (`GIT~1`, a tilde followed by
+   a digit) that could alias them; `user~old.yaml` is fine. A spec that itself lives in a hidden directory (`.github/`) can
    still refer to files next to it.
 4. **No symlinks.** Every part of a `$ref` path must be a plain directory or
    regular file; a symlink, a Windows junction, a FIFO or a device is
    refused.
-5. **Limits.** At most 10 MiB per referenced file, 64 MiB for all of them
-   together, and 64 MiB for the spec itself.
+5. **Limits.** At most 10 MiB per referenced file and 64 MiB for the spec
+   itself. Every `$ref` counts against a 64 MiB total, even when it points at
+   a file already read, because each reference is parsed again.
+6. **The spec itself** must be a regular file: a symlink (to a device that
+   never ends, or to a file outside the repository) is refused.
 
 The path is checked as text before anything touches the file system, so a
 `$ref` cannot probe the machine or learn whether a file exists outside the

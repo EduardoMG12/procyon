@@ -48,3 +48,30 @@ func TestSpecHasASizeLimit(t *testing.T) {
 		t.Fatalf("Run = %v, want an error about the spec's size", err)
 	}
 }
+
+// Every $ref counts against the budget, cached or not: kin-openapi parses
+// the returned bytes again for each reference.
+func TestRepeatedRefsCountAgainstTheBudget(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	defer func(old int64) { maxRefTotal = old }(maxRefTotal)
+	maxRefTotal = 100
+
+	dir := t.TempDir()
+	item := "get:\n  responses:\n    \"200\":\n      description: OK\n" // 47 bytes
+	if err := os.WriteFile(filepath.Join(dir, "a.yaml"), []byte(item), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	spec := "openapi: 3.0.3\ninfo:\n  title: Shop\n  version: 1.0.0\npaths:\n"
+	for _, p := range []string{"one", "two", "three"} {
+		spec += "  /" + p + ":\n    $ref: \"./a.yaml\"\n"
+	}
+	path := filepath.Join(dir, "api.yaml")
+	if err := os.WriteFile(path, []byte(spec), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Run(path, Options{})
+	if err == nil || !strings.Contains(err.Error(), "in total") {
+		t.Fatalf("Run = %v, want an error about the total read through $refs", err)
+	}
+}

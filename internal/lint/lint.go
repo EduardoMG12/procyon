@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"slices"
@@ -62,19 +63,9 @@ func Run(path string, opts Options) (Report, error) {
 // load reads the spec at path, recording the file, line and column of every
 // element so findings can point at the original file.
 func load(path string, opts Options) (*openapi3.T, *specFiles, error) {
-	if info, err := os.Stat(path); err == nil && info.Size() > maxSpecSize {
-		return nil, nil, fmt.Errorf("%s: larger than %d MiB", path, maxSpecSize>>20)
-	}
-	data, err := os.ReadFile(path)
+	data, err := readSpec(path)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, nil, fmt.Errorf("%s: file not found", path)
-		}
-		var pathErr *fs.PathError
-		if errors.As(err, &pathErr) {
-			err = pathErr.Err
-		}
-		return nil, nil, fmt.Errorf("%s: %w", path, err)
+		return nil, nil, err
 	}
 
 	// kin-openapi's own syntax errors are off by a line for some YAML
@@ -124,4 +115,42 @@ func load(path string, opts Options) (*openapi3.T, *specFiles, error) {
 func splitLines(data []byte) []string {
 	text := strings.ReplaceAll(string(data), "\r\n", "\n")
 	return strings.Split(strings.TrimSuffix(text, "\n"), "\n")
+}
+
+// readSpec reads the spec, which must be a regular file (not a symlink to
+// somewhere else, nor a device that never ends) of at most maxSpecSize.
+func readSpec(path string) ([]byte, error) {
+	info, err := os.Lstat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, fmt.Errorf("%s: file not found", path)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, unwrapPath(err))
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s: not a regular file (a symlink, directory or device); give the spec file itself", path)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, unwrapPath(err))
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, maxSpecSize+1))
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	if int64(len(data)) > maxSpecSize {
+		return nil, fmt.Errorf("%s: larger than %d MiB", path, maxSpecSize>>20)
+	}
+	return data, nil
+}
+
+// unwrapPath drops the operation and path that os errors repeat, since the
+// message already starts with the path.
+func unwrapPath(err error) error {
+	var pathErr *fs.PathError
+	if errors.As(err, &pathErr) {
+		return pathErr.Err
+	}
+	return err
 }

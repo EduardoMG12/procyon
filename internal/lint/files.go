@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -38,8 +39,11 @@ type specFiles struct {
 	// lines holds each file's lines, by path, for excerpts.
 	lines map[string][]string
 	// cache holds $ref files by path, so a file referenced a thousand times
-	// is read once.
-	cache map[string][]byte
+	// is read from disk once, and cacheOwner the path findings use for it.
+	cache      map[string][]byte
+	cacheOwner map[string]string
+	// specData is the spec's own content, for $refs that point back into it.
+	specData []byte
 	// root is the one directory $refs may read from, opened on the first
 	// $ref so a spec without $refs never depends on it.
 	root *os.Root
@@ -53,7 +57,8 @@ type specFiles struct {
 func newSpecFiles(path, refRoot string, data []byte) *specFiles {
 	files := &specFiles{
 		spec: path, refRoot: refRoot,
-		paths: map[string]string{}, lines: map[string][]string{}, cache: map[string][]byte{},
+		paths: map[string]string{}, lines: map[string][]string{},
+		cache: map[string][]byte{}, cacheOwner: map[string]string{}, specData: data,
 	}
 	files.add(specURL(path), path, data)
 	return files
@@ -89,9 +94,26 @@ func (f *specFiles) read(_ *openapi3.Loader, location *url.URL) ([]byte, error) 
 		return nil, fmt.Errorf("$ref %q is a URL: Procyon never fetches remote references while linting; download the file and refer to it by a local path", location)
 	}
 	path := filepath.Clean(filepath.FromSlash(location.Path))
-	if data, ok := f.cache[path]; ok {
-		f.paths[location.String()] = path
+	// kin-openapi parses what read returns on every $ref, cached or not, so
+	// every call counts against the budget.
+	charge := func(data []byte) ([]byte, error) {
+		if f.total += int64(len(data)); f.total > maxRefTotal {
+			return nil, fmt.Errorf("$ref %q: the spec's $refs read more than %d MiB in total", path, maxRefTotal>>20)
+		}
 		return data, nil
+	}
+	if data, ok := f.cache[path]; ok {
+		f.paths[location.String()] = f.cacheOwner[path]
+		return charge(data)
+	}
+	if specAbs, err := filepath.Abs(f.spec); err == nil {
+		if abs, err := filepath.Abs(path); err == nil && abs == specAbs {
+			// A $ref back into the spec, written another way (./api.yaml vs
+			// api.yaml): it is the spec, already read.
+			f.paths[location.String()] = f.spec
+			f.cache[path], f.cacheOwner[path] = withLocations(f.specData), f.spec
+			return charge(f.cache[path])
+		}
 	}
 	if f.root == nil {
 		root, specRel, err := openRefRoot(f.spec, f.refRoot)
@@ -117,13 +139,13 @@ func (f *specFiles) read(_ *openapi3.Loader, location *url.URL) ([]byte, error) 
 	if err != nil {
 		return nil, fmt.Errorf("$ref %q: %w", path, err)
 	}
-	if f.total += int64(len(data)); f.total > maxRefTotal {
-		return nil, fmt.Errorf("$ref %q: the spec's $refs read more than %d MiB in total", path, maxRefTotal>>20)
-	}
 	f.add(location, path, data)
-	f.cache[path] = withLocations(data)
-	return f.cache[path], nil
+	f.cache[path], f.cacheOwner[path] = withLocations(data), path
+	return charge(f.cache[path])
 }
+
+// shortName matches an 8.3 short name such as GIT~1 or PROGRA~2.
+var shortName = regexp.MustCompile(`~[0-9]`)
 
 // refusedPart explains why a path relative to the root may not be read
 // as text, or returns "": a hidden part (.git, .env) after the spec's own
@@ -139,10 +161,13 @@ func refusedPart(rel, specRel string) string {
 		}
 	}
 	for i, part := range parts {
-		if strings.Contains(part, "~") {
+		if i < own {
+			continue
+		}
+		if shortName.MatchString(part) {
 			return "short (8.3) names are not allowed in $refs; use the full name"
 		}
-		if i >= own && strings.HasPrefix(part, ".") && part != "." {
+		if strings.HasPrefix(part, ".") && part != "." {
 			return "hidden files and directories (.git, .env, ...) are never read"
 		}
 	}
@@ -220,20 +245,13 @@ func openRefRoot(spec, refRoot string) (*os.Root, string, error) {
 	}
 	specRel, ok := within(dir, specDir)
 	if !ok {
-		// The same directories written another way (/tmp vs /private/tmp,
-		// a symlinked checkout): compare them resolved, then name the root
-		// the way the spec's path names it, since $ref paths are built from
-		// the spec's path and checked against the root's name as text.
-		if specRel, ok = within(evalSymlinks(dir), evalSymlinks(specDir)); ok {
-			dir = specDir
-			for range strings.Split(specRel, string(filepath.Separator)) {
-				if specRel != "." {
-					dir = filepath.Dir(dir)
-				}
-			}
+		if _, same := within(evalSymlinks(dir), evalSymlinks(specDir)); same {
+			// Matching only after resolving symlinks would mean opening one
+			// directory while checking $ref paths against another name for
+			// it; a symlink in between could widen the root. Refuse.
+			return nil, "", fmt.Errorf("the $ref root %s and the spec %s are written through different directories; "+
+				"give both the same way (for example both relative to the repository root)", dir, spec)
 		}
-	}
-	if !ok {
 		return nil, "", fmt.Errorf("the $ref root %s does not contain the spec", dir)
 	}
 	root, err := os.OpenRoot(dir)
@@ -266,14 +284,19 @@ func tooBroad(root *os.Root) string {
 	if sameDir(opened, home) {
 		return "your home directory"
 	}
-	for dir := filepath.Dir(home); ; dir = filepath.Dir(dir) {
-		if sameDir(opened, dir) {
-			return "a directory containing your home directory"
-		}
-		if filepath.Dir(dir) == dir {
-			return ""
+	// The home's ancestors as written and as resolved (/home may be a link
+	// to /usr/home): either way they contain it.
+	for _, h := range []string{home, evalSymlinks(home)} {
+		for dir := filepath.Dir(h); ; dir = filepath.Dir(dir) {
+			if sameDir(opened, dir) {
+				return "a directory containing your home directory"
+			}
+			if filepath.Dir(dir) == dir {
+				break
+			}
 		}
 	}
+	return ""
 }
 
 func sameDir(opened fs.FileInfo, dir string) bool {

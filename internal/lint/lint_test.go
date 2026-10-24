@@ -370,8 +370,10 @@ func TestRefsRefuseShortNamesOnEverySystem(t *testing.T) {
 	}
 }
 
-// A RefRoot written another way (through a symlink) still contains the spec.
-func TestRefRootThroughASymlinkStillContainsTheSpec(t *testing.T) {
+// A RefRoot written through other directories than the spec's path is
+// refused with a clear message: accepting it would mean checking $ref paths
+// against one name of a directory while reading through another.
+func TestRefRootWrittenThroughOtherDirectoriesIsRefused(t *testing.T) {
 	setHome(t, t.TempDir())
 	real := t.TempDir()
 	writeFile(t, filepath.Join(real, "common", "orders.yaml"), pathItem)
@@ -381,7 +383,61 @@ func TestRefRootThroughASymlinkStillContainsTheSpec(t *testing.T) {
 	if err := os.Symlink(real, alias); err != nil {
 		t.Skipf("cannot create symlinks here: %v", err)
 	}
-	if _, err := lint.Run(spec, lint.Options{RefRoot: alias}); err != nil {
-		t.Fatalf("RefRoot through a symlink: %v", err)
+	_, err := lint.Run(spec, lint.Options{RefRoot: alias})
+	if err == nil || !strings.Contains(err.Error(), "the same way") {
+		t.Fatalf("Run = %v, want an error asking to give both paths the same way", err)
+	}
+}
+
+// The escape found in review: a symlink below RefRoot in the spec's path
+// must not let the root be opened above RefRoot.
+func TestRefRootCannotBeWidenedThroughASymlinkInTheSpecPath(t *testing.T) {
+	setHome(t, t.TempDir())
+	base := t.TempDir()
+	refRoot := filepath.Join(base, "ci", "repo", "sub")
+	writeFile(t, filepath.Join(refRoot, "a", "b", "c", "keep"), "")
+	writeFile(t, filepath.Join(base, "secret.yaml"), pathItem)
+	link := filepath.Join(base, "ci", "repo", "link")
+	if err := os.Symlink(filepath.Join(refRoot, "a", "b", "c"), link); err != nil {
+		t.Skipf("cannot create symlinks here: %v", err)
+	}
+	spec := filepath.Join(link, "api.yaml")
+	writeSpec(t, spec, "../../../secret.yaml")
+	report, err := lint.Run(spec, lint.Options{RefRoot: refRoot})
+	for file := range report.Sources {
+		if strings.HasSuffix(file, "secret.yaml") {
+			t.Fatal("read a file outside RefRoot")
+		}
+	}
+	if err == nil {
+		t.Fatal("Run returned no error")
+	}
+}
+
+// Ordinary names with a tilde are fine; only short-name patterns (~1) are not.
+func TestTildeInOrdinaryNamesIsAllowed(t *testing.T) {
+	setHome(t, t.TempDir())
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "user~old.yaml"), pathItem)
+	spec := filepath.Join(dir, "api.yaml")
+	writeSpec(t, spec, "./user~old.yaml")
+	if _, err := lint.Run(spec, lint.Options{}); err != nil {
+		t.Fatalf("Run = %v, want no error for user~old.yaml", err)
+	}
+}
+
+// The spec itself must be a regular file: a symlink to a device or to a file
+// outside the repository is refused.
+func TestSpecMustBeARegularFile(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(t.TempDir(), "elsewhere.yaml")
+	writeFile(t, target, "openapi: 3.0.3\ninfo:\n  title: x\n  version: \"1\"\npaths: {}\n")
+	link := filepath.Join(dir, "api.yaml")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("cannot create symlinks here: %v", err)
+	}
+	_, err := lint.Run(link, lint.Options{})
+	if err == nil || !strings.Contains(err.Error(), "regular file") {
+		t.Fatalf("Run = %v, want an error refusing a symlinked spec", err)
 	}
 }
