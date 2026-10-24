@@ -30,6 +30,23 @@ func TestRules(t *testing.T) {
 			"PRC001 prc001-no-auth-tabs.json:9:4 GET /orders",
 		}},
 		{"prc001-global-security.yaml", []string{"PRC001"}, []string{}},
+		// Authenticated: nothing. Unauthenticated (/profiles) and public (/team)
+		// operations: both rules. /docs/{version}: version is not an object ID.
+		{"prc006-prc007.yaml", []string{"PRC006", "PRC007"}, []string{
+			"PRC007 prc006-prc007.yaml:24:5 GET /profiles/{username}",
+			"PRC007 prc006-prc007.yaml:39:5 GET /team/{order_id}/contacts",
+			"PRC006 prc006-prc007.yaml:57:21 GET /team/{order_id}/contacts",
+			"PRC006 prc006-prc007.yaml:96:19 GET /contacts",
+			"PRC006 prc006-prc007.yaml:100:19 GET /contacts",
+			"PRC006 prc006-prc007.yaml:102:19 GET /contacts",
+			"PRC006 prc006-prc007.yaml:106:19 GET /contacts",
+			"PRC007 prc006-prc007.yaml:118:5 GET /orders/{orderid}",
+			"PRC006 prc006-prc007.yaml:157:9 GET /profiles/{username}",
+			"PRC006 prc006-prc007.yaml:161:9 GET /profiles/{username}",
+			"PRC006 prc006-prc007.yaml:163:9 GET /profiles/{username}",
+			"PRC006 prc006-prc007.yaml:165:9 GET /profiles/{username}",
+			"PRC006 prc006-prc007.yaml:170:9 GET /profiles/{username}",
+		}},
 		{"public-operation.yaml", []string{"PRC001"}, []string{
 			"PRC001 public-operation.yaml:13:5 GET /orders",
 		}},

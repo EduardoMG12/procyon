@@ -1,0 +1,171 @@
+openapi: 3.0.3
+info:
+  title: Shop
+  version: 1.0.0
+paths:
+  /users/{userId}:
+    get:
+      security:
+        - bearer: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Person"
+  /profiles/{username}:
+    get:
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A public profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Person"
+  /team/{order_id}/contacts:
+    get:
+      x-procyon-public: "The team page is public"
+      parameters:
+        - name: order_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Contacts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    telefone:
+                      type: string
+  /docs/{version}:
+    get:
+      x-procyon-public: "Documentation"
+      parameters:
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Docs
+  /contacts:
+    get:
+      x-procyon-public: "Company contacts page"
+      responses:
+        "200":
+          description: Contacts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  emailTemplate:
+                    type: string
+                  emailSettings:
+                    type: object
+                    properties:
+                      daily:
+                        type: boolean
+                  emailVerifiedAt:
+                    type: string
+                    format: date-time
+                  supportEmail:
+                    type: string
+                  walletAddress:
+                    type: string
+                  addresses:
+                    type: array
+                    items:
+                      type: string
+                  telephone:
+                    type: string
+                  celulares:
+                    type: array
+                    items:
+                      type: string
+                  nationalIdentifier:
+                    type: string
+  /auth/login:
+    post:
+      responses:
+        "200":
+          description: The caller's own profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Person"
+  /orders/{orderid}:
+    get:
+      x-procyon-public: "Order tracking"
+      parameters:
+        - name: orderid
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: An order
+  /i18n/{langCode}/pages/{pageNumber}:
+    get:
+      x-procyon-public: "Translations"
+      parameters:
+        - name: langCode
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: pageNumber
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: A page
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+  schemas:
+    Person:
+      type: object
+      properties:
+        nickname:
+          type: string
+        email:
+          type: string
+        emailVerified:
+          type: boolean
+        phoneNumber:
+          type: string
+        cpf:
+          type: string
+        birthDate:
+          type: string
+          format: date
+        addressId:
+          type: string
+        dataNascimento:
+          type: string

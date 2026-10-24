@@ -23,3 +23,9 @@ vampi PRC005 620:21 GET /books/v1/{book_title}
 crapi PRC010 855:7 DELETE /identity/api/v2/admin/videos/{video_id}
 # crAPI: the workshop's management listing of all users, same problem.
 crapi PRC010 2201:7 GET /workshop/api/management/users/all
+
+# VAmPI: GET /users/v1 lists every user's email with no authentication
+# (excessive data exposure).
+vampi PRC006 82:25 GET /users/v1
+# VAmPI: anyone can look up any user by username.
+vampi PRC007 264:5 GET /users/v1/{username}
