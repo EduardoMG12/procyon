@@ -29,3 +29,15 @@ jobs:
         run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
       - name: go test
         run: go test -race ./...
+
+  # Runs the GitHub Actions example from the README, so it cannot rot.
+  readme-example:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go install ./cmd/procyon
+      - run: procyon lint testdata/specs/prc001-global-security.yaml --output sarif=procyon.sarif --output markdown=$GITHUB_STEP_SUMMARY
+      - run: test -s procyon.sarif
