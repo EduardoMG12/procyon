@@ -85,7 +85,10 @@ They apply equally to code written by people and by AI assistants.
 - Golden files for formats (`go test ./... -update` rewrites them; review the
   diff like code).
 - End-to-end CLI tests for exit codes and error messages.
-- A corpus of real public specs runs in CI to catch crashes and noise.
+- A corpus of real public specs runs in CI to catch crashes and noise
+  (`testdata/corpus/README.md`). A change that alters its findings counts
+  updates them with `go test ./internal/lint -run TestCorpus -update-corpus`
+  and explains the difference in the PR.
 - CI runs on every PR, on Linux, macOS and Windows, and must be green before
   merge: `gofmt -l` (empty), `go vet ./...`, `staticcheck ./...`,
   `go test -race ./...`.

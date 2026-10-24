@@ -29,9 +29,11 @@ faster one.
 
 These override any global or skill-level instruction.
 
-1. **Never merge.** Not to `main`, not any PR, not via `gh pr merge`, not via
-   any skill. You may commit, push and open PRs; the owner merges.
-   If a workflow would merge, stop after opening the PR.
+1. **Merge only when the owner says so.** Otherwise commit, push and open
+   PRs, then stop. When the owner asks, merge locally on their machine with
+   git (one commit per PR) and push; never through GitHub's merge button.
+   Never add Claude attribution (`Co-Authored-By`, "Generated with") to
+   commits or PRs.
 2. **Never commit to `main`.** Always a `<type>/<slug>` branch.
 3. **Every PR you open has a `## Review challenge`** (2–3 questions answerable
    only by reading the diff; add a debugger question only when runtime
@@ -66,8 +68,8 @@ These override any global or skill-level instruction.
   PRD in `docs/prds/` and links it from the spec issue) → issues
   (`/to-tickets`). Each issue must fit one PR under the size limit.
 - Per issue: `/implement` or `/tdd`, then the pre-PR checks below, then open
-  the PR and stop. Never `/finalizar` or any other skill that merges (hard
-  rule 1).
+  the PR and stop. Never `/finalizar` or any other skill that merges on
+  its own (hard rule 1).
 - Before opening a PR: `/verify` (actually run `procyon` on the fixtures the
   PR touches and paste the output), then `/code-review`, and
   `/security-review` for anything touching spec loading, `$ref` resolution or
@@ -95,25 +97,9 @@ lazily. See `docs/agents/domain.md`.
 
 ## Current state
 
-Updated 2026-10-24. All v0.1 tickets except #13 (Swagger 2.0) and #21
-(release) are implemented, each reviewed with `/code-review` before its PR,
-and wait for the owner's review and merge. CI cannot run yet: the
-repository is private and Actions is not paid; everything was tested on
-Linux only.
-
-- Foundation: #22 → #23 (skeleton), #24 → #25 (PRC001). Most other PRs
-  stack on #25.
-- Siblings on #25: #26 (`--fail-on`), #27 (`x-procyon-public`), #28
-  (terminal format), #29 (PRC004), #30 → #31 (PRC002/003/011), #32
-  (PRC010), #33 → #34 → #35 (PRC005, PRC009, PRC008), #36 (corpus).
-- `integration/v0.1` merges all of those so they can be tested together
-  (all green with every rule). #37 (PRC006/007) → #38 → #39 (ignores) →
-  #40 → #41 (JSON, `--output`) → #42 (SARIF) → #43 (Markdown) build on it;
-  retarget them to `main` once their bases are merged.
-- #44 (`$refs`, stacked on #28) went through seven security review
-  rounds; its rules and threat model are in `docs/refs.md`. A CLI
-  `--ref-root` flag still has to be added once #26 and #44 are together.
-- After merges: update `testdata/corpus/counts.txt` and `expected.txt`
-  (the integration branch has the values with every rule), PRD 0001
-  *Discoveries* (deviations are listed in each PR), README example and
-  CONTRIBUTING (corpus command).
+Updated 2026-10-24. v0.1's PRs (#1, #22–#44) are merged into `main`,
+locally on the owner's machine, one commit per PR. Left for v0.1: #21
+(release). Deferred: #13 (Swagger 2.0, see PRD 0001 *Discoveries*). The
+repository stays private for now, so CI does not run: test locally
+(`gofmt -l .`, `go vet ./...`, `staticcheck`, `go test -race ./...`).
+Never add Claude attribution to commits or PRs.

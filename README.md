@@ -7,9 +7,8 @@ exposed to anonymous callers, clients that can make themselves admin. It runs
 in CI and fails the build before the problem ships, without you writing a
 single test.
 
-> **Status: planning.** Nothing is released yet. The plan lives in
-> [docs/prds/](docs/prds/): start with the [vision](docs/prds/0000-vision.md)
-> and the [v0.1 PRD](docs/prds/0001-v0.1-spec-lint.md).
+> **Status: v0.1 in development.** Everything below works from source; no
+> release is published yet.
 
 ## Why
 
@@ -25,31 +24,75 @@ knows them already:
 It works for an API written in any language: Procyon reads the spec, never
 your source code.
 
-## What it will look like (v0.1)
+## Usage
 
 ```sh
+go install github.com/EduardoMG12/procyon/cmd/procyon@latest
 procyon lint openapi.yaml
 ```
 
 ```text
-high  PRC001  Operation has no authentication
-      openapi.yaml:42:5  GET /users/{id}
+HIGH    PRC001  Operation has no authentication
+        openapi.yaml:7:5  GET /users/{id}
 
-      40 |   /users/{id}:
-      41 |     get:
-    > 42 |       operationId: getUser
-      43 |       responses:
+          5 | paths:
+          6 |   /users/{id}:
+        > 7 |     get:
+          8 |       operationId: getUser
+          9 |       parameters:
 
-      Why: anyone who knows the URL can call this operation.
-      Fix: add a security requirement, or mark it public on purpose with
-           x-procyon-public: "<reason>".
-      More: docs/rules/PRC001.md
+        Why:  Anyone who can reach the API can call this operation, without
+              proving who they are.
+        Fix:  Add a security requirement to the operation or to the whole spec.
+        More: https://github.com/EduardoMG12/procyon/blob/main/docs/rules/PRC001.md
 
-1 high · 0 medium · 0 low · 0 ignored   (fails at: high)
+FAILED  1 high · 0 medium · 0 low · 0 ignored  (fails at: high)
 ```
 
-Formats: `terminal`, `json`, `sarif` (GitHub code scanning) and `markdown`
-(job summaries). Inputs: OpenAPI 3.0, 3.1 and Swagger 2.0, YAML or JSON.
+Exit code `0` passed, `1` a finding at or above the fail threshold, `2`
+Procyon could not run. Inputs: OpenAPI 3.0 and 3.1, YAML or JSON, split
+across local files or not (Swagger 2.0 is not supported yet).
+
+| Flag | |
+|---|---|
+| `--fail-on <severity>` | `critical`, `high` (default), `medium` or `low` |
+| `--format <format>` | what to print: `terminal` (default), `json`, `sarif`, `markdown` |
+| `--output <format>=<path>` | also write a format to a file; repeatable |
+| `--ref-root <dir>` | let `$refs` read anywhere under `dir` (monorepos) |
+
+`fail-on` and `ref-root` can also live in a `.procyon.yaml`. See
+[configuration](docs/configuration.md), [ignoring a finding](docs/ignoring.md),
+[how `$refs` are read](docs/refs.md) and the [JSON format](docs/json-format.md).
+
+### In GitHub Actions
+
+```yaml
+- run: go install github.com/EduardoMG12/procyon/cmd/procyon@latest
+- run: procyon lint openapi.yaml --output sarif=procyon.sarif --output markdown=$GITHUB_STEP_SUMMARY
+- uses: github/codeql-action/upload-sarif@v3
+  if: always()
+  with:
+    sarif_file: procyon.sarif
+```
+
+Run Procyon before any step that writes credentials into the workspace
+(see [docs/refs.md](docs/refs.md)).
+
+## Rules
+
+| ID | Severity | Catches |
+|---|---|---|
+| [PRC001](docs/rules/PRC001.md) | high | Operation has no authentication |
+| [PRC002](docs/rules/PRC002.md) | high | Security requirement names an undefined scheme |
+| [PRC003](docs/rules/PRC003.md) | medium | API key in the query string, or HTTP Basic |
+| [PRC004](docs/rules/PRC004.md) | high | Server URL without TLS |
+| [PRC005](docs/rules/PRC005.md) | high | Secret returned in a response |
+| [PRC006](docs/rules/PRC006.md) | high | Personal data returned without authentication |
+| [PRC007](docs/rules/PRC007.md) | high | Object addressed by ID without authentication |
+| [PRC008](docs/rules/PRC008.md) | low | Unbounded input or unpaged list |
+| [PRC009](docs/rules/PRC009.md) | medium | Client can write a privileged field (mass assignment) |
+| [PRC010](docs/rules/PRC010.md) | medium | Admin operation protected like regular ones |
+| [PRC011](docs/rules/PRC011.md) | medium | Deprecated OAuth2 flow |
 
 ## Roadmap
 

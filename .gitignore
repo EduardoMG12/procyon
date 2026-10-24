@@ -6,3 +6,12 @@ coverage.*
 .DS_Store
 .idea/
 .vscode/
+
+# Secrets never go in the repository.
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*credentials*.json
+gha-creds-*.json
