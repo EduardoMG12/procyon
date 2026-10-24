@@ -135,8 +135,8 @@ func TestRefThroughSymlinkCannotLeaveTheSpecDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := lint.Run(spec, lint.Options{})
-	if err == nil || !strings.Contains(err.Error(), "outside") {
-		t.Fatalf("Run = %v, want an error saying the $ref points outside", err)
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("Run = %v, want an error refusing the symlink", err)
 	}
 }
 
@@ -300,6 +300,57 @@ func TestRefToADirectoryIsReportedAsSuch(t *testing.T) {
 	}
 	spec := filepath.Join(dir, "api.yaml")
 	writeSpec(t, spec, "./orders")
+	_, err := lint.Run(spec, lint.Options{})
+	if err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("Run = %v, want an error saying it is not a regular file", err)
+	}
+}
+
+// A symlink with an ordinary name must not lead to a hidden file: $refs
+// never follow symlinks at all.
+func TestRefsNeverFollowSymlinks(t *testing.T) {
+	setHome(t, t.TempDir())
+	repo := t.TempDir()
+	writeFile(t, filepath.Join(repo, ".git", "config"), pathItem)
+	writeFile(t, filepath.Join(repo, ".env"), pathItem)
+	if err := os.Symlink(".git", filepath.Join(repo, "g")); err != nil {
+		t.Skipf("cannot create symlinks here: %v", err)
+	}
+	if err := os.Symlink(".env", filepath.Join(repo, "e.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	for _, ref := range []string{"./g/config", "./e.yaml"} {
+		spec := filepath.Join(repo, "api.yaml")
+		writeSpec(t, spec, ref)
+		_, err := lint.Run(spec, lint.Options{})
+		if err == nil || !strings.Contains(err.Error(), "symlink") {
+			t.Errorf("$ref %s: Run = %v, want an error refusing the symlink", ref, err)
+		}
+	}
+}
+
+// A spec inside a hidden directory (.github) can still use $refs next to
+// it, with or without RefRoot: only what comes after the spec's directory
+// is checked for hidden parts.
+func TestSpecInsideAHiddenDirectoryCanUseRefs(t *testing.T) {
+	setHome(t, t.TempDir())
+	repo := t.TempDir()
+	writeFile(t, filepath.Join(repo, ".github", "orders.yaml"), pathItem)
+	spec := filepath.Join(repo, ".github", "api.yaml")
+	writeSpec(t, spec, "./orders.yaml")
+	for _, opts := range []lint.Options{{}, {RefRoot: repo}} {
+		if _, err := lint.Run(spec, opts); err != nil {
+			t.Errorf("Options%+v: %v", opts, err)
+		}
+	}
+}
+
+// A $ref to the root directory itself is a directory, not a hidden file.
+func TestRefToTheRootDirectoryIsNotAFile(t *testing.T) {
+	setHome(t, t.TempDir())
+	dir := t.TempDir()
+	spec := filepath.Join(dir, "api.yaml")
+	writeSpec(t, spec, "./")
 	_, err := lint.Run(spec, lint.Options{})
 	if err == nil || !strings.Contains(err.Error(), "not a regular file") {
 		t.Fatalf("Run = %v, want an error saying it is not a regular file", err)
