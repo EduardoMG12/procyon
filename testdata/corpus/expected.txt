@@ -32,3 +32,19 @@ crapi PRC008 2394:19 POST /workshop/api/merchant/contact_mechanic
 vampi PRC006 82:25 GET /users/v1
 # VAmPI: anyone can look up any user by username.
 vampi PRC007 264:5 GET /users/v1/{username}
+
+# Pixi: the spec leaves out the token on PUT /api/user/edit_info, unlike
+# every other user operation (the server checks it: a gap in the spec).
+pixi PRC001 1:7783 PUT /api/user/edit_info
+# Pixi: the admin operations accept any user's token (broken function level
+# authorization).
+pixi PRC010 1:9620 GET /api/admin/users/search
+pixi PRC010 1:11203 POST /api/admin/money
+# Pixi: is_admin is writable in UsersItem, the body of register, login,
+# edit_info and admin/money (mass assignment at sign-up and profile edit).
+# Reported once, under the first of those operations.
+pixi PRC009 1:12004 POST /api/admin/money
+
+# Juice Shop: orderLinesData is an unbounded string the B2B API evaluates
+# (the "RCE DoS" challenges).
+juice-shop PRC008 35:139 POST /orders
