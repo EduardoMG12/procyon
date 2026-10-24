@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -130,6 +131,9 @@ func readSpec(path string) ([]byte, error) {
 	if !info.Mode().IsRegular() {
 		return nil, fmt.Errorf("%s: not a regular file (a symlink, directory or device); give the spec file itself", path)
 	}
+	if leavesWorkingDir(path) {
+		return nil, fmt.Errorf("%s: reached through a link leading outside the working directory; give the spec's real path", path)
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, unwrapPath(err))
@@ -153,4 +157,24 @@ func unwrapPath(err error) error {
 		return pathErr.Err
 	}
 	return err
+}
+
+// leavesWorkingDir reports whether a spec written inside the working
+// directory really lives outside it, through a directory symlink: a pull
+// request could commit such a link to make Procyon read, and root $refs
+// in, a directory nobody reviews.
+func leavesWorkingDir(path string) bool {
+	wd, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+	dir, err := filepath.Abs(filepath.Dir(path))
+	if err != nil {
+		return false
+	}
+	if _, inside := within(wd, dir); !inside {
+		return false
+	}
+	_, stillInside := within(evalSymlinks(wd), evalSymlinks(dir))
+	return !stillInside
 }

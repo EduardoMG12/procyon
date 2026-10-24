@@ -3,6 +3,7 @@ package lint_test
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -439,5 +440,50 @@ func TestSpecMustBeARegularFile(t *testing.T) {
 	_, err := lint.Run(link, lint.Options{})
 	if err == nil || !strings.Contains(err.Error(), "regular file") {
 		t.Fatalf("Run = %v, want an error refusing a symlinked spec", err)
+	}
+}
+
+// Many fragment refs to one shared file are an ordinary layout: they must
+// not exhaust the budget, since the file is read once.
+func TestManyFragmentRefsToOneFileAreFine(t *testing.T) {
+	setHome(t, t.TempDir())
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "common.yaml"), "components:\n  responses:\n    OK:\n      description: OK\n"+"      x-padding: \""+strings.Repeat("x", 400000)+"\"\n")
+	spec := "openapi: 3.0.3\ninfo:\n  title: Shop\n  version: 1.0.0\npaths:\n"
+	for i := 0; i < 200; i++ {
+		spec += "  /p" + strconv.Itoa(i) + ":\n    get:\n      responses:\n        \"200\":\n          $ref: \"./common.yaml#/components/responses/OK\"\n"
+	}
+	path := filepath.Join(dir, "api.yaml")
+	writeFile(t, path, spec)
+	if _, err := lint.Run(path, lint.Options{}); err != nil {
+		t.Fatalf("Run = %v, want no error", err)
+	}
+}
+
+// Only real 8.3 names are refused: order~2024.yaml is an ordinary name.
+func TestTildeFollowedByDigitsInLongNamesIsAllowed(t *testing.T) {
+	setHome(t, t.TempDir())
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "order~2024.yaml"), pathItem)
+	spec := filepath.Join(dir, "api.yaml")
+	writeSpec(t, spec, "./order~2024.yaml")
+	if _, err := lint.Run(spec, lint.Options{}); err != nil {
+		t.Fatalf("Run = %v, want no error", err)
+	}
+}
+
+// A spec reached through a directory symlink that leads out of the working
+// directory is refused, like a symlinked spec file.
+func TestSpecBehindADirectorySymlinkLeavingTheWorkingDirectoryIsRefused(t *testing.T) {
+	outside := t.TempDir()
+	writeFile(t, filepath.Join(outside, "openapi.yaml"), "openapi: 3.0.3\ninfo:\n  title: x\n  version: \"1\"\npaths: {}\n")
+	work := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(work, "api")); err != nil {
+		t.Skipf("cannot create symlinks here: %v", err)
+	}
+	t.Chdir(work)
+	_, err := lint.Run(filepath.Join("api", "openapi.yaml"), lint.Options{})
+	if err == nil || !strings.Contains(err.Error(), "outside the working directory") {
+		t.Fatalf("Run = %v, want an error refusing a spec reached through a link leading out", err)
 	}
 }

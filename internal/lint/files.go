@@ -16,16 +16,20 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-// maxRefSize caps one file read through a $ref, and maxRefTotal all of
-// them together, so references to huge or numerous files cannot exhaust a
-// CI runner's memory. maxRefTotal is a variable only so a test can lower it.
+// Limits on what a spec can make Procyon read and parse, so a hostile spec
+// cannot exhaust a CI runner. Parsing costs many times a file's size in
+// memory, so the limits stay well below what a runner holds. maxRefSize
+// caps one file read through a $ref, maxRefTotal the bytes read from disk
+// through all of them, maxRefReads how many $refs are resolved (each may be
+// parsed again), and maxSpecSize the spec itself. The variables are only
+// variables so tests can lower them.
 const maxRefSize = 10 << 20 // 10 MiB
 
-var maxRefTotal int64 = 64 << 20 // 64 MiB
-
-// maxSpecSize caps the spec file itself. A variable only so a test can
-// lower it.
-var maxSpecSize int64 = 64 << 20 // 64 MiB
+var (
+	maxRefTotal int64 = 32 << 20 // 32 MiB
+	maxRefReads       = 20000
+	maxSpecSize int64 = 16 << 20 // 16 MiB
+)
 
 // specFiles is every file one spec was read from: the spec itself and the
 // local files its $refs point to.
@@ -50,8 +54,12 @@ type specFiles struct {
 	// specRel is the spec's directory relative to root ("." when they are
 	// the same). Hidden parts are only refused after it.
 	specRel string
-	// total counts the bytes read through $refs, against maxRefTotal.
+	// total counts the bytes read from disk through $refs, against
+	// maxRefTotal, and reads the $refs resolved, against maxRefReads.
 	total int64
+	reads int
+	// specAbs is the spec's absolute path, for $refs back into it.
+	specAbs string
 }
 
 func newSpecFiles(path, refRoot string, data []byte) *specFiles {
@@ -60,6 +68,7 @@ func newSpecFiles(path, refRoot string, data []byte) *specFiles {
 		paths: map[string]string{}, lines: map[string][]string{},
 		cache: map[string][]byte{}, cacheOwner: map[string]string{}, specData: data,
 	}
+	files.specAbs, _ = filepath.Abs(path)
 	files.add(specURL(path), path, data)
 	return files
 }
@@ -94,26 +103,23 @@ func (f *specFiles) read(_ *openapi3.Loader, location *url.URL) ([]byte, error) 
 		return nil, fmt.Errorf("$ref %q is a URL: Procyon never fetches remote references while linting; download the file and refer to it by a local path", location)
 	}
 	path := filepath.Clean(filepath.FromSlash(location.Path))
-	// kin-openapi parses what read returns on every $ref, cached or not, so
-	// every call counts against the budget.
-	charge := func(data []byte) ([]byte, error) {
-		if f.total += int64(len(data)); f.total > maxRefTotal {
-			return nil, fmt.Errorf("$ref %q: the spec's $refs read more than %d MiB in total", path, maxRefTotal>>20)
-		}
-		return data, nil
+	if f.reads++; f.reads > maxRefReads {
+		return nil, fmt.Errorf("$ref %q: the spec resolves more than %d $refs", path, maxRefReads)
 	}
 	if data, ok := f.cache[path]; ok {
 		f.paths[location.String()] = f.cacheOwner[path]
-		return charge(data)
+		return data, nil
 	}
-	if specAbs, err := filepath.Abs(f.spec); err == nil {
-		if abs, err := filepath.Abs(path); err == nil && abs == specAbs {
-			// A $ref back into the spec, written another way (./api.yaml vs
-			// api.yaml): it is the spec, already read.
-			f.paths[location.String()] = f.spec
-			f.cache[path], f.cacheOwner[path] = withLocations(f.specData), f.spec
-			return charge(f.cache[path])
-		}
+	abs, err := filepath.Abs(path) // lexical: touches nothing
+	if err != nil {
+		return nil, fmt.Errorf("$ref %q: %w", path, err)
+	}
+	if abs == f.specAbs {
+		// A $ref back into the spec, written another way (./api.yaml vs
+		// api.yaml): it is the spec, already read.
+		f.paths[location.String()] = f.spec
+		f.cache[path], f.cacheOwner[path] = withLocations(f.specData), f.spec
+		return f.cache[path], nil
 	}
 	if f.root == nil {
 		root, specRel, err := openRefRoot(f.spec, f.refRoot)
@@ -123,10 +129,6 @@ func (f *specFiles) read(_ *openapi3.Loader, location *url.URL) ([]byte, error) 
 		f.root, f.specRel = root, specRel
 	}
 
-	abs, err := filepath.Abs(path) // lexical: touches nothing
-	if err != nil {
-		return nil, fmt.Errorf("$ref %q: %w", path, err)
-	}
 	rel, ok := within(f.root.Name(), abs)
 	if !ok {
 		return nil, fmt.Errorf("$ref %q points outside %s; Procyon only reads files there "+
@@ -139,13 +141,18 @@ func (f *specFiles) read(_ *openapi3.Loader, location *url.URL) ([]byte, error) 
 	if err != nil {
 		return nil, fmt.Errorf("$ref %q: %w", path, err)
 	}
+	if f.total += int64(len(data)); f.total > maxRefTotal {
+		return nil, fmt.Errorf("$ref %q: the spec's $refs read more than %d MiB in total", path, maxRefTotal>>20)
+	}
 	f.add(location, path, data)
 	f.cache[path], f.cacheOwner[path] = withLocations(data), path
-	return charge(f.cache[path])
+	return f.cache[path], nil
 }
 
-// shortName matches an 8.3 short name such as GIT~1 or PROGRA~2.
-var shortName = regexp.MustCompile(`~[0-9]`)
+// shortName matches an 8.3 short name such as GIT~1 or PROGRA~2.EXE: up to
+// six characters, a tilde, digits, and an extension of up to three.
+// order~2024.yaml is an ordinary long name.
+var shortName = regexp.MustCompile(`^[^.~]{1,6}~[0-9]+(\.[^.]{0,3})?$`)
 
 // refusedPart explains why a path relative to the root may not be read
 // as text, or returns "": a hidden part (.git, .env) after the spec's own
@@ -344,5 +351,5 @@ func withLocations(data []byte) []byte {
 // specURL is the location kin-openapi is given for the spec at path, and so
 // the one its origins report.
 func specURL(path string) *url.URL {
-	return &url.URL{Path: filepath.ToSlash(path)}
+	return &url.URL{Path: filepath.ToSlash(filepath.Clean(path))}
 }

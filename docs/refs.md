@@ -16,17 +16,17 @@ request, a vendor, a public repository), it does so defensively.
    never be the file system's root, your home directory, or a directory
    containing it, whatever name it is reached by.
 3. **No hidden files.** `.git`, `.env`, `.aws` and every other name starting
-   with `.` are never read, nor short 8.3 names (`GIT~1`, a tilde followed by
-   a digit) that could alias them; `user~old.yaml` is fine. A spec that itself lives in a hidden directory (`.github/`) can
+   with `.` are never read, nor 8.3 short names (`GIT~1`, `PROGRA~2.EXE`)
+   that could alias them; `user~old.yaml` and `order~2024.yaml` are fine. A spec that itself lives in a hidden directory (`.github/`) can
    still refer to files next to it.
 4. **No symlinks.** Every part of a `$ref` path must be a plain directory or
    regular file; a symlink, a Windows junction, a FIFO or a device is
    refused.
-5. **Limits.** At most 10 MiB per referenced file and 64 MiB for the spec
-   itself. Every `$ref` counts against a 64 MiB total, even when it points at
-   a file already read, because each reference is parsed again.
-6. **The spec itself** must be a regular file: a symlink (to a device that
-   never ends, or to a file outside the repository) is refused.
+5. **Limits.** At most 16 MiB for the spec, 10 MiB per referenced file,
+   32 MiB read from disk through all `$refs`, and 20,000 `$refs` resolved.
+6. **The spec itself** must be a regular file, not a symlink (to a device
+   that never ends, or to a file outside the repository), and not reached
+   through a directory symlink leading outside the working directory.
 
 The path is checked as text before anything touches the file system, so a
 `$ref` cannot probe the machine or learn whether a file exists outside the
@@ -37,15 +37,30 @@ still be the file that was examined.
 
 **Defended against:** a spec, and the files committed next to it, written
 by an attacker, for example in a pull request linted by CI. They cannot make
-Procyon read files outside the allowed directory, read hidden files inside
-it, reach the network, or exhaust the runner's memory, and what they can
-read is limited to files a reviewer can see in the pull request.
+Procyon read outside the allowed directory, read hidden files, follow
+symlinks, reach the network, or read unbounded amounts of data.
 
-**Not defended against:** another process running on the same machine
-during the lint, able to rename files and directories while Procyon reads
-them. Such a process can already read the runner's files directly; Procyon
-narrows the window (it re-checks the file after opening it) but does not
-claim to close every race.
+**Not defended against:**
+
+- **Files that are in the allowed directory but not in the repository.**
+  Procyon does not know which files git tracks. If an earlier CI step writes
+  something sensitive into the workspace without a leading dot (some cloud
+  login actions write credential files such as `gha-creds-*.json`), a spec
+  that guesses its name can make Procyon read it, and parts of it may show
+  up in error messages. **Run Procyon before any step that writes secrets
+  into the workspace**, or give it a directory that holds only the specs.
+- **Expensive parsing within the limits.** Parsing can use far more memory
+  than a file's size; a spec built to be expensive can still slow a run or
+  exhaust a small runner. The limits bound the damage, not the cost.
+- **Another process on the same machine** renaming files while Procyon reads
+  them. Such a process can already read the runner's files directly;
+  Procyon re-checks each file after opening it but does not claim to close
+  every race.
+
+**Also refused, deliberately:** a spec directly in your home directory
+(including containers where `HOME` is the project directory, such as
+`HOME=/app`): `$refs` from it would expose everything in home. Move the
+specs into a subdirectory.
 
 Found a way around these rules? Please report it privately: see
 `SECURITY.md`.
