@@ -3,6 +3,7 @@ package lint
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
 )
@@ -24,6 +25,9 @@ var prc009 = Rule{
 // Array items are not entered: a list of child records (chat messages with
 // a role) is not the record being assigned. OAuth2 token requests (a body
 // with grant_type) are skipped: asking for a scope is what they are for.
+// A role or permission is not reported where assigning it is the
+// operation's purpose (PUT /memberships/{username}, see grantPath), nor when
+// its enum holds only low values (guestRole: viewer | commenter).
 func checkPRC009(doc *openapi3.T) []Finding {
 	var found onePerPlace
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
@@ -38,7 +42,7 @@ func checkPRC009(doc *openapi3.T) []Finding {
 			if readOnly(prop.Value) {
 				return false // the client cannot send it, nor anything inside it
 			}
-			if grantsPrivilege(name) {
+			if word := privilegeWord(name); word != "" && !assignedOnPurpose(word, path, prop.Value) {
 				found.add(Finding{
 					Location:  propertyLocation(prop),
 					Operation: method + " " + path,
@@ -52,6 +56,79 @@ func checkPRC009(doc *openapi3.T) []Finding {
 		})
 	})
 	return found.findings
+}
+
+// roleWords are the privileged words that name a role or a permission:
+// the kind of privilege an operation can exist to assign, or an enum can
+// list harmlessly. Never admin, superuser or tenant: those are the
+// privilege themselves.
+var roleWords = []string{"role", "permission", "scope", "papel", "papeis", "permissao", "permissoes"}
+
+// assignedOnPurpose reports whether a privileged field (its privileged
+// word, from privilegeWord) is safe to accept: a role or permission on an
+// operation that exists to assign it, or one whose enum holds only low
+// values.
+func assignedOnPurpose(word, path string, s *openapi3.Schema) bool {
+	if !slices.Contains(roleWords, word) {
+		return false
+	}
+	return (word != "scope" && grantPath(path)) || lowEnum(s)
+}
+
+// grantPathWords name a grant in a path.
+var grantPathWords = []string{
+	"member", "membership", "collaborator", "invitation", "role", "permission",
+	"membro", "papel", "papeis", "permissao", "permissoes",
+}
+
+// grantPath reports whether path addresses one grant: a segment naming it,
+// followed by a parameter (/orgs/{org}/memberships/{username},
+// /collaborators/{user}). A collection (/members) or another resource after
+// it (/permissions-check) is not one.
+func grantPath(path string) bool {
+	segments := strings.Split(path, "/")
+	for i := 0; i+1 < len(segments); i++ {
+		if !strings.HasPrefix(segments[i+1], "{") {
+			continue
+		}
+		words := splitWords(segments[i])
+		if len(words) == 1 && slices.ContainsFunc(grantPathWords, func(g string) bool { return sameWord(words[0], g) }) {
+			return true
+		}
+	}
+	return false
+}
+
+// lowValues are enum values that grant nothing above an ordinary user.
+var lowValues = []string{
+	"viewer", "view", "reader", "read", "readonly", "guest", "commenter", "comment",
+	"member", "user", "basic", "none", "no", "access", "public", "anonymous", "visitor",
+	"leitor", "leitura", "convidado", "membro", "usuario", "visitante",
+}
+
+// lowEnum reports whether a field (or the items of a list field) is an enum
+// of strings made only of low values: guestRole: viewer | commenter. A
+// boolean, number or null value, or any other word, makes it a privilege a
+// client could pick.
+func lowEnum(s *openapi3.Schema) bool {
+	if s != nil && s.Type.Includes("array") && s.Items != nil {
+		s = s.Items.Value
+	}
+	if s == nil || len(s.Enum) == 0 {
+		return false
+	}
+	for _, v := range s.Enum {
+		text, ok := v.(string)
+		if !ok || text == "" {
+			return false
+		}
+		for _, w := range splitWords(text) {
+			if !slices.ContainsFunc(lowValues, func(low string) bool { return sameWord(w, low) }) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // readOnly reports whether the client cannot send a schema: readOnly on the
@@ -101,11 +178,11 @@ var privilegeSuffixes = []string{
 	"key", "keys", "slug", "type", "level", "list",
 }
 
-// grantsPrivilege reports whether a field name is a privilege: a privileged
-// word (or its plural) that is the head of the name, followed by nothing
-// or by an identifier suffix. userRole, isAdmin, roleIDs and tenantUuid
-// are; adminNotes is not.
-func grantsPrivilege(name string) bool {
+// privilegeWord returns the privileged word a field name is about, or "":
+// a privileged word (or its plural) that is the head of the name, followed
+// by nothing or by an identifier suffix. userRole, isAdmin, roleIDs and
+// tenantUuid are privileges; adminNotes is not.
+func privilegeWord(name string) string {
 	words := splitWords(name)
 	for i := range words {
 		for _, entry := range privilegedWords {
@@ -114,9 +191,9 @@ func grantsPrivilege(name string) bool {
 				continue
 			}
 			if !slices.ContainsFunc(words[end:], func(w string) bool { return !slices.Contains(privilegeSuffixes, w) }) {
-				return true
+				return strings.Join(entry, " ")
 			}
 		}
 	}
-	return false
+	return ""
 }
