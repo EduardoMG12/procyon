@@ -2,11 +2,15 @@ openapi: 3.0.3
 info:
   title: Shop
   version: 1.0.0
-x-procyon-ignore:
-  - rule: PRC003
-    reason: "Basic auth is only used by the legacy importer, behind the VPN"
 security:
   - basic: []
+  - queryKey: []
+servers:
+  - url: http://mirror.internal.example.com
+    x-procyon-ignore:
+      - rule: PRC004
+        reason: "Internal mirror, reachable only inside the VPN"
+  - url: http://api.example.com
 paths:
   /health:
     get:
@@ -43,3 +47,10 @@ components:
     basic:
       type: http
       scheme: basic
+      x-procyon-ignore:
+        - rule: PRC003
+          reason: "Basic auth is only used by the legacy importer, behind the VPN"
+    queryKey:
+      type: apiKey
+      in: query
+      name: key

@@ -9,9 +9,11 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-// ignoreKey holds ignores: on an operation, for findings about that
-// operation; at the spec's root, for findings about no operation (a
-// security scheme, a server, an OAuth2 flow).
+// ignoreKey holds ignores. Written on an operation, it covers that
+// operation's findings; on a security scheme, a server or an OAuth2 flow,
+// that element's findings; at the spec's root, findings about the spec as a
+// whole (its default security requirement). An ignore never reaches beyond
+// the element it is written on.
 const ignoreKey = "x-procyon-ignore"
 
 // IgnoredFinding is a finding an ignore matched. It is still reported, and
@@ -34,39 +36,87 @@ type ignore struct {
 	rule      string
 	reason    string
 	expires   string    // as written
-	until     time.Time // zero when it never expires
-	operation string    // "" at the spec's root
+	until     time.Time // the expiry date (its day, month and year only)
+	operation string    // the operation it is written on, or ""
+	about     any       // the element it is written on, when not an operation
+	where     string    // how notes name that element
 	location  Location
 	used      bool
 }
 
 // on names where the ignore lives, for notes.
 func (ig *ignore) on() string {
-	if ig.operation == "" {
-		return "the spec"
+	if ig.operation != "" {
+		return ig.operation
 	}
-	return ig.operation
+	return ig.where
+}
+
+// covers reports whether the ignore is written on the element f is about.
+func (ig *ignore) covers(f Finding) bool {
+	if ig.rule != f.Rule.ID {
+		return false
+	}
+	if ig.operation != "" {
+		return ig.operation == f.Operation
+	}
+	return ig.about != nil && ig.about == f.about
 }
 
 // parseIgnores reads every x-procyon-ignore in the spec. A malformed entry
 // is an error: a typo must never silently ignore something.
 func parseIgnores(doc *openapi3.T, asGiven func(Location) Location) ([]*ignore, error) {
-	ignores, err := parseIgnoreList(doc.Extensions[ignoreKey], "", asGiven(locateField(doc.Origin, ignoreKey)))
-	if err != nil {
-		return nil, err
-	}
-	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-		if err != nil {
+	var ignores []*ignore
+	var firstErr error
+	// add parses the ignores written on one element.
+	add := func(ext map[string]any, origin *openapi3.Origin, operation string, about any, where string) {
+		if firstErr != nil {
 			return
 		}
-		var more []*ignore
-		more, err = parseIgnoreList(op.Extensions[ignoreKey], method+" "+path, asGiven(locateField(op.Origin, ignoreKey)))
-		ignores = append(ignores, more...)
+		more, err := parseIgnoreList(ext[ignoreKey], operation, asGiven(locateField(origin, ignoreKey)))
+		for _, ig := range more {
+			ig.about, ig.where = about, where
+		}
+		ignores, firstErr = append(ignores, more...), err
+	}
+	add(doc.Extensions, doc.Origin, "", doc, "the spec")
+	for _, server := range doc.Servers {
+		add(server.Extensions, server.Origin, "", server, "server "+server.URL)
+	}
+	if doc.Paths != nil {
+		for _, item := range doc.Paths.Map() {
+			for _, server := range item.Servers {
+				add(server.Extensions, server.Origin, "", server, "server "+server.URL)
+			}
+		}
+	}
+	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
+		add(op.Extensions, op.Origin, method+" "+path, nil, "")
+		if op.Servers != nil {
+			for _, server := range *op.Servers {
+				add(server.Extensions, server.Origin, "", server, "server "+server.URL)
+			}
+		}
 	})
-	return ignores, err
+	forEachScheme(doc, func(name string, scheme *openapi3.SecurityScheme) {
+		add(scheme.Extensions, scheme.Origin, "", scheme, "security scheme "+name)
+		if f := scheme.Flows; f != nil {
+			for flowName, flow := range map[string]*openapi3.OAuthFlow{
+				"implicit": f.Implicit, "password": f.Password,
+				"clientCredentials": f.ClientCredentials, "authorizationCode": f.AuthorizationCode,
+			} {
+				if flow != nil {
+					add(flow.Extensions, flow.Origin, "", flow, "the "+flowName+" flow of "+name)
+				}
+			}
+		}
+	})
+	return ignores, firstErr
 }
 
 func parseIgnoreList(value any, operation string, loc Location) ([]*ignore, error) {
+	// Errors name the operation when there is one; otherwise the location
+	// says where.
 	if value == nil {
 		return nil, nil
 	}
@@ -122,14 +172,18 @@ func knownRule(id string) bool {
 // into report.Ignored, and adds notes for expired and unused ignores. An
 // ignore expires at the end of its date.
 func applyIgnores(report *Report, ignores []*ignore, today time.Time) {
+	// An ignore lasts until the end of its date where Procyon runs, so the
+	// same spec gives the same verdict all day in any time zone.
 	expired := func(ig *ignore) bool {
-		return !ig.until.IsZero() && today.After(ig.until.AddDate(0, 0, 1).Add(-time.Nanosecond))
+		if ig.until.IsZero() {
+			return false
+		}
+		y, m, d := ig.until.Date()
+		return !today.Before(time.Date(y, m, d+1, 0, 0, 0, 0, today.Location()))
 	}
 	kept := report.Findings[:0]
 	for _, f := range report.Findings {
-		i := slices.IndexFunc(ignores, func(ig *ignore) bool {
-			return ig.rule == f.Rule.ID && ig.operation == f.Operation && !expired(ig)
-		})
+		i := slices.IndexFunc(ignores, func(ig *ignore) bool { return ig.covers(f) && !expired(ig) })
 		if i < 0 {
 			kept = append(kept, f)
 			continue

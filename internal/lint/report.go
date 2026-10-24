@@ -51,6 +51,11 @@ type Finding struct {
 	Operation string // "GET /orders"; empty when the finding is not about an operation
 	Why       string // why it is a risk, in plain words
 	Fix       string // how to fix it
+
+	// about is the spec element a finding without an operation belongs to
+	// (a security scheme, a server, an OAuth2 flow, the spec itself), so an
+	// x-procyon-ignore written on that element covers it and nothing else.
+	about any
 }
 
 // Report is everything one run produced.

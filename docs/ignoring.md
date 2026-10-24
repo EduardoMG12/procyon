@@ -34,12 +34,33 @@ Any finding can be ignored, one rule at a time:
         expires: 2027-01-31
 ```
 
-- **On an operation**, it covers that operation's findings.
-- **At the spec's root**, it covers findings about no operation: a security
-  scheme (PRC003), a server (PRC004), an OAuth2 flow (PRC011).
-- `reason` is required. `expires` (a date) is optional: after that day the
-  ignore stops applying, its findings count again, and the report says it
-  expired.
+An ignore covers the findings about the element it is written on, and
+nothing else:
+
+| Written on | Covers |
+|---|---|
+| an operation | that operation's findings |
+| a security scheme (`components.securitySchemes.x`) | that scheme's findings (PRC003) |
+| a server (`servers[]`, at any level) | that server's findings (PRC004) |
+| an OAuth2 flow (`flows.implicit`, ...) | that flow's findings (PRC011) |
+| the spec's root | findings about the spec as a whole (PRC002 on the default `security`) |
+
+So excusing one weak scheme never hides a second one added later.
+
+```yaml
+components:
+  securitySchemes:
+    basic:
+      type: http
+      scheme: basic
+      x-procyon-ignore:
+        - rule: PRC003
+          reason: "Only the legacy importer uses it, behind the VPN"
+```
+
+`reason` is required. `expires` (a date) is optional: the ignore applies
+until the end of that day, wherever Procyon runs; after it, its findings
+count again and the report says it expired.
 
 An ignored finding never fails the run, but it is listed under **Ignored**
 with its reason in every format.
