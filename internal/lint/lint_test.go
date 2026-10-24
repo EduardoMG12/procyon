@@ -58,6 +58,12 @@ func TestRunRejectsBadInput(t *testing.T) {
 		{"ignore of an unknown rule", "ignore-unknown-rule.yaml", []string{"ignore-unknown-rule.yaml:8:7:", "PRC01"}},
 		{"ignore with a malformed date", "ignore-bad-date.yaml", []string{"ignore-bad-date.yaml:8:7:", "expires", "tomorrow"}},
 		{"ignore that is not a list", "ignore-not-a-list.yaml", []string{"ignore-not-a-list.yaml:8:7:", "list"}},
+		{"Swagger 2.0 with a null path item", "swagger-2.0-null.yaml", []string{"swagger-2.0-null.yaml:6:3:", "/u"}},
+		{"Swagger 2.0 path item $ref", "swagger-2.0-pathref.yaml", []string{"swagger-2.0-pathref.yaml", "/users", "$ref"}},
+		{"Swagger 2.0 YAML alias bomb of long strings", "swagger-2.0-string-bomb.yaml", []string{"swagger-2.0-string-bomb.yaml", "alias"}},
+		{"Swagger 2.0 with a null default response", "swagger-2.0-null-default.yaml", []string{"swagger-2.0-null-default.yaml:9:9:", "default"}},
+		{"Swagger 2.0 YAML alias bomb", "swagger-2.0-alias-bomb.yaml", []string{"swagger-2.0-alias-bomb.yaml", "alias"}},
+		{"Swagger 2.0 split across files", "swagger-2.0-split.yaml", []string{"swagger-2.0-split.yaml", "./definitions.yaml#/User", "one file"}},
 		{"public marker error keeps the path as written", "dir with space/public-empty-reason.yaml", []string{"dir with space/public-empty-reason.yaml:7:5:"}},
 	}
 	for _, tt := range tests {

@@ -32,6 +32,27 @@ func fromSwagger(data []byte) (converted []byte, back func(position) (position, 
 	if err != nil {
 		return nil, nil, err
 	}
+	// at is an error about an element of the original file, at its place.
+	at := func(pointer, format string, args ...any) error {
+		// paths > /users > $ref: a pointer reads badly once a key has a "/".
+		parts := strings.Split(pointer, "/")[1:]
+		for i := range parts {
+			parts[i] = unescapePointer(parts[i])
+		}
+		err := &positionError{message: strings.Join(parts, " > ") + ": " + fmt.Sprintf(format, args...)}
+		for p := pointer; p != ""; p = parentPointer(p) {
+			if pos, ok := original[p]; ok {
+				err.at = pos
+				break
+			}
+		}
+		return err
+	}
+	// Decoding to JSON expands YAML aliases, and a few hundred bytes of
+	// nested aliases expand to gigabytes: refuse before expanding.
+	if err := limitAliases(data); err != nil {
+		return nil, nil, err
+	}
 	asJSON, err := yaml.YAMLToJSON(data)
 	if err != nil {
 		return nil, nil, err
@@ -44,6 +65,14 @@ func fromSwagger(data []byte) (converted []byte, back func(position) (position, 
 	if _, isNumber := top["swagger"].(float64); isNumber {
 		top["swagger"] = "2.0" // swagger: 2.0 without quotes is a YAML number
 	}
+	if pointer := nullEntry(raw, ""); pointer != "" {
+		return nil, nil, at(pointer, "empty (null); remove it or give it a value")
+	}
+	if pointer := pathItemRef(raw); pointer != "" {
+		return nil, nil, at(pointer, "a $ref on a path item is not supported in Swagger 2.0 specs "+
+			"(write the operations in place, or convert the spec to OpenAPI 3)")
+	}
+	limitMediaTypes(raw)
 	if asJSON, err = json.Marshal(raw); err != nil {
 		return nil, nil, err
 	}
@@ -54,14 +83,19 @@ func fromSwagger(data []byte) (converted []byte, back func(position) (position, 
 			converted, back, err = nil, nil, fmt.Errorf("converting Swagger 2.0 to OpenAPI 3 failed: %v", r)
 		}
 	}()
+	if ref := externalRef(raw); ref != "" {
+		return nil, nil, fmt.Errorf("$ref %q: Swagger 2.0 specs must be one file "+
+			"(bundle it first, or convert it to OpenAPI 3, where $refs to other files are supported)", ref)
+	}
 	var doc2 openapi2.T
 	if err := json.Unmarshal(asJSON, &doc2); err != nil {
 		return nil, nil, fmt.Errorf("reading Swagger 2.0: %w", err)
 	}
 	doc3, err := openapi2conv.ToV3(&doc2)
 	if err != nil {
-		return nil, nil, fmt.Errorf("converting Swagger 2.0 to OpenAPI 3: %w", err)
+		return nil, nil, fmt.Errorf("converting Swagger 2.0 to OpenAPI 3: %s", swaggerNames(err.Error()))
 	}
+	operationServers(&doc2, doc3)
 	if doc3.Paths == nil {
 		doc3.Paths = openapi3.NewPaths() // the converter leaves an empty paths as null
 	}
@@ -118,6 +152,19 @@ func swaggerPointer(pointer string, doc2 *openapi2.T) string {
 		// responses/200/content/<type>/schema/... -> responses/200/schema/...
 		if len(rest) >= 5 && rest[0] == "responses" && rest[2] == "content" {
 			rest = append(rest[:2:2], rest[4:]...)
+		}
+		if rest[0] == "servers" {
+			return "/" + strings.Join(append(op, "schemes"), "/") // see operationServers
+		}
+		// requestBody/content/<type>/schema/properties/<field>/... ->
+		// parameters/<formData field>/name
+		if rest[0] == "requestBody" && len(rest) >= 6 && rest[4] == "properties" {
+			if owner, i, key := formParameter(doc2, unescapePointer(op[1]), op[2], unescapePointer(rest[5])); i >= 0 {
+				if owner == "path" {
+					op = op[:2]
+				}
+				return "/" + strings.Join(append(op, "parameters", strconv.Itoa(i), key), "/")
+			}
 		}
 		// requestBody/content/<type>/schema/... -> parameters/<body>/schema/...
 		if rest[0] == "requestBody" {

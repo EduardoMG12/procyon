@@ -1,0 +1,65 @@
+swagger: "2.0"
+info:
+  title: Shop
+  version: 1.0.0
+host: shop.example.com
+schemes: [https]
+securityDefinitions:
+  key:
+    type: apiKey
+    in: header
+    name: X-Key
+security:
+  - key: []
+paths:
+  /profile:
+    post:
+      consumes: [application/x-www-form-urlencoded]
+      parameters:
+        - name: role
+          in: formData
+          type: string
+          maxLength: 5
+        - name: bio
+          in: formData
+          type: string
+      responses:
+        "200":
+          description: Saved
+  /login:
+    post:
+      schemes: [http]
+      responses:
+        "200":
+          description: Logged in
+  /accounts:
+    parameters:
+      - name: account
+        in: body
+        schema:
+          type: object
+          properties:
+            role:
+              type: string
+              maxLength: 5
+    post:
+      x-procyon-ignore:
+        - rule: PRC009
+          reason: "Only admins reach this operation"
+      responses:
+        "201":
+          description: Created
+    put:
+      responses:
+        "200":
+          description: Updated
+  /notes:
+    get:
+      responses:
+        "200":
+          description: Notes
+          examples:
+            application/json:
+              headers:
+                X-Trace: null
+x-generated: null
