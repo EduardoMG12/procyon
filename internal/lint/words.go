@@ -54,6 +54,11 @@ var (
 // the word appears whole (or as a plural), the word before it does not make
 // it a reference, and the word after it does not make it a description.
 func matches(name string, list [][]string) bool {
+	return matchesWith(name, list, describingWords, referenceWords)
+}
+
+// matchesWith is matches with the describing and reference words given.
+func matchesWith(name string, list [][]string, describing, reference []string) bool {
 	words := splitWords(name)
 	for i := range words {
 		for _, entry := range list {
@@ -61,10 +66,10 @@ func matches(name string, list [][]string) bool {
 			if end > len(words) || !slices.EqualFunc(words[i:end], entry, sameWord) {
 				continue
 			}
-			if i > 0 && slices.Contains(referenceWords, words[i-1]) {
+			if i > 0 && slices.Contains(reference, words[i-1]) {
 				continue
 			}
-			if end < len(words) && slices.Contains(describingWords, words[end]) {
+			if end < len(words) && slices.Contains(describing, words[end]) {
 				continue
 			}
 			return true
@@ -73,9 +78,10 @@ func matches(name string, list [][]string) bool {
 	return false
 }
 
-// sameWord matches a listed word and its plural: tokens, apiKeys, senhas.
+// sameWord matches a listed word and its plural: tokens, apiKeys, senhas,
+// addresses, celulares.
 func sameWord(word, listed string) bool {
-	return word == listed || word == listed+"s"
+	return word == listed || word == listed+"s" || word == listed+"es"
 }
 
 // splitWords splits a field name into lowercase words: userPassword,

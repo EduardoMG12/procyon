@@ -3,6 +3,7 @@ package lint
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
 )
@@ -17,9 +18,11 @@ var prc007 = Rule{
 
 // identifierWords, as the last word of a path parameter's name, mean it
 // identifies one object: {id}, {userId}, {order_id}, {slug}, {username}.
+// Generic words such as code, number or name are left out: {langCode} and
+// {pageNumber} pick a language and a page, not an object.
 var identifierWords = []string{
-	"id", "ids", "uuid", "guid", "key", "slug", "number", "num", "no",
-	"code", "name", "username", "login", "handle", "title", "email",
+	"id", "ids", "uuid", "guid", "uid", "identifier", "key", "slug", "sku",
+	"username", "login", "handle", "title", "email",
 }
 
 // checkPRC007 reports operations anyone can call that address an object by
@@ -42,7 +45,8 @@ func checkPRC007(doc *openapi3.T) []Finding {
 			Why: fmt.Sprintf("This operation needs no authentication and picks an object by {%s}. "+
 				"Nobody can check whose object it is, so anyone can try identifiers one after another and reach every object.", param),
 			Fix: "Require authentication and check on the server that the caller may access the object. " +
-				"If the objects really are public, use identifiers that cannot be guessed and say so with x-procyon-public.",
+				"If the objects really are public, use identifiers that cannot be guessed and ignore this finding " +
+				"with x-procyon-ignore and the reason.",
 		})
 	})
 	return findings
@@ -59,10 +63,24 @@ func objectIdentifier(doc *openapi3.T, path string, op *openapi3.Operation) stri
 		if p == nil || p.Value == nil || p.Value.In != openapi3.ParameterInPath {
 			continue
 		}
-		words := splitWords(p.Value.Name)
-		if len(words) > 0 && slices.Contains(identifierWords, words[len(words)-1]) {
+		if identifies(p.Value.Name) {
 			return p.Value.Name
 		}
 	}
 	return ""
+}
+
+// identifies reports whether a path parameter's name identifies an object:
+// its last word is an identifier word, or it is one lowercase word ending
+// in "id" ({userid}, {orderid}), which splitWords cannot split.
+func identifies(name string) bool {
+	words := splitWords(name)
+	if len(words) == 0 {
+		return false
+	}
+	last := words[len(words)-1]
+	if slices.Contains(identifierWords, last) {
+		return true
+	}
+	return len(words) == 1 && len(last) > 3 && (strings.HasSuffix(last, "id") || strings.HasSuffix(last, "ids"))
 }
