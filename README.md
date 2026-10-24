@@ -103,6 +103,22 @@ Run Procyon before any step that writes credentials into the workspace
 | [PRC010](docs/rules/PRC010.md) | medium | Admin operation protected like regular ones |
 | [PRC011](docs/rules/PRC011.md) | medium | Deprecated OAuth2 flow |
 
+## What it can and cannot see
+
+Procyon reads the spec, so it finds what the spec says: an operation open to
+anyone, a password in a response, a writable `role`, an unbounded field. It
+cannot see what the server does with a valid request: whose order it
+returns, which undocumented field it copies into the record, what it runs.
+[docs/benchmark.md](docs/benchmark.md) runs Procyon against four APIs that
+are vulnerable on purpose (OWASP crAPI, VAmPI, Pixi, Juice Shop) and shows,
+for each documented vulnerability, whether the spec gives it away. Most of
+the rest is what v0.2's runtime tests are for.
+
+Findings are heuristics over names and shapes, so expect some noise on
+large APIs. Each rule's page lists what it skips on purpose and its known
+limits, and a finding you have checked can be [ignored with a
+reason](docs/ignoring.md).
+
 ## Roadmap
 
 | Version | What it does |
