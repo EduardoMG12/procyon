@@ -48,10 +48,20 @@ func Run(path string, opts Options) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
+	// Identical findings are one finding: a converted Swagger 2.0 spec copies
+	// an element once per media type. Findings that differ only in their
+	// operation or reason stay apart, so an ignore on one operation never
+	// hides another's.
+	seen := map[string]bool{}
 	for _, rule := range rules {
 		for _, f := range rule.check(doc) {
 			f.Rule = rule
 			f.Location = asGiven(f.Location)
+			key := fmt.Sprintf("%s %s:%d:%d %s %s", rule.ID, f.Location.File, f.Location.Line, f.Location.Column, f.Operation, f.Why)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
 			report.Findings = append(report.Findings, f)
 		}
 	}
@@ -97,19 +107,29 @@ func load(path string, opts Options) (*openapi3.T, *specFiles, error) {
 		return nil, nil, fmt.Errorf("%s: %w", path, err)
 	}
 
+	// Swagger 2.0 is converted to OpenAPI 3 and linted like any spec;
+	// locations are mapped back to the original file (see fromSwagger).
+	toLoad := data
 	var version struct {
-		Swagger string `yaml:"swagger"`
+		Swagger any `yaml:"swagger"` // a string, or a number when 2.0 is unquoted
 	}
-	if err := yaml.Unmarshal(data, &version); err == nil && version.Swagger != "" {
-		return nil, nil, fmt.Errorf("%s: Swagger 2.0 is not supported yet; convert it to OpenAPI 3 (support is tracked in issue #13)", path)
+	var back func(position) (position, bool)
+	if err := yaml.Unmarshal(data, &version); err == nil && version.Swagger != nil {
+		if v := fmt.Sprint(version.Swagger); v != "2" && !strings.HasPrefix(v, "2.") {
+			return nil, nil, fmt.Errorf("%s: swagger %q is not a version Procyon knows; use Swagger 2.0 or OpenAPI 3", path, v)
+		}
+		if toLoad, back, err = fromSwagger(data); err != nil {
+			return nil, nil, fmt.Errorf("%s: %w", path, err)
+		}
 	}
 
-	files := newSpecFiles(path, opts.RefRoot, data)
+	files := newSpecFiles(path, opts.RefRoot, data) // excerpts show the original
+	files.back = back
 	defer files.close()
 	loader := openapi3.NewLoader()
 	loader.IncludeOrigin = true
 	loader.ReadFromURIFunc = files.read
-	doc, err := loader.LoadFromDataWithPath(withLocations(data), specURL(path))
+	doc, err := loader.LoadFromDataWithPath(withLocations(toLoad), specURL(path))
 	if err != nil {
 		return nil, nil, fmt.Errorf("%s: %w", path, err)
 	}

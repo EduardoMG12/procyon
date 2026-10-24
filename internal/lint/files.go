@@ -48,6 +48,9 @@ type specFiles struct {
 	cacheOwner map[string]string
 	// specData is the spec's own content, for $refs that point back into it.
 	specData []byte
+	// back maps a position in a converted Swagger 2.0 spec to the original
+	// file; nil for OpenAPI 3 specs.
+	back func(position) (position, bool)
 	// root is the one directory $refs may read from, opened on the first
 	// $ref so a spec without $refs never depends on it.
 	root *os.Root
@@ -79,10 +82,16 @@ func (f *specFiles) add(location *url.URL, path string, data []byte) {
 }
 
 // asGiven turns the file URL kin-openapi records in a location back into
-// the path Procyon read.
+// the path Procyon read and, for a Swagger 2.0 spec, the position in the
+// converted document back into the original file.
 func (f *specFiles) asGiven(loc Location) Location {
 	if given, ok := f.paths[loc.File]; ok {
 		loc.File = given
+		if given == f.spec && f.back != nil {
+			if p, ok := f.back(position{loc.Line, loc.Column}); ok {
+				loc.Line, loc.Column = p.line, p.column
+			}
+		}
 	}
 	return loc
 }

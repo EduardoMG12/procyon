@@ -30,6 +30,23 @@ func TestRules(t *testing.T) {
 			"PRC001 prc001-no-auth-tabs.json:9:4 GET /orders",
 		}},
 		{"prc001-global-security.yaml", []string{"PRC001"}, []string{}},
+		// Swagger 2.0: findings point at the original file, not the
+		// OpenAPI 3 document it is converted to. In JSON, with the request body as a "body" parameter.
+		{"swagger-2.0-body.json", []string{"PRC009"}, []string{
+			"PRC009 swagger-2.0-body.json:18:17 POST /users",
+		}},
+		// Two undefined schemes in one requirement are two findings.
+		{"prc002-two-undefined.yaml", []string{"PRC002"}, []string{
+			"PRC002 prc002-two-undefined.yaml:5:1 ",
+			"PRC002 prc002-two-undefined.yaml:5:1 ",
+		}},
+		{"swagger-2.0-shop.yaml", []string{"PRC001", "PRC003", "PRC004", "PRC005", "PRC007"}, []string{
+			"PRC004 swagger-2.0-shop.yaml:7:1 ",
+			"PRC003 swagger-2.0-shop.yaml:10:3 ",
+			"PRC001 swagger-2.0-shop.yaml:14:5 GET /users/{id}",
+			"PRC007 swagger-2.0-shop.yaml:14:5 GET /users/{id}",
+			"PRC005 swagger-2.0-shop.yaml:29:7 GET /users/{id}",
+		}},
 		// Authenticated: nothing. Unauthenticated (/profiles) and public (/team)
 		// operations: both rules. /docs/{version}: version is not an object ID.
 		{"prc006-prc007.yaml", []string{"PRC006", "PRC007"}, []string{
