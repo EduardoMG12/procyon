@@ -53,15 +53,24 @@ func (o *outputs) Set(value string) error {
 	return nil
 }
 
-// write renders the report into a new file at path, never in colour.
-func (o output) write(report lint.Report) error {
-	file, err := os.Create(o.path)
-	if err != nil {
-		return err
+// openOutputs creates (or empties) every --output file before linting, so
+// a path that cannot be written stops the run before anything is printed,
+// and a run that fails never leaves an earlier run's report behind.
+func openOutputs(outs outputs) ([]*os.File, error) {
+	files := make([]*os.File, 0, len(outs))
+	for _, o := range outs {
+		file, err := os.Create(o.path)
+		if err != nil {
+			closeAll(files)
+			return nil, fmt.Errorf("--output %s=%s: %w", o.format, o.path, err)
+		}
+		files = append(files, file)
 	}
-	if err := formats[o.format](file, report, false); err != nil {
-		file.Close()
-		return err
+	return files, nil
+}
+
+func closeAll(files []*os.File) {
+	for _, f := range files {
+		f.Close()
 	}
-	return file.Close()
 }

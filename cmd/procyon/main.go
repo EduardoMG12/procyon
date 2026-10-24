@@ -78,6 +78,13 @@ func runLint(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
+	files, err := openOutputs(extra)
+	if err != nil {
+		fmt.Fprintf(stderr, "procyon: %v\n", err)
+		return exitUsage
+	}
+	defer closeAll(files)
+
 	report, err := lint.Run(specs[0], opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "procyon: %v\n", err)
@@ -88,8 +95,12 @@ func runLint(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "procyon: writing report: %v\n", err)
 		return exitUsage
 	}
-	for _, o := range extra {
-		if err := o.write(report); err != nil {
+	for i, o := range extra {
+		err := formats[o.format](files[i], report, false) // files never get colours
+		if err == nil {
+			err = files[i].Close()
+		}
+		if err != nil {
 			fmt.Fprintf(stderr, "procyon: --output %s=%s: %v\n", o.format, o.path, err)
 			return exitUsage
 		}

@@ -277,3 +277,37 @@ func TestBadFormatsAreUsageErrors(t *testing.T) {
 		}
 	}
 }
+
+// A failed run must not leave an earlier run's report behind for CI to
+// publish as if it were current.
+func TestOutputIsNeverStale(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "report.json")
+	if err := os.WriteFile(out, []byte(`{"stale": true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := run(t, "lint", "--output", "json="+out, spec("invalid-yaml.yaml"))
+	if r.code != 2 {
+		t.Fatalf("exit code = %d, want 2", r.code)
+	}
+	data, err := os.ReadFile(out)
+	if err == nil && strings.Contains(string(data), "stale") {
+		t.Errorf("%s still holds the previous run's report", out)
+	}
+}
+
+// An output that cannot be written is found before linting, so nothing is
+// printed and no other output is half written.
+func TestUnwritableOutputFailsBeforeLinting(t *testing.T) {
+	good := filepath.Join(t.TempDir(), "good.json")
+	bad := filepath.Join(t.TempDir(), "missing", "dir", "r.json")
+	r := run(t, "lint", "--output", "json="+good, "--output", "json="+bad, spec("prc001-no-auth.yaml"))
+	if r.code != 2 {
+		t.Fatalf("exit code = %d, want 2", r.code)
+	}
+	if r.stdout != "" {
+		t.Errorf("printed a report although an output could not be written: %q", r.stdout)
+	}
+	if data, err := os.ReadFile(good); err == nil && len(data) > 0 {
+		t.Errorf("%s was written although the run stopped", good)
+	}
+}
