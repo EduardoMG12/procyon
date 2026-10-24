@@ -1,0 +1,41 @@
+openapi: 3.0.3
+info:
+  title: Org
+  version: 1.0.0
+security:
+  - token: []
+paths:
+  /orders:
+    get:
+      responses:
+        "200":
+          description: Orders
+  /users/{admin_id}:
+    get:
+      parameters:
+        - name: admin_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 36
+      responses:
+        "200":
+          description: A user
+  /orgs/{org}/admins:
+    get:
+      parameters:
+        - name: org
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 36
+      responses:
+        "200":
+          description: Admins
+components:
+  securitySchemes:
+    token:
+      type: http
+      scheme: bearer

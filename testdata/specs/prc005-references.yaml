@@ -52,6 +52,10 @@ paths:
                     type: string
                   secret_scanning_push_protection_custom_link:
                     type: string
+                  passwordResetPolicyName:
+                    type: string
+                  apiKeyPublic:
+                    type: string
                   clientSecrets:
                     type: object
                     additionalProperties:
