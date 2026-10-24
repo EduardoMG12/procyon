@@ -1,0 +1,86 @@
+openapi: 3.0.3
+info:
+  title: Cluster
+  version: 1.0.0
+security:
+  - key: []
+paths:
+  /volumes:
+    get:
+      responses:
+        "200":
+          description: Volumes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  secretRef:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                  secretKeyRef:
+                    $ref: "#/components/schemas/KeySelector"
+                  imagePullSecrets:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/KeySelector"
+                  network_token:
+                    anyOf:
+                      - $ref: "#/components/schemas/KeySelector"
+                  secretNamespace:
+                    type: string
+                  token_reference_id:
+                    type: string
+                  token_risk_score:
+                    type: integer
+                  client_secret:
+                    type: string
+                  apiToken:
+                    type: string
+                  recoveryCodes:
+                    type: array
+                    items:
+                      type: string
+                  pinPassword:
+                    type: integer
+                  secrets:
+                    type: string
+                    enum: [read, write]
+                  token_currency:
+                    type: string
+                  secret_scanning_push_protection_custom_link:
+                    type: string
+                  clientSecrets:
+                    type: object
+                    additionalProperties:
+                      type: string
+                  password:
+                    type: object
+                    properties:
+                      value:
+                        type: string
+                  privateKeyFile:
+                    type: string
+                  defaultPassword:
+                    type: string
+                    enum: [hunter2]
+                  secretHolder:
+                    allOf:
+                      - $ref: "#/components/schemas/KeySelector"
+                      - nullable: true
+components:
+  securitySchemes:
+    key:
+      type: apiKey
+      in: header
+      name: X-Key
+  schemas:
+    KeySelector:
+      type: object
+      properties:
+        key:
+          type: string
+        name:
+          type: string
