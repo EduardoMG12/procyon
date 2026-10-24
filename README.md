@@ -1,5 +1,8 @@
 # Procyon
 
+[![CI](https://github.com/EduardoMG12/procyon/actions/workflows/ci.yml/badge.svg)](https://github.com/EduardoMG12/procyon/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 **Automatic security QA for your API.** Procyon reads your OpenAPI spec and
 tells you, in plain words, where your API's design leaves a door open:
 operations without authentication, secrets in responses, personal data
