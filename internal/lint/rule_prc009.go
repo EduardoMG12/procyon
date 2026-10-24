@@ -74,11 +74,17 @@ func readOnly(s *openapi3.Schema) bool {
 	return false
 }
 
-// tokenRequest reports whether a request body is an OAuth2 token request.
+// tokenRequest reports whether a request body is an OAuth2 token request:
+// it has a grant type field, however it is spelt (grant_type, GrantType).
 func tokenRequest(roots []*openapi3.SchemaRef) bool {
 	for _, root := range roots {
-		if root != nil && root.Value != nil && root.Value.Properties["grant_type"] != nil {
-			return true
+		if root == nil || root.Value == nil {
+			continue
+		}
+		for name := range root.Value.Properties {
+			if slices.Equal(splitWords(name), []string{"grant", "type"}) {
+				return true
+			}
 		}
 	}
 	return false
