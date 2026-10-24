@@ -1,0 +1,43 @@
+openapi: 3.0.3
+info:
+  title: Shop
+  version: 1.0.0
+paths:
+  /orders:
+    get:
+      security:
+        - apiKey: []
+        - oauth: [read, write]
+      responses:
+        "200":
+          description: Orders
+  /admin/users:
+    get:
+      security:
+        - oauth: [write, read]
+        - apiKey: []
+      responses:
+        "200":
+          description: Users
+  /admin/orders:
+    get:
+      security:
+        - oauth: [orders:admin]
+      responses:
+        "200":
+          description: Orders
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    oauth:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth.example.com/token
+          scopes:
+            read: Read
+            write: Write
+            orders:admin: Manage orders
