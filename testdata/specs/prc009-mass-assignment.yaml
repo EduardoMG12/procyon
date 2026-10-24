@@ -64,6 +64,21 @@ paths:
       responses:
         "200":
           description: Token
+  /v1/token:
+    post:
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                GrantType:
+                  type: string
+                Scope:
+                  type: string
+      responses:
+        "200":
+          description: Token
 components:
   securitySchemes:
     bearer:
