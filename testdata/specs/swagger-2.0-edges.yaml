@@ -1,0 +1,73 @@
+swagger: 2.0
+info:
+  title: Shop
+  version: 1.0.0
+host: api.example.com
+schemes:
+  - http
+x-procyon-ignore:
+  - rule: PRC004
+    reason: "Internal only"
+securityDefinitions:
+  key:
+    type: apiKey
+    in: header
+    name: X-Key
+  legacy:
+    type: oauth2
+    flow: implicit
+    authorizationUrl: https://auth.example.com/authorize
+    scopes: {}
+    x-procyon-ignore:
+      - rule: PRC011
+        reason: "Being retired"
+security:
+  - key: []
+parameters:
+  Body:
+    name: body
+    in: body
+    schema:
+      type: object
+      properties:
+        isAdmin:
+          type: boolean
+responses:
+  Me:
+    description: Me
+    schema:
+      type: object
+      properties:
+        password:
+          type: string
+paths:
+  /accounts:
+    parameters:
+      - name: account
+        in: body
+        schema:
+          type: object
+          properties:
+            role:
+              type: string
+    post:
+      consumes: [application/json, application/xml]
+      responses:
+        "201":
+          description: Created
+    put:
+      responses:
+        "200":
+          description: Updated
+  /admins:
+    post:
+      parameters:
+        - $ref: "#/parameters/Body"
+      responses:
+        "201":
+          description: Created
+  /me:
+    get:
+      responses:
+        "200":
+          $ref: "#/responses/Me"
