@@ -1,0 +1,45 @@
+name: False positive or false negative
+description: Procyon reported something that is fine, or missed something it should catch.
+labels: [needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks: this is the most useful report Procyon can get.
+        **Remove anything private from the spec** (internal hostnames,
+        real examples with personal data) before pasting it.
+  - type: input
+    id: version
+    attributes:
+      label: Procyon version
+      description: "`procyon --version`"
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What went wrong
+      options:
+        - It reported a finding that is not a problem (false positive)
+        - It missed a problem it should catch (false negative)
+    validations:
+      required: true
+  - type: input
+    id: rule
+    attributes:
+      label: Rule ID
+      placeholder: PRC006
+  - type: textarea
+    id: spec
+    attributes:
+      label: The smallest spec that shows it
+      render: yaml
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it is wrong
+      description: Why this is safe (false positive), or what the risk is (false negative).
+    validations:
+      required: true
