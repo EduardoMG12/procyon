@@ -78,6 +78,15 @@ func (f *specFiles) add(location *url.URL, path string, data []byte) {
 	f.lines[path] = splitLines(data)
 }
 
+// asGiven turns the file URL kin-openapi records in a location back into
+// the path Procyon read.
+func (f *specFiles) asGiven(loc Location) Location {
+	if given, ok := f.paths[loc.File]; ok {
+		loc.File = given
+	}
+	return loc
+}
+
 // close releases the directory opened for $refs.
 func (f *specFiles) close() {
 	if f.root != nil {

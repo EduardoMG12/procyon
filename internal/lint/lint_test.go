@@ -57,6 +57,7 @@ func TestRunRejectsBadInput(t *testing.T) {
 		{"ignore of an unknown rule", "ignore-unknown-rule.yaml", []string{"ignore-unknown-rule.yaml:8:7:", "PRC01"}},
 		{"ignore with a malformed date", "ignore-bad-date.yaml", []string{"ignore-bad-date.yaml:8:7:", "expires", "tomorrow"}},
 		{"ignore that is not a list", "ignore-not-a-list.yaml", []string{"ignore-not-a-list.yaml:8:7:", "list"}},
+		{"public marker error keeps the path as written", "dir with space/public-empty-reason.yaml", []string{"dir with space/public-empty-reason.yaml:7:5:"}},
 		{"Swagger 2.0", "swagger-2.0.yaml", []string{"swagger-2.0.yaml", "Swagger 2.0", "not supported yet"}},
 	}
 	for _, tt := range tests {
