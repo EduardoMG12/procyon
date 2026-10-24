@@ -1,0 +1,30 @@
+openapi: 3.1.0
+info:
+  title: Shop
+  version: 1.0.0
+security:
+  - bearer: []
+paths:
+  /users/{id}:
+    get:
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hasPassword:
+                    type: [boolean, "null"]
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
