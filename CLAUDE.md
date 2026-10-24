@@ -95,11 +95,26 @@ lazily. See `docs/agents/domain.md`.
 
 ## Current state
 
-Planning done on 2026-10-23: vision ([0000](docs/prds/0000-vision.md)) and
-v0.1 PRD ([0001](docs/prds/0001-v0.1-spec-lint.md)) written, glossary in
-`CONTEXT.md`. No code yet. v0.1 is tracked in spec issue #2 with tickets
-#3–#21 (sub-issues of #2, blocking edges set on GitHub). Start with #3
-(skeleton), then #4 (PRC001 end to end); after #4 most tickets can run in
-parallel. #14 vendors the deliberately vulnerable crAPI and VAmPI specs as
-known-bad fixtures with an answer key, to catch false negatives; their
-running apps are candidate targets for v0.2.
+Updated 2026-10-24. All v0.1 tickets except #13 (Swagger 2.0) and #21
+(release) are implemented, each reviewed with `/code-review` before its PR,
+and wait for the owner's review and merge. CI cannot run yet: the
+repository is private and Actions is not paid; everything was tested on
+Linux only.
+
+- Foundation: #22 → #23 (skeleton), #24 → #25 (PRC001). Most other PRs
+  stack on #25.
+- Siblings on #25: #26 (`--fail-on`), #27 (`x-procyon-public`), #28
+  (terminal format), #29 (PRC004), #30 → #31 (PRC002/003/011), #32
+  (PRC010), #33 → #34 → #35 (PRC005, PRC009, PRC008), #36 (corpus).
+- `integration/v0.1` merges all of those so they can be tested together
+  (all green with every rule). #37 (PRC006/007) → #38 → #39 (ignores) →
+  #40 → #41 (JSON, `--output`) → #42 (SARIF) → #43 (Markdown) build on it;
+  retarget them to `main` once their bases are merged.
+- #12 (`$refs`, branch `feat/local-refs`) went through six security review
+  rounds; its rules and threat model are in `docs/refs.md`. Its PR is not
+  open yet. A CLI `--ref-root` flag still has to be added on top of the
+  integration branch.
+- After merges: update `testdata/corpus/counts.txt` and `expected.txt`
+  (the integration branch has the values with every rule), PRD 0001
+  *Discoveries* (deviations are listed in each PR), README example and
+  CONTRIBUTING (corpus command).
