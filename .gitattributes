@@ -1,2 +1,5 @@
 # Specs and golden files are compared byte for byte; keep LF everywhere.
 * text=auto eol=lf
+
+# Windows line endings on purpose: Procyon must handle specs written on Windows.
+testdata/specs/crlf.yaml -text
