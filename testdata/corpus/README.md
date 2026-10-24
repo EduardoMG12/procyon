@@ -12,6 +12,8 @@ taken (`SOURCE`).
 | `twilio-oauth`, `twilio-chat`, `twilio-routes` | Twilio | MIT | Generated specs from a large vendor |
 | `crapi` | OWASP crAPI | Apache-2.0 | Vulnerable on purpose |
 | `vampi` | VAmPI | MIT | Vulnerable on purpose |
+| `pixi` | OWASP DevSlop Pixi (Swagger 2.0, minified JSON) | Apache-2.0 | Vulnerable on purpose |
+| `juice-shop` | OWASP Juice Shop's B2B order API | MIT | Vulnerable on purpose |
 
 ## The two tests
 
@@ -35,6 +37,6 @@ APIs' code are for runtime tests (v0.2).
 ## Adding a spec
 
 Only specs whose license allows redistribution (Apache-2.0, MIT, BSD, CC-BY,
-…). Never a GPL-licensed one: copying it into this Apache-2.0 repository would
+…). Never a GPL-licensed one (dvws-node, for one, is GPL-3.0): copying it into this Apache-2.0 repository would
 bring the GPL's terms with it. Keep them small (under ~200 KB); a huge spec
 belongs in an ad-hoc local test, not in the repository.
