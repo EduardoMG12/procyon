@@ -76,7 +76,7 @@ func runLint(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "procyon: %v\n", err)
 		return exitUsage
 	}
-	if err := format.Terminal(stdout, report); err != nil {
+	if err := format.Terminal(stdout, report, format.TerminalOptions{Color: useColor(stdout)}); err != nil {
 		fmt.Fprintf(stderr, "procyon: writing report: %v\n", err)
 		return exitUsage
 	}
@@ -109,6 +109,20 @@ func parseInterspersed(flags *flag.FlagSet, args []string) ([]string, error) {
 		positional = append(positional, args[0])
 		args = args[1:]
 	}
+}
+
+// useColor reports whether w is a terminal and the user has not opted out
+// with a non-empty NO_COLOR (https://no-color.org).
+func useColor(w io.Writer) bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := f.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
 const usage = `Usage:

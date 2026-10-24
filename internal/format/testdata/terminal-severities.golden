@@ -1,0 +1,51 @@
+HIGH    PRC001  Operation has no authentication
+        specs/shop.yaml:9:5  GET /orders
+
+           7 | paths:
+           8 |   /orders:
+        >  9 |     get:
+          10 |       responses:
+          11 |         "200":
+
+        Why:  Anyone who can reach the API can call this operation, without
+              proving who they are.
+        Fix:  Add a security requirement to the operation or to the whole spec.
+        More: https://github.com/EduardoMG12/procyon/blob/main/docs/rules/PRC001.md
+
+MEDIUM  PRC004  Server URL does not use TLS
+        specs/shop.yaml:6:12
+
+          4 |   version: 1.0.0
+          5 | servers:
+        > 6 |   - url: http://api.example.com
+          7 | paths:
+          8 |   /orders:
+
+        Why:  Traffic to this server is sent unencrypted, so anyone on the
+              network path can read or change it, including credentials.
+        Fix:  Use an https:// URL.
+        More: https://github.com/EduardoMG12/procyon/blob/main/docs/rules/PRC004.md
+
+LOW     PRC008  Unbounded input or output
+        specs/shop.yaml:1:1
+
+        > 1 | openapi: 3.0.3
+          2 | info:
+          3 |   title: Shop
+
+        Why:  Nothing limits how big a request can be.
+        Fix:  Add maxLength.
+        More: https://github.com/EduardoMG12/procyon/blob/main/docs/rules/PRC008.md
+
+LOW     PRC008  Unbounded input or output
+        specs/shop.yaml:12:11
+
+          10 |       responses:
+          11 |         "200":
+        > 12 |           description: Orders
+
+        Why:  Nothing limits how big a response can be.
+        Fix:  Add paging.
+        More: https://github.com/EduardoMG12/procyon/blob/main/docs/rules/PRC008.md
+
+FAILED  1 high · 1 medium · 2 low  (fails at: medium)

@@ -1,0 +1,15 @@
+[1;31mHIGH    [0mPRC001  Operation has no authentication
+        specs/shop.yaml:9:5  GET /orders
+
+           7 | paths:
+           8 |   /orders:
+[1m        >  9 |     get:[0m
+          10 |       responses:
+          11 |         "200":
+
+        Why:  Anyone who can reach the API can call this operation, without
+              proving who they are.
+        Fix:  Add a security requirement to the operation or to the whole spec.
+        More: https://github.com/EduardoMG12/procyon/blob/main/docs/rules/PRC001.md
+
+[1;31mFAILED[0m  1 high · 0 medium · 0 low  (fails at: high)

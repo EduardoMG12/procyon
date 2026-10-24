@@ -1,0 +1,10 @@
+HIGH    PRC001  Operation has no authentication
+        specs/min.json:1:150  POST /orders
+
+        > 1 | …n":"Orders"}}},"post":{"responses":{"201":{"description":"Created"}}}},"/users":{"get":{"responses":…
+
+        Why:  Anyone can call it.
+        Fix:  Add security.
+        More: https://github.com/EduardoMG12/procyon/blob/main/docs/rules/PRC001.md
+
+FAILED  1 high · 0 medium · 0 low  (fails at: high)
