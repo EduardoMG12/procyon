@@ -1,0 +1,25 @@
+# Answer key: findings Procyon must report on APIs that are vulnerable on
+# purpose. Format: <corpus name> <rule> <line>:<column> <METHOD /path>
+#
+# Only problems visible in the spec belong here. Many of these APIs'
+# vulnerabilities live in their code (an undocumented field, a missing
+# ownership check); finding those is the job of runtime tests (v0.2).
+#
+# When a rule lands, add the known problems it must find.
+
+# VAmPI: GET /createdb resets the database and needs no authentication.
+vampi PRC001 17:5 GET /createdb
+# VAmPI: GET /users/v1/_debug dumps every user, passwords included, and
+# needs no authentication.
+vampi PRC001 89:5 GET /users/v1/_debug
+
+# VAmPI: GET /users/v1/_debug returns every user's password.
+vampi PRC005 114:25 GET /users/v1/_debug
+# VAmPI: GET /books/v1/{book_title} returns the book's secret to any user.
+vampi PRC005 620:21 GET /books/v1/{book_title}
+
+# crAPI: deleting any user's video is an admin function any logged-in user
+# can call (broken function level authorization).
+crapi PRC010 855:7 DELETE /identity/api/v2/admin/videos/{video_id}
+# crAPI: the workshop's management listing of all users, same problem.
+crapi PRC010 2201:7 GET /workshop/api/management/users/all
