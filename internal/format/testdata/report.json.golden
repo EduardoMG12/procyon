@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "failed": true,
+  "failOn": "high",
+  "summary": {
+    "critical": 0,
+    "high": 1,
+    "medium": 0,
+    "low": 0,
+    "ignored": 1
+  },
+  "findings": [
+    {
+      "rule": {
+        "id": "PRC001",
+        "title": "Operation has no authentication",
+        "severity": "high",
+        "owasp": "API2:2023 Broken Authentication",
+        "docs": "https://github.com/EduardoMG12/procyon/blob/main/docs/rules/PRC001.md"
+      },
+      "location": {
+        "file": "specs/shop.yaml",
+        "line": 9,
+        "column": 5
+      },
+      "operation": "GET /orders",
+      "why": "Anyone can call it.",
+      "fix": "Add security."
+    }
+  ],
+  "ignored": [
+    {
+      "rule": {
+        "id": "PRC004",
+        "title": "Server URL does not use TLS",
+        "severity": "high",
+        "owasp": "API8:2023 Security Misconfiguration",
+        "docs": "https://github.com/EduardoMG12/procyon/blob/main/docs/rules/PRC004.md"
+      },
+      "location": {
+        "file": "specs/shop.yaml",
+        "line": 6,
+        "column": 12
+      },
+      "why": "Unencrypted.",
+      "fix": "Use https.",
+      "reason": "Internal mirror",
+      "expires": "2027-01-31"
+    }
+  ],
+  "notes": [
+    {
+      "location": {
+        "file": "specs/shop.yaml",
+        "line": 27,
+        "column": 7
+      },
+      "message": "ignore of PRC010 on GET /orders matches no finding; remove it"
+    }
+  ]
+}
