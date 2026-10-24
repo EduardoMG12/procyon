@@ -55,7 +55,7 @@ var piiReferenceWords = append(slices.Clone(referenceWords),
 func checkPRC006(doc *openapi3.T) []Finding {
 	var found onePerPlace
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-		if method != http.MethodGet || !reachableAnonymously(doc, op) {
+		if method != http.MethodGet || !reachableAnonymously(doc, path, op) {
 			return
 		}
 		forEachResponseProperty(op, func(name string, prop *openapi3.SchemaRef) {
@@ -91,6 +91,6 @@ func textual(s *openapi3.Schema) bool {
 // reachableAnonymously reports whether anyone can call op without
 // credentials. Marking an operation public (x-procyon-public) does not
 // change that: it only says it is meant to be so.
-func reachableAnonymously(doc *openapi3.T, op *openapi3.Operation) bool {
-	return unauthenticated(doc, op)
+func reachableAnonymously(doc *openapi3.T, path string, op *openapi3.Operation) bool {
+	return unauthenticated(doc, path, op)
 }

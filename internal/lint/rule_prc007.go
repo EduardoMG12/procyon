@@ -32,7 +32,7 @@ var identifierWords = []string{
 func checkPRC007(doc *openapi3.T) []Finding {
 	var findings []Finding
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-		if !reachableAnonymously(doc, op) {
+		if !reachableAnonymously(doc, path, op) {
 			return
 		}
 		param := objectIdentifier(doc, path, op)

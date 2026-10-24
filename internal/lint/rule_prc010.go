@@ -28,13 +28,13 @@ var adminWords = []string{"admin", "internal", "debug", "management"}
 func checkPRC010(doc *openapi3.T) []Finding {
 	regular := map[string]bool{}
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-		if !adminPath(path) && !unauthenticated(doc, op) {
-			regular[securityKey(effectiveSecurity(doc, op))] = true
+		if !adminPath(path) && !unauthenticated(doc, path, op) {
+			regular[authKey(doc, path, op)] = true
 		}
 	})
 	var findings []Finding
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-		if !adminPath(path) || unauthenticated(doc, op) || !regular[securityKey(effectiveSecurity(doc, op))] {
+		if !adminPath(path) || unauthenticated(doc, path, op) || !regular[authKey(doc, path, op)] {
 			return
 		}
 		findings = append(findings, Finding{
@@ -45,6 +45,16 @@ func checkPRC010(doc *openapi3.T) []Finding {
 		})
 	})
 	return findings
+}
+
+// authKey is equal for operations that authenticate the same way: the same
+// security requirements and the same credential parameter, if any.
+func authKey(doc *openapi3.T, path string, op *openapi3.Operation) string {
+	key := securityKey(effectiveSecurity(doc, op))
+	if name := credentialParameter(doc, path, op); name != "" {
+		key += " parameter " + strings.ToLower(name)
+	}
+	return key
 }
 
 // effectiveSecurity is the requirement that applies to op: its own, or the
