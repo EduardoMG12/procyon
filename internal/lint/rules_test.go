@@ -65,16 +65,16 @@ func TestRules(t *testing.T) {
 			"PRC011 prc011-oauth-flows.yaml:11:9 ",
 			"PRC011 prc011-oauth-flows.yaml:14:9 ",
 		}},
-		// /admin/users inherits the default: reported. /admin/orders has
-		// its own scope: not. /internal/metrics repeats the default: reported.
-		// /debug-tools has "debug" as a word: reported. /administrators-guide
-		// is not "admin". /management has no auth at all: PRC001, not PRC010.
 		// No default security: /admin/users is protected exactly like /orders
 		// (same alternatives and scopes, in another order). /admin/orders asks
 		// for a scope no regular operation uses.
 		{"prc010-no-default.yaml", []string{"PRC010"}, []string{
 			"PRC010 prc010-no-default.yaml:15:5 GET /admin/users",
 		}},
+		// /admin/users inherits the default: reported. /admin/orders has
+		// its own scope: not. /internal/metrics repeats the default: reported.
+		// /debug-tools has "debug" as a word: reported. /administrators-guide
+		// is not "admin". /management has no auth at all: PRC001, not PRC010.
 		{"prc010-admin.yaml", []string{"PRC001", "PRC010"}, []string{
 			"PRC010 prc010-admin.yaml:9:5 GET /admin/users",
 			"PRC010 prc010-admin.yaml:21:5 GET /internal/metrics",
