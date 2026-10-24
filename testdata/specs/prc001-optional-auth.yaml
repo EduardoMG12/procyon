@@ -1,0 +1,18 @@
+openapi: 3.0.3
+info:
+  title: Shop
+  version: 1.0.0
+paths:
+  /orders:
+    get:
+      security:
+        - {}
+        - bearer: []
+      responses:
+        "200":
+          description: Orders
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer

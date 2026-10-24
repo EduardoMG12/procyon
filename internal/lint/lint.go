@@ -2,12 +2,14 @@
 package lint
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -18,15 +20,34 @@ import (
 // Options control a run.
 type Options struct{}
 
-// Report is everything one run produced.
-type Report struct{}
-
 // Run lints the spec at path.
 func Run(path string, opts Options) (Report, error) {
-	if _, err := load(path); err != nil {
+	doc, err := load(path)
+	if err != nil {
 		return Report{}, err
 	}
-	return Report{}, nil
+	var report Report
+	for _, rule := range rules {
+		for _, f := range rule.check(doc) {
+			f.Rule = rule
+			report.Findings = append(report.Findings, f)
+		}
+	}
+	// Same spec, same report, same order: sort by where findings point.
+	slices.SortStableFunc(report.Findings, func(a, b Finding) int {
+		return cmp.Or(
+			cmp.Compare(a.Location.File, b.Location.File),
+			cmp.Compare(a.Location.Line, b.Location.Line),
+			cmp.Compare(a.Location.Column, b.Location.Column),
+			cmp.Compare(a.Rule.ID, b.Rule.ID),
+		)
+	})
+	for _, f := range report.Findings {
+		if f.Rule.Severity >= High {
+			report.Failed = true
+		}
+	}
+	return report, nil
 }
 
 // load reads the spec at path, recording the file, line and column of every
@@ -65,7 +86,11 @@ func load(path string) (*openapi3.T, error) {
 
 	loader := openapi3.NewLoader()
 	loader.IncludeOrigin = true
-	doc, err := loader.LoadFromDataWithPath(data, &url.URL{Path: path})
+	// kin-openapi records locations only on its YAML path, and it tries JSON
+	// first. A trailing YAML comment makes the JSON attempt fail while the
+	// file stays valid YAML (JSON is YAML) with every line and column
+	// unchanged, so JSON specs get locations too.
+	doc, err := loader.LoadFromDataWithPath(append(data, "\n# procyon\n"...), &url.URL{Path: path})
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}

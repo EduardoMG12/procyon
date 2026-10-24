@@ -1,0 +1,50 @@
+package lint
+
+// Severity is how serious a finding is. The order matters: a higher value is
+// more serious, which is how the fail threshold compares them.
+type Severity int
+
+const (
+	Low Severity = iota + 1
+	Medium
+	High
+	Critical
+)
+
+func (s Severity) String() string {
+	switch s {
+	case Low:
+		return "low"
+	case Medium:
+		return "medium"
+	case High:
+		return "high"
+	case Critical:
+		return "critical"
+	}
+	return "unknown"
+}
+
+// Location is where a finding points in the original spec files.
+type Location struct {
+	File   string
+	Line   int
+	Column int
+}
+
+// Finding is one place in the spec where a rule is broken.
+type Finding struct {
+	Rule      Rule
+	Location  Location
+	Operation string // "GET /orders"; empty when the finding is not about an operation
+	Why       string // why it is a risk, in plain words
+	Fix       string // how to fix it
+}
+
+// Report is everything one run produced.
+type Report struct {
+	Findings []Finding
+	// Failed is true when at least one finding is at or above the fail
+	// threshold.
+	Failed bool
+}

@@ -1,0 +1,15 @@
+openapi: 3.0.3
+info:
+  title: Zoo
+  version: 1.0.0
+paths:
+  /zebras:
+    get:
+      responses:
+        "200":
+          description: Zebras
+  /apples:
+    get:
+      responses:
+        "200":
+          description: Apples
