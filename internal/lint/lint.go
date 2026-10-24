@@ -224,12 +224,16 @@ func leavesWorkingDir(path string) bool {
 	return !stillInside
 }
 
-// withoutUndefinedSchemes removes kin-openapi's "undefined security scheme"
-// errors that PRC002 reports from a validation error, returning nil when
-// nothing else is left.
+// withoutUndefinedSchemes removes from a validation error what must not
+// stop a lint, returning nil when nothing else is left: the "undefined
+// security scheme" errors PRC002 reports, and conflicting paths
+// (/users/{id} and /users/{name}), which OpenAPI forbids but which say
+// nothing about security and are common in large real specs (GitHub's).
 func withoutUndefinedSchemes(err error) error {
 	switch e := err.(type) {
 	case nil:
+		return nil
+	case *openapi3.ConflictingPathsError:
 		return nil
 	case *openapi3.SecurityRequirementSchemeUndefinedError:
 		if coveredByPRC002(e.JSONPointer) {
