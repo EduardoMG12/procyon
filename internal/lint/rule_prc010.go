@@ -86,15 +86,19 @@ func securityKey(reqs openapi3.SecurityRequirements) string {
 }
 
 // adminPath reports whether a path segment, split into words on anything
-// but letters and digits, contains an admin word: /admin/users and
-// /debug-tools match, /administrators-guide does not.
+// but letters and digits, contains an admin word or its plural:
+// /admin/users, /orgs/{org}/admins and /debug-tools match,
+// /administrators-guide and /users/{admin_id} (a parameter's name) do not.
 func adminPath(path string) bool {
 	for _, segment := range strings.Split(path, "/") {
+		if strings.HasPrefix(segment, "{") {
+			continue // a parameter's name ({admin_id}) is not part of the path
+		}
 		words := strings.FieldsFunc(strings.ToLower(segment), func(r rune) bool {
 			return !unicode.IsLetter(r) && !unicode.IsDigit(r)
 		})
 		for _, w := range words {
-			if slices.Contains(adminWords, w) {
+			if slices.ContainsFunc(adminWords, func(a string) bool { return sameWord(w, a) }) { // admins too
 				return true
 			}
 		}

@@ -110,10 +110,10 @@ func TestRules(t *testing.T) {
 			"PRC005 prc005-references.yaml:38:19 GET /volumes",
 			"PRC005 prc005-references.yaml:40:19 GET /volumes",
 			"PRC005 prc005-references.yaml:46:19 GET /volumes",
-			"PRC005 prc005-references.yaml:55:19 GET /volumes",
 			"PRC005 prc005-references.yaml:59:19 GET /volumes",
-			"PRC005 prc005-references.yaml:64:19 GET /volumes",
-			"PRC005 prc005-references.yaml:66:19 GET /volumes",
+			"PRC005 prc005-references.yaml:63:19 GET /volumes",
+			"PRC005 prc005-references.yaml:68:19 GET /volumes",
+			"PRC005 prc005-references.yaml:70:19 GET /volumes",
 		}},
 		// A role on /memberships/{username} is what the operation assigns,
 		// and an enum of only low values (guestRole: viewer | commenter)
@@ -134,6 +134,11 @@ func TestRules(t *testing.T) {
 			"PRC009 prc009-grants-and-enums.yaml:134:17 PATCH /flags",
 			"PRC009 prc009-grants-and-enums.yaml:137:17 PATCH /flags",
 			"PRC009 prc009-grants-and-enums.yaml:140:17 PATCH /flags",
+		}},
+		// Admin words count in the path's own segments, plural included
+		// (/admins), not in a parameter's name (/users/{admin_id}).
+		{"prc010-path-words.yaml", []string{"PRC010"}, []string{
+			"PRC010 prc010-path-words.yaml:26:5 GET /orgs/{org}/admins",
 		}},
 		// Two undefined schemes in one requirement are two findings.
 		{"prc002-two-undefined.yaml", []string{"PRC002"}, []string{
