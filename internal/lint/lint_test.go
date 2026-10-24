@@ -47,6 +47,11 @@ func TestRunRejectsBadInput(t *testing.T) {
 		{"remote $ref", "ref-remote.yaml", []string{"ref-remote.yaml", "https://example.com/orders.yaml", "never fetches"}},
 		{"missing local $ref", "ref-missing.yaml", []string{"ref-missing.yaml", "missing.yaml"}},
 		{"$ref escaping the working directory", "ref-escapes.yaml", []string{"ref-escapes.yaml", "outside"}},
+		{"undefined scheme does not hide another error", "invalid-spec-and-undefined-scheme.yaml", []string{"invalid-spec-and-undefined-scheme.yaml", "info"}},
+		// PRC002 does not look into webhooks or callbacks, so an undefined
+		// scheme there must still stop the run instead of passing silently.
+		{"undefined scheme in a webhook", "invalid-undefined-scheme-in-webhook.yaml", []string{"undefined security scheme", "missing"}},
+		{"undefined scheme in a callback", "invalid-undefined-scheme-in-callback.yaml", []string{"undefined security scheme", "missing"}},
 		{"Swagger 2.0", "swagger-2.0.yaml", []string{"swagger-2.0.yaml", "Swagger 2.0", "not supported yet"}},
 	}
 	for _, tt := range tests {

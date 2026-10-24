@@ -1,0 +1,26 @@
+openapi: 3.0.3
+info:
+  title: Shop
+  version: 1.0.0
+security:
+  - bearer: []
+paths:
+  /orders:
+    post:
+      callbacks:
+        onPaid:
+          "{$request.body#/callbackUrl}":
+            post:
+              security:
+                - missing: []
+              responses:
+                "200":
+                  description: Received
+      responses:
+        "201":
+          description: Created
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer

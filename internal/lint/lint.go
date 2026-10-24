@@ -106,9 +106,12 @@ func load(path string, opts Options) (*openapi3.T, *specFiles, error) {
 	// Wrong examples and defaults are documentation mistakes, not security
 	// problems, and common in real specs: they must not stop a lint.
 	err = doc.Validate(context.Background(),
+		openapi3.EnableMultiError(),
 		openapi3.DisableExamplesValidation(),
 		openapi3.DisableSchemaDefaultsValidation())
-	if err != nil {
+	// A requirement naming an undefined scheme is a security finding
+	// (PRC002), with a location and a fix, not a reason to refuse the spec.
+	if err = withoutUndefinedSchemes(err); err != nil {
 		// Some validation errors append the schema and value on extra lines;
 		// the first line says what is wrong.
 		msg, _, _ := strings.Cut(err.Error(), "\n")
@@ -186,4 +189,48 @@ func leavesWorkingDir(path string) bool {
 	}
 	_, stillInside := within(evalSymlinks(wd), evalSymlinks(dir))
 	return !stillInside
+}
+
+// withoutUndefinedSchemes removes kin-openapi's "undefined security scheme"
+// errors that PRC002 reports from a validation error, returning nil when
+// nothing else is left.
+func withoutUndefinedSchemes(err error) error {
+	switch e := err.(type) {
+	case nil:
+		return nil
+	case *openapi3.SecurityRequirementSchemeUndefinedError:
+		if coveredByPRC002(e.JSONPointer) {
+			return nil
+		}
+		return err
+	case openapi3.MultiError:
+		var kept openapi3.MultiError
+		for _, inner := range e {
+			if inner = withoutUndefinedSchemes(inner); inner != nil {
+				kept = append(kept, inner)
+			}
+		}
+		switch len(kept) {
+		case 0:
+			return nil
+		case 1:
+			return kept[0]
+		}
+		return kept
+	}
+	// A context wrapper ("invalid path /orders: ...") around nothing but
+	// undefined schemes goes too.
+	if inner := errors.Unwrap(err); inner != nil && withoutUndefinedSchemes(inner) == nil {
+		return nil
+	}
+	return err
+}
+
+// coveredByPRC002 reports whether PRC002 checks the requirement at pointer:
+// the global one and those of path operations. Webhooks and callbacks are
+// not checked, so their undefined schemes must stay errors rather than
+// vanish.
+func coveredByPRC002(pointer string) bool {
+	return strings.HasPrefix(pointer, "/security/") ||
+		(strings.HasPrefix(pointer, "/paths/") && !strings.Contains(pointer, "/callbacks/"))
 }

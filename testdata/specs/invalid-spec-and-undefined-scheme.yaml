@@ -1,0 +1,9 @@
+openapi: 3.0.3
+security:
+  - token: []
+paths:
+  /orders:
+    get:
+      responses:
+        "200":
+          description: Orders
