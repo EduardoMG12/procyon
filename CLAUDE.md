@@ -97,10 +97,13 @@ lazily. See `docs/agents/domain.md`.
 
 ## Current state
 
-Updated 2026-10-24. v0.1's PRs (#1, #22–#49) are merged into `main`,
+Updated 2026-10-24. v0.1's PRs (#1, #22–#59) are merged into `main`,
 locally on the owner's machine, one commit per PR, including Swagger 2.0
-(#13, landed as #47–#49). Left for v0.1: #21 (publishing the v0.1.0
-release, after the owner's review; the release machinery is in). The
+(#13, landed as #47–#49) and fixes found by benchmarking against vulnerable
+and large real specs (docs/benchmark.md). Left for v0.1: #21 (publishing
+the v0.1.0 release, after the owner's review; the release machinery is in).
+Before every push, run the tests on a clean `git archive` of the commit:
+new files left out of a commit pass locally and fail everywhere else. The
 repository stays private for now, so CI does not run: test locally
 (`gofmt -l .`, `go vet ./...`, `staticcheck`, `go test -race ./...`).
 Never add Claude attribution to commits or PRs.
