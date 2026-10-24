@@ -200,12 +200,108 @@ func TestRefOutsideGivesTheSameErrorWhetherOrNotTheFileExists(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "outside") {
 			t.Fatalf("Run = %v, want an error saying the $ref points outside", err)
 		}
-		messages = append(messages, strings.ReplaceAll(err.Error(), filepath.ToSlash(target), "TARGET"))
+		msg := strings.ReplaceAll(err.Error(), filepath.ToSlash(target), "TARGET")
+		messages = append(messages, strings.ReplaceAll(msg, dir, "DIR"))
 	}
 	for i := range messages {
 		messages[i] = messages[i][strings.Index(messages[i], "$ref"):]
 	}
 	if messages[0] != messages[1] {
 		t.Errorf("messages differ, revealing whether the file exists:\n %s\n %s", messages[0], messages[1])
+	}
+}
+
+// writeSpec writes a spec at path whose /orders path item is a $ref.
+func writeSpec(t *testing.T, path, ref string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "openapi: 3.0.3\ninfo:\n  title: Shop\n  version: 1.0.0\npaths:\n  /orders:\n    $ref: \"" + ref + "\"\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeFile(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+const pathItem = "get:\n  responses:\n    \"200\":\n      description: OK\n"
+
+// setHome points the user's home directory at dir for this test.
+func setHome(t *testing.T, dir string) {
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir) // Windows
+}
+
+// A spec saved straight into the home directory must not make all of home
+// (~/.ssh, ~/.config, ~/.aws) readable through $refs.
+func TestRefsRefusedWhenTheSpecSitsInTheHomeDirectory(t *testing.T) {
+	home := t.TempDir()
+	setHome(t, home)
+	writeFile(t, filepath.Join(home, "notes.yaml"), pathItem)
+	spec := filepath.Join(home, "api.yaml")
+	writeSpec(t, spec, "./notes.yaml")
+	_, err := lint.Run(spec, lint.Options{})
+	if err == nil || !strings.Contains(err.Error(), "home directory") {
+		t.Fatalf("Run = %v, want an error refusing $refs from the home directory", err)
+	}
+}
+
+// Hidden files and directories are never read, even inside the root: a spec
+// at a repository's top level sits next to .git, whose config may hold the
+// CI's checkout token.
+func TestRefsNeverReadHiddenFiles(t *testing.T) {
+	setHome(t, t.TempDir())
+	repo := t.TempDir()
+	writeFile(t, filepath.Join(repo, ".git", "config"), pathItem)
+	writeFile(t, filepath.Join(repo, ".env"), pathItem)
+	for _, ref := range []string{"./.git/config", "./.env"} {
+		spec := filepath.Join(repo, "api.yaml")
+		writeSpec(t, spec, ref)
+		_, err := lint.Run(spec, lint.Options{})
+		if err == nil || !strings.Contains(err.Error(), "hidden") {
+			t.Errorf("$ref %s: Run = %v, want an error refusing a hidden file", ref, err)
+		}
+	}
+}
+
+// By default $refs stay in the spec's directory. A monorepo whose specs
+// share files from a sibling folder opts in with RefRoot.
+func TestRefRootAllowsSiblingFoldersOnlyWhenAskedFor(t *testing.T) {
+	setHome(t, t.TempDir())
+	repo := t.TempDir()
+	writeFile(t, filepath.Join(repo, "common", "orders.yaml"), pathItem)
+	spec := filepath.Join(repo, "specs", "api.yaml")
+	writeSpec(t, spec, "../common/orders.yaml")
+
+	_, err := lint.Run(spec, lint.Options{})
+	if err == nil || !strings.Contains(err.Error(), "RefRoot") {
+		t.Fatalf("default: Run = %v, want an error explaining how to allow it", err)
+	}
+	if _, err := lint.Run(spec, lint.Options{RefRoot: repo}); err != nil {
+		t.Fatalf("with RefRoot: %v", err)
+	}
+}
+
+// A $ref to a directory says so, instead of claiming it points outside.
+func TestRefToADirectoryIsReportedAsSuch(t *testing.T) {
+	setHome(t, t.TempDir())
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "orders"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	spec := filepath.Join(dir, "api.yaml")
+	writeSpec(t, spec, "./orders")
+	_, err := lint.Run(spec, lint.Options{})
+	if err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("Run = %v, want an error saying it is not a regular file", err)
 	}
 }

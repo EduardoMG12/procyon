@@ -17,11 +17,17 @@ import (
 )
 
 // Options control a run.
-type Options struct{}
+type Options struct {
+	// RefRoot is the directory $refs may read files from. Empty means the
+	// spec's own directory. A monorepo whose specs share files from a
+	// sibling folder sets it to the repository root. It must contain the
+	// spec, and it may not be the file system's root or the home directory.
+	RefRoot string
+}
 
 // Run lints the spec at path.
 func Run(path string, opts Options) (Report, error) {
-	doc, files, err := load(path)
+	doc, files, err := load(path, opts)
 	if err != nil {
 		return Report{}, err
 	}
@@ -55,7 +61,7 @@ func Run(path string, opts Options) (Report, error) {
 
 // load reads the spec at path, recording the file, line and column of every
 // element so findings can point at the original file.
-func load(path string) (*openapi3.T, *specFiles, error) {
+func load(path string, opts Options) (*openapi3.T, *specFiles, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -87,7 +93,7 @@ func load(path string) (*openapi3.T, *specFiles, error) {
 		return nil, nil, fmt.Errorf("%s: Swagger 2.0 is not supported yet; convert it to OpenAPI 3 (support is tracked in issue #13)", path)
 	}
 
-	files := newSpecFiles(path, data)
+	files := newSpecFiles(path, opts.RefRoot, data)
 	defer files.close()
 	loader := openapi3.NewLoader()
 	loader.IncludeOrigin = true
