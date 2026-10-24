@@ -18,7 +18,11 @@ import (
 )
 
 // Options control a run.
-type Options struct{}
+type Options struct {
+	// FailOn is the fail threshold: the lowest severity that fails the run.
+	// Zero means the default, High.
+	FailOn Severity
+}
 
 // Run lints the spec at path.
 func Run(path string, opts Options) (Report, error) {
@@ -42,8 +46,12 @@ func Run(path string, opts Options) (Report, error) {
 			cmp.Compare(a.Rule.ID, b.Rule.ID),
 		)
 	})
+	failOn := opts.FailOn
+	if failOn == 0 {
+		failOn = High
+	}
 	for _, f := range report.Findings {
-		if f.Rule.Severity >= High {
+		if f.Rule.Severity >= failOn {
 			report.Failed = true
 		}
 	}
