@@ -1,0 +1,15 @@
+swagger: "2.0"
+info:
+  title: Stats
+  version: 1.0.0
+paths:
+  /stats:
+    get:
+      responses:
+        "200":
+          description: Stats
+          schema:
+            type: array
+            items:
+              - type: string
+              - type: integer

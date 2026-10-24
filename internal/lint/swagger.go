@@ -2,7 +2,9 @@ package lint
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -89,6 +91,12 @@ func fromSwagger(data []byte) (converted []byte, back func(position) (position, 
 	}
 	var doc2 openapi2.T
 	if err := json.Unmarshal(asJSON, &doc2); err != nil {
+		// A value of the wrong kind (a list where a schema must be) names its
+		// place as dotted, pointer-escaped keys: point at it in the file.
+		if wrong, ok := errors.AsType[*json.UnmarshalTypeError](err); ok && wrong.Field != "" {
+			return nil, nil, at("/"+strings.ReplaceAll(wrong.Field, ".", "/"),
+				"is %s, where Swagger 2.0 expects %s", jsonKind(wrong.Value), goKind(wrong.Type))
+		}
 		return nil, nil, fmt.Errorf("reading Swagger 2.0: %w", err)
 	}
 	doc3, err := openapi2conv.ToV3(&doc2)
@@ -286,4 +294,34 @@ func escapePointer(s string) string {
 
 func unescapePointer(s string) string {
 	return strings.NewReplacer("~1", "/", "~0", "~").Replace(s)
+}
+
+// jsonKind names a JSON value kind as encoding/json reports it ("array").
+func jsonKind(kind string) string {
+	if name, ok := map[string]string{
+		"array": "a list", "object": "an object", "string": "text", "number": "a number", "bool": "true or false",
+	}[kind]; ok {
+		return name
+	}
+	return kind
+}
+
+// goKind names what a Go type expects, in JSON terms.
+func goKind(t reflect.Type) string {
+	if t == nil {
+		return "another kind of value"
+	}
+	switch t.Kind() {
+	case reflect.Struct, reflect.Map:
+		return "an object"
+	case reflect.Slice, reflect.Array:
+		return "a list"
+	case reflect.String:
+		return "text"
+	case reflect.Bool:
+		return "true or false"
+	case reflect.Int, reflect.Int64, reflect.Uint64, reflect.Float64:
+		return "a number"
+	}
+	return "another kind of value"
 }

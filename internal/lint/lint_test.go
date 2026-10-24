@@ -64,6 +64,7 @@ func TestRunRejectsBadInput(t *testing.T) {
 		{"Swagger 2.0 path item $ref", "swagger-2.0-pathref.yaml", []string{"swagger-2.0-pathref.yaml", "/users", "$ref"}},
 		{"Swagger 2.0 YAML alias bomb of long strings", "swagger-2.0-string-bomb.yaml", []string{"swagger-2.0-string-bomb.yaml", "alias"}},
 		{"Swagger 2.0 with a null default response", "swagger-2.0-null-default.yaml", []string{"swagger-2.0-null-default.yaml:9:9:", "default"}},
+		{"Swagger 2.0 with a list where a schema must be", "swagger-2.0-tuple.yaml", []string{"swagger-2.0-tuple.yaml:13:13:", "items", "list"}},
 		{"Swagger 2.0 YAML alias bomb", "swagger-2.0-alias-bomb.yaml", []string{"swagger-2.0-alias-bomb.yaml", "alias"}},
 		{"Swagger 2.0 split across files", "swagger-2.0-split.yaml", []string{"swagger-2.0-split.yaml", "./definitions.yaml#/User", "one file"}},
 		{"public marker error keeps the path as written", "dir with space/public-empty-reason.yaml", []string{"dir with space/public-empty-reason.yaml:7:5:"}},
