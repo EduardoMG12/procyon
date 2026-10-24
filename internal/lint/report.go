@@ -59,6 +59,11 @@ type Report struct {
 	// Failed is true when at least one finding is at or above the fail
 	// threshold.
 	Failed bool
+	// Ignored are the findings an x-procyon-ignore matched.
+	Ignored []IgnoredFinding
+	// Notes are things to know that are not findings: expired and unused
+	// ignores.
+	Notes []Note
 	// FailOn is the fail threshold the run used.
 	FailOn Severity
 	// Sources holds the lines of every spec file read, by the same path

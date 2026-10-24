@@ -11,6 +11,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/goccy/go-yaml"
@@ -22,6 +23,8 @@ type Options struct {
 	// FailOn is the fail threshold: the lowest severity that fails the run.
 	// Zero means the default, High.
 	FailOn Severity
+	// Today decides whether an ignore has expired. Zero means now.
+	Today time.Time
 }
 
 // Run lints the spec at path.
@@ -40,12 +43,21 @@ func Run(path string, opts Options) (Report, error) {
 	if report.FailOn == 0 {
 		report.FailOn = High
 	}
+	// asGiven turns kin-openapi's file URL back into the path read.
+	asGiven := func(loc Location) Location {
+		if given, ok := files[loc.File]; ok {
+			loc.File = given
+		}
+		return loc
+	}
+	ignores, err := parseIgnores(doc, asGiven)
+	if err != nil {
+		return Report{}, err
+	}
 	for _, rule := range rules {
 		for _, f := range rule.check(doc) {
 			f.Rule = rule
-			if given, ok := files[f.Location.File]; ok {
-				f.Location.File = given
-			}
+			f.Location = asGiven(f.Location)
 			report.Findings = append(report.Findings, f)
 		}
 	}
@@ -58,6 +70,11 @@ func Run(path string, opts Options) (Report, error) {
 			cmp.Compare(a.Rule.ID, b.Rule.ID),
 		)
 	})
+	today := opts.Today
+	if today.IsZero() {
+		today = time.Now()
+	}
+	applyIgnores(&report, ignores, today)
 	for _, f := range report.Findings {
 		if f.Rule.Severity >= report.FailOn {
 			report.Failed = true
