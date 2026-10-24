@@ -1,0 +1,31 @@
+openapi: 3.0.3
+info:
+  title: Shop
+  version: 1.0.0
+security:
+  - key: []
+paths:
+  /orders:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Order[Draft]"
+      responses:
+        "201":
+          description: Created
+components:
+  securitySchemes:
+    key:
+      type: apiKey
+      in: header
+      name: X-Key
+  schemas:
+    Order[Draft]:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 1020
+          pattern: "^(?=.*[a-z])[\\w+=,.@-]{1,1020}$"
