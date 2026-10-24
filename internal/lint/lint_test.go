@@ -52,6 +52,11 @@ func TestRunRejectsBadInput(t *testing.T) {
 		// scheme there must still stop the run instead of passing silently.
 		{"undefined scheme in a webhook", "invalid-undefined-scheme-in-webhook.yaml", []string{"undefined security scheme", "missing"}},
 		{"undefined scheme in a callback", "invalid-undefined-scheme-in-callback.yaml", []string{"undefined security scheme", "missing"}},
+		// A typo in an ignore must never silently ignore something.
+		{"ignore without a reason", "ignore-no-reason.yaml", []string{"ignore-no-reason.yaml:8:7:", "GET /health", "reason"}},
+		{"ignore of an unknown rule", "ignore-unknown-rule.yaml", []string{"ignore-unknown-rule.yaml:8:7:", "PRC01"}},
+		{"ignore with a malformed date", "ignore-bad-date.yaml", []string{"ignore-bad-date.yaml:8:7:", "expires", "tomorrow"}},
+		{"ignore that is not a list", "ignore-not-a-list.yaml", []string{"ignore-not-a-list.yaml:8:7:", "list"}},
 		{"Swagger 2.0", "swagger-2.0.yaml", []string{"swagger-2.0.yaml", "Swagger 2.0", "not supported yet"}},
 	}
 	for _, tt := range tests {

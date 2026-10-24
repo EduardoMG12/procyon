@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/goccy/go-yaml"
@@ -28,6 +29,8 @@ type Options struct {
 	// sibling folder sets it to the repository root. It must contain the
 	// spec, and it may not be the file system's root or the home directory.
 	RefRoot string
+	// Today decides whether an ignore has expired. Zero means now.
+	Today time.Time
 }
 
 // Run lints the spec at path.
@@ -40,13 +43,21 @@ func Run(path string, opts Options) (Report, error) {
 	if report.FailOn == 0 {
 		report.FailOn = High
 	}
+	// asGiven turns kin-openapi's file URL back into the path read.
+	asGiven := func(loc Location) Location {
+		if given, ok := files.paths[loc.File]; ok {
+			loc.File = given
+		}
+		return loc
+	}
+	ignores, err := parseIgnores(doc, asGiven)
+	if err != nil {
+		return Report{}, err
+	}
 	for _, rule := range rules {
 		for _, f := range rule.check(doc) {
 			f.Rule = rule
-			// kin-openapi records files as URLs; findings use the path read.
-			if given, ok := files.paths[f.Location.File]; ok {
-				f.Location.File = given
-			}
+			f.Location = asGiven(f.Location)
 			report.Findings = append(report.Findings, f)
 		}
 	}
@@ -59,6 +70,11 @@ func Run(path string, opts Options) (Report, error) {
 			cmp.Compare(a.Rule.ID, b.Rule.ID),
 		)
 	})
+	today := opts.Today
+	if today.IsZero() {
+		today = time.Now()
+	}
+	applyIgnores(&report, ignores, today)
 	for _, f := range report.Findings {
 		if f.Rule.Severity >= report.FailOn {
 			report.Failed = true
