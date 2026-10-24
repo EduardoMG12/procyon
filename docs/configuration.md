@@ -19,9 +19,15 @@ options for the whole team:
 
 ```yaml
 fail-on: medium
+ref-root: .
 ```
 
-Flags always win over the file. An unknown key is an error, so a typo such as
+Flags always win over the file.
+
+| Key | Flag | Meaning |
+|---|---|---|
+| `fail-on` | `--fail-on` | The lowest severity that fails the run |
+| `ref-root` | `--ref-root` | A directory `$refs` may read anywhere under, instead of only the spec's own directory: for monorepos whose specs share files from a sibling folder. A relative path counts from the directory Procyon runs in. See [how `$refs` are read](refs.md). | An unknown key is an error, so a typo such as
 `fail_on` never goes unnoticed.
 
 The file holds **how** Procyon runs, never **what it ignores**. Ignores live in

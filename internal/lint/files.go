@@ -78,6 +78,15 @@ func (f *specFiles) add(location *url.URL, path string, data []byte) {
 	f.lines[path] = splitLines(data)
 }
 
+// asGiven turns the file URL kin-openapi records in a location back into
+// the path Procyon read.
+func (f *specFiles) asGiven(loc Location) Location {
+	if given, ok := f.paths[loc.File]; ok {
+		loc.File = given
+	}
+	return loc
+}
+
 // close releases the directory opened for $refs.
 func (f *specFiles) close() {
 	if f.root != nil {
@@ -132,7 +141,7 @@ func (f *specFiles) read(_ *openapi3.Loader, location *url.URL) ([]byte, error) 
 	rel, ok := within(f.root.Name(), abs)
 	if !ok {
 		return nil, fmt.Errorf("$ref %q points outside %s; Procyon only reads files there "+
-			"(set RefRoot to a directory containing both, such as the repository root)", path, f.root.Name())
+			"(allow a directory containing both with --ref-root, or Options.RefRoot, such as the repository root)", path, f.root.Name())
 	}
 	if reason := refusedPart(rel, f.specRel); reason != "" {
 		return nil, fmt.Errorf("$ref %q: %s", path, reason)

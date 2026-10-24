@@ -20,7 +20,10 @@ security problem in Procyon: open a normal issue with the
 ## What Procyon promises
 
 - `procyon lint` never makes network requests. Remote `$ref`s are refused.
-- It only reads the spec file and the local files the spec references.
+- It reads the spec and the local files its `$refs` point to, within one
+  directory, never hidden files or symlinks, within size limits. The full
+  rules and the threat model, including what is not defended against, are
+  in [docs/refs.md](docs/refs.md).
 - A malformed or hostile spec produces an error, never a crash.
 
 ## Supported versions

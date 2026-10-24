@@ -352,3 +352,33 @@ func TestOutputMarkdown(t *testing.T) {
 		t.Errorf("unexpected summary:\n%s", data)
 	}
 }
+
+// A monorepo whose specs share files from a sibling folder allows it with
+// --ref-root, or ref-root in .procyon.yaml.
+func TestRefRoot(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	write := func(path, body string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(repo, "common", "orders.yaml"), "get:\n  security: []\n  responses:\n    \"200\":\n      description: OK\n")
+	write(filepath.Join(repo, "specs", "api.yaml"), "openapi: 3.0.3\ninfo:\n  title: Shop\n  version: 1.0.0\npaths:\n  /orders:\n    $ref: \"../common/orders.yaml\"\n")
+	spec := filepath.Join("specs", "api.yaml")
+
+	if r := runIn(t, repo, "lint", spec); r.code != 2 || !strings.Contains(r.stderr, "--ref-root") {
+		t.Errorf("without --ref-root: exit %d, stderr %q; want 2 and a hint about --ref-root", r.code, r.stderr)
+	}
+	if r := runIn(t, repo, "lint", "--ref-root", ".", spec); r.code != 1 {
+		t.Errorf("with --ref-root: exit %d, want 1 (PRC001 found); stderr: %s", r.code, r.stderr)
+	}
+	write(filepath.Join(repo, ".procyon.yaml"), "ref-root: .\n")
+	if r := runIn(t, repo, "lint", spec); r.code != 1 {
+		t.Errorf("with ref-root in .procyon.yaml: exit %d, want 1; stderr: %s", r.code, r.stderr)
+	}
+}

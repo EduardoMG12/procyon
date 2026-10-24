@@ -9,8 +9,9 @@ request, a vendor, a public repository), it does so defensively.
 1. **Never the network.** A `$ref` to a URL (`https://`, `file://`, `//host`)
    is refused. Download the file and refer to it by a local path.
 2. **One directory.** `$refs` read only from the spec's own directory, or,
-   when you allow it, a directory that contains it (`RefRoot`, for monorepos
-   whose specs share files from a sibling folder). `RefRoot` and the spec's
+   when you allow it, a directory that contains it (`--ref-root`, `ref-root`
+   in `.procyon.yaml`, or `Options.RefRoot` in the library), for monorepos
+   whose specs share files from a sibling folder. The root and the spec's
    path must be written the same way (both relative to the repository root,
    say), not through different links to the same place. That directory may
    never be the file system's root, your home directory, or a directory

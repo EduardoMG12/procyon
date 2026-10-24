@@ -43,13 +43,7 @@ func Run(path string, opts Options) (Report, error) {
 	if report.FailOn == 0 {
 		report.FailOn = High
 	}
-	// asGiven turns kin-openapi's file URL back into the path read.
-	asGiven := func(loc Location) Location {
-		if given, ok := files.paths[loc.File]; ok {
-			loc.File = given
-		}
-		return loc
-	}
+	asGiven := files.asGiven
 	ignores, err := parseIgnores(doc, asGiven)
 	if err != nil {
 		return Report{}, err
@@ -133,7 +127,7 @@ func load(path string, opts Options) (*openapi3.T, *specFiles, error) {
 		msg, _, _ := strings.Cut(err.Error(), "\n")
 		return nil, nil, fmt.Errorf("%s: invalid spec: %s", path, msg)
 	}
-	if err := checkExtensions(doc); err != nil {
+	if err := checkExtensions(doc, files.asGiven); err != nil {
 		return nil, nil, err
 	}
 	return doc, files, nil
