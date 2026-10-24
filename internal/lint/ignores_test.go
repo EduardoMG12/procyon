@@ -115,3 +115,31 @@ func TestIgnoreExpiresAtTheEndOfTheDayInAnyTimeZone(t *testing.T) {
 		}
 	}
 }
+
+// A schema shared by two operations, ignored on the one Procyon does not
+// visit first: that operation's finding is ignored, the other's is still
+// reported, and the ignore is not reported as unused.
+func TestIgnoreOnOneOperationOfASharedSchema(t *testing.T) {
+	report, err := lint.Run(spec("prc009-shared-ignore-second.yaml"), lint.Options{Today: today})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var findings, ignored []string
+	for _, f := range report.Findings {
+		if f.Rule.ID == "PRC009" {
+			findings = append(findings, fmt.Sprintf("%s %s", f.Rule.ID, f.Operation))
+		}
+	}
+	for _, i := range report.Ignored {
+		ignored = append(ignored, fmt.Sprintf("%s %s", i.Finding.Rule.ID, i.Finding.Operation))
+	}
+	if want := []string{"PRC009 POST /admin/users"}; !slices.Equal(findings, want) {
+		t.Errorf("findings = %q, want %q", findings, want)
+	}
+	if want := []string{"PRC009 POST /register"}; !slices.Equal(ignored, want) {
+		t.Errorf("ignored = %q, want %q", ignored, want)
+	}
+	for _, n := range report.Notes {
+		t.Errorf("unexpected note: %s", n.Message)
+	}
+}

@@ -49,9 +49,7 @@ func Run(path string, opts Options) (Report, error) {
 		return Report{}, err
 	}
 	// Identical findings are one finding: a converted Swagger 2.0 spec copies
-	// an element once per media type. Findings that differ only in their
-	// operation or reason stay apart, so an ignore on one operation never
-	// hides another's.
+	// an element once per media type.
 	seen := map[string]bool{}
 	for _, rule := range rules {
 		for _, f := range rule.check(doc) {
@@ -72,6 +70,7 @@ func Run(path string, opts Options) (Report, error) {
 			cmp.Compare(a.Location.Line, b.Location.Line),
 			cmp.Compare(a.Location.Column, b.Location.Column),
 			cmp.Compare(a.Rule.ID, b.Rule.ID),
+			cmp.Compare(a.Operation, b.Operation),
 		)
 	})
 	today := opts.Today
@@ -79,12 +78,31 @@ func Run(path string, opts Options) (Report, error) {
 		today = time.Now()
 	}
 	applyIgnores(&report, ignores, today)
+	report.Findings = oncePerPlace(report.Findings)
 	for _, f := range report.Findings {
 		if f.Rule.Severity >= report.FailOn {
 			report.Failed = true
 		}
 	}
 	return report, nil
+}
+
+// oncePerPlace keeps one finding per rule, place and reason: a schema
+// shared by several operations is one problem to fix, where it is written.
+// It runs after ignores, so an ignore on one of those operations never
+// hides the finding for the others; the operation shown is the first one
+// left.
+func oncePerPlace(findings []Finding) []Finding {
+	seen := map[string]bool{}
+	kept := findings[:0]
+	for _, f := range findings {
+		key := fmt.Sprintf("%s %s:%d:%d %s", f.Rule.ID, f.Location.File, f.Location.Line, f.Location.Column, f.Why)
+		if !seen[key] {
+			seen[key] = true
+			kept = append(kept, f)
+		}
+	}
+	return kept
 }
 
 // load reads the spec at path, recording the file, line and column of every

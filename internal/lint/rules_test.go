@@ -38,13 +38,12 @@ func TestRules(t *testing.T) {
 		}},
 		// Swagger 2.0 edges: a global body parameter, a global response, a
 		// body declared on the path item and shared by two operations (one
-		// finding each, at the property; two media types add none), and ignores for
+		// finding, at the property, like any shared schema), and ignores for
 		// PRC004 at the root and PRC011 on the scheme that holds its flow.
 		{"swagger-2.0-edges.yaml", []string{"PRC004", "PRC005", "PRC009", "PRC011"}, []string{
 			"PRC009 swagger-2.0-edges.yaml:33:9 POST /admins",
 			"PRC005 swagger-2.0-edges.yaml:41:9 GET /me",
 			"PRC009 swagger-2.0-edges.yaml:51:13 POST /accounts",
-			"PRC009 swagger-2.0-edges.yaml:51:13 PUT /accounts",
 		}},
 		// Swagger 2.0: formData fields, an operation-level http scheme, a
 		// path-level body whose POST copy is ignored but PUT copy is not,
@@ -59,6 +58,12 @@ func TestRules(t *testing.T) {
 		// formData field given by $ref points at that $ref.
 		{"swagger-2.0-extensions.yaml", []string{"PRC009"}, []string{
 			"PRC009 swagger-2.0-extensions.yaml:22:11 POST /profile",
+		}},
+		// A schema shared by two operations, with the finding ignored on one:
+		// the other still reports it (a shared place is reported once, after
+		// ignores).
+		{"prc009-shared-ignore.yaml", []string{"PRC009"}, []string{
+			"PRC009 prc009-shared-ignore.yaml:41:9 POST /register",
 		}},
 		// Two undefined schemes in one requirement are two findings.
 		{"prc002-two-undefined.yaml", []string{"PRC002"}, []string{

@@ -54,7 +54,6 @@ var piiReferenceWords = append(slices.Clone(referenceWords),
 // checked: a login or sign-up returns the caller's own data.
 func checkPRC006(doc *openapi3.T) []Finding {
 	var findings []Finding
-	reported := map[Location]bool{}
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		if method != http.MethodGet || !reachableAnonymously(doc, op) {
 			return
@@ -64,10 +63,6 @@ func checkPRC006(doc *openapi3.T) []Finding {
 				return // emailVerified, emailSettings: about the data, not the data
 			}
 			loc := propertyLocation(prop)
-			if reported[loc] {
-				return
-			}
-			reported[loc] = true
 			findings = append(findings, Finding{
 				Location:  loc,
 				Operation: method + " " + path,

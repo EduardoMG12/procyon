@@ -35,13 +35,9 @@ var pagingParameters = []string{
 // for a page.
 func checkPRC008(doc *openapi3.T) []Finding {
 	var findings []Finding
-	reported := map[Location]bool{}
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		add := func(loc Location, why, fix string) {
-			if !reported[loc] {
-				reported[loc] = true
-				findings = append(findings, Finding{Location: loc, Operation: method + " " + path, Why: why, Fix: fix})
-			}
+			findings = append(findings, Finding{Location: loc, Operation: method + " " + path, Why: why, Fix: fix})
 		}
 		if method == http.MethodGet && returnsList(op) && !paged(doc, path, op) {
 			add(locate(op.Origin),

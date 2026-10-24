@@ -21,11 +21,10 @@ var prc005 = Rule{
 // reported only in GET responses: issuing one from a POST (a login, a new
 // key) is how they work, but reading one back must never be possible.
 //
-// A schema used by several operations is reported once, at the property,
-// for the first operation that returns it.
+// A schema used by several operations is reported for each of them; the
+// engine shows it once (see Run).
 func checkPRC005(doc *openapi3.T) []Finding {
 	var findings []Finding
-	reported := map[Location]bool{}
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		lists := [][][]string{secretWords}
 		if method == http.MethodGet {
@@ -36,10 +35,6 @@ func checkPRC005(doc *openapi3.T) []Finding {
 				return // hasPassword, passwordSet: about the secret, not the secret
 			}
 			loc := propertyLocation(prop)
-			if reported[loc] {
-				return
-			}
-			reported[loc] = true
 			findings = append(findings, Finding{
 				Location:  loc,
 				Operation: method + " " + path,

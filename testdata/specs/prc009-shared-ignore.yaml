@@ -1,0 +1,43 @@
+openapi: 3.0.3
+info:
+  title: Shop
+  version: 1.0.0
+security:
+  - key: []
+paths:
+  /admin/users:
+    post:
+      x-procyon-ignore:
+        - rule: PRC009
+          reason: "Only admins reach this operation"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/User"
+      responses:
+        "201":
+          description: Created
+  /register:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/User"
+      responses:
+        "201":
+          description: Registered
+components:
+  securitySchemes:
+    key:
+      type: apiKey
+      in: header
+      name: X-Key
+  schemas:
+    User:
+      type: object
+      properties:
+        role:
+          type: string
+          maxLength: 10
