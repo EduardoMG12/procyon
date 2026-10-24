@@ -88,13 +88,39 @@ func matchesAny(name string, lists [][][]string) bool {
 }
 
 // forEachResponseProperty calls fn for every property of every schema an
-// operation's responses can return, following nested objects, array items,
-// allOf/oneOf/anyOf and additionalProperties. Each schema is visited once,
-// so recursive schemas (a User with a manager User) terminate.
+// operation's responses can return.
 func forEachResponseProperty(op *openapi3.Operation, fn func(name string, prop *openapi3.SchemaRef)) {
 	if op.Responses == nil {
 		return
 	}
+	var roots []*openapi3.SchemaRef
+	for _, response := range op.Responses.Map() {
+		if response != nil && response.Value != nil {
+			roots = append(roots, mediaSchemas(response.Value.Content)...)
+		}
+	}
+	walkProperties(roots, func(name string, prop *openapi3.SchemaRef) bool {
+		fn(name, prop)
+		return true
+	})
+}
+
+func mediaSchemas(content openapi3.Content) []*openapi3.SchemaRef {
+	var schemas []*openapi3.SchemaRef
+	for _, media := range content {
+		if media != nil {
+			schemas = append(schemas, media.Schema)
+		}
+	}
+	return schemas
+}
+
+// walkProperties calls fn for every property of the schemas under roots,
+// following nested objects, array items, allOf/oneOf/anyOf and
+// additionalProperties. fn returns whether to look inside the property.
+// Each schema is visited once, so recursive schemas (a User with a manager
+// User) terminate.
+func walkProperties(roots []*openapi3.SchemaRef, fn func(name string, prop *openapi3.SchemaRef) bool) {
 	visited := map[*openapi3.Schema]bool{}
 	var walk func(ref *openapi3.SchemaRef)
 	walk = func(ref *openapi3.SchemaRef) {
@@ -109,8 +135,7 @@ func forEachResponseProperty(op *openapi3.Operation, fn func(name string, prop *
 		}
 		sort.Strings(names)
 		for _, name := range names {
-			if prop := s.Properties[name]; prop != nil && prop.Value != nil {
-				fn(name, prop)
+			if prop := s.Properties[name]; prop != nil && prop.Value != nil && fn(name, prop) {
 				walk(prop)
 			}
 		}
@@ -122,12 +147,7 @@ func forEachResponseProperty(op *openapi3.Operation, fn func(name string, prop *
 		}
 		walk(s.AdditionalProperties.Schema)
 	}
-	for _, response := range op.Responses.Map() {
-		if response == nil || response.Value == nil {
-			continue
-		}
-		for _, media := range response.Value.Content {
-			walk(media.Schema)
-		}
+	for _, root := range roots {
+		walk(root)
 	}
 }

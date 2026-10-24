@@ -1,0 +1,157 @@
+openapi: 3.0.3
+info:
+  title: Shop
+  version: 1.0.0
+security:
+  - bearer: []
+paths:
+  /users:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/User"
+      responses:
+        "201":
+          description: Created
+  /users/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nickname:
+                  type: string
+                roleIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: Updated
+    get:
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  role:
+                    type: string
+  /oauth/token:
+    post:
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                grant_type:
+                  type: string
+                scope:
+                  type: string
+      responses:
+        "200":
+          description: Token
+  /v1/token:
+    post:
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                GrantType:
+                  type: string
+                Scope:
+                  type: string
+      responses:
+        "200":
+          description: Token
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          readOnly: true
+        name:
+          type: string
+        userRole:
+          type: string
+        isAdmin:
+          type: boolean
+        permissions:
+          type: array
+          items:
+            type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        tenantId:
+          type: string
+        roles:
+          type: array
+          readOnly: true
+          items:
+            type: string
+        adminNotes:
+          type: string
+        settings:
+          type: object
+          properties:
+            admin:
+              type: boolean
+        permissões:
+          type: array
+          items:
+            type: string
+        roleIDs:
+          type: array
+          items:
+            type: string
+        isSuperUser:
+          type: boolean
+        tenantUuid:
+          type: string
+        tenantCode:
+          allOf:
+            - $ref: "#/components/schemas/Id"
+            - readOnly: true
+        owner:
+          allOf:
+            - $ref: "#/components/schemas/Owner"
+            - readOnly: true
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+              content:
+                type: string
+    Id:
+      type: string
+    Owner:
+      type: object
+      properties:
+        isAdmin:
+          type: boolean
