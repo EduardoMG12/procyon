@@ -1,0 +1,29 @@
+## Procyon: ❌ failed
+
+| Severity | Findings |
+|---|---|
+| critical | 0 |
+| high | 1 |
+| medium | 0 |
+| low | 0 |
+| ignored | 1 |
+
+The run fails at **high** or above.
+
+### Findings
+
+#### HIGH · PRC001 · Operation has no authentication
+
+`specs/shop.yaml:9:5` · ``GET /orders/`id` ``
+
+**Why:** Anyone can call it.
+
+**Fix:** Add security. [More about PRC001](https://github.com/EduardoMG12/procyon/blob/main/docs/rules/PRC001.md)
+
+### Ignored
+
+- **PRC004** `specs/shop.yaml:6:12`: Internal mirror \<img src=x\> \[click\](https://evil.example)
+
+### Notes
+
+- `specs/shop.yaml:27:7`: ignore of PRC010 on GET /orders matches no finding; remove it
