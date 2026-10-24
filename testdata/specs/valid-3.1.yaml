@@ -1,0 +1,21 @@
+openapi: 3.1.0
+info:
+  title: Pet store
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      responses:
+        "200":
+          description: A list of pets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    tag:
+                      type: [string, "null"]
