@@ -38,6 +38,8 @@ var (
 		"hint", "required", "set", "changed", "updated", "created", "last",
 		"status", "id", "ids", "identifier", "name", "prefix", "suffix",
 		"arn", "label", "description", "date", "time",
+		"ref", "refs", "reference", "requestor", "risk", "score", "namespace",
+		"currency", "scanning", "link",
 		"politica", "regras", "tipo", "validade", "expira", "expiracao", "nome",
 	}
 

@@ -102,6 +102,19 @@ func TestRules(t *testing.T) {
 		{"prc010-credential-parameter.yaml", []string{"PRC010"}, []string{
 			"PRC010 prc010-credential-parameter.yaml:31:5 DELETE /admin/orders",
 		}},
+		// A secret is a value: text, a number, or a list of them. Objects
+		// that point at a secret (secretRef, imagePullSecrets, an anyOf of
+		// objects) and fields describing one (secretNamespace,
+		// token_risk_score) are not reported.
+		{"prc005-references.yaml", []string{"PRC005"}, []string{
+			"PRC005 prc005-references.yaml:38:19 GET /volumes",
+			"PRC005 prc005-references.yaml:40:19 GET /volumes",
+			"PRC005 prc005-references.yaml:46:19 GET /volumes",
+			"PRC005 prc005-references.yaml:55:19 GET /volumes",
+			"PRC005 prc005-references.yaml:59:19 GET /volumes",
+			"PRC005 prc005-references.yaml:64:19 GET /volumes",
+			"PRC005 prc005-references.yaml:66:19 GET /volumes",
+		}},
 		// Two undefined schemes in one requirement are two findings.
 		{"prc002-two-undefined.yaml", []string{"PRC002"}, []string{
 			"PRC002 prc002-two-undefined.yaml:5:1 ",
