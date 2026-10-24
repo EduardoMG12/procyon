@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Procyon",
+          "informationUri": "https://github.com/EduardoMG12/procyon",
+          "rules": [
+            {
+              "id": "PRC001",
+              "name": "OperationHasNoAuthentication",
+              "shortDescription": {
+                "text": "Operation has no authentication"
+              },
+              "helpUri": "https://github.com/EduardoMG12/procyon/blob/main/docs/rules/PRC001.md",
+              "help": {
+                "text": "See https://github.com/EduardoMG12/procyon/blob/main/docs/rules/PRC001.md"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "API2:2023 Broken Authentication"
+                ],
+                "security-severity": "8.0"
+              }
+            },
+            {
+              "id": "PRC004",
+              "name": "ServerURLDoesNotUseTLS",
+              "shortDescription": {
+                "text": "Server URL does not use TLS"
+              },
+              "helpUri": "https://github.com/EduardoMG12/procyon/blob/main/docs/rules/PRC004.md",
+              "help": {
+                "text": "See https://github.com/EduardoMG12/procyon/blob/main/docs/rules/PRC004.md"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "tags": [
+                  "security",
+                  "API8:2023 Security Misconfiguration"
+                ],
+                "security-severity": "8.0"
+              }
+            }
+          ]
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "toolExecutionNotifications": [
+            {
+              "level": "note",
+              "message": {
+                "text": "ignore of PRC010 on GET /orders matches no finding; remove it"
+              },
+              "locations": [
+                {
+                  "physicalLocation": {
+                    "artifactLocation": {
+                      "uri": "specs/shop.yaml"
+                    },
+                    "region": {
+                      "startLine": 27,
+                      "startColumn": 7
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "PRC001",
+          "ruleIndex": 0,
+          "level": "error",
+          "message": {
+            "text": "GET /orders: Anyone can call it. Fix: Add security."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "specs/shop.yaml"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 5
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "PRC004",
+          "ruleIndex": 1,
+          "level": "error",
+          "message": {
+            "text": "Unencrypted. Fix: Use https."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "specs/shop.yaml"
+                },
+                "region": {
+                  "startLine": 6,
+                  "startColumn": 12
+                }
+              }
+            }
+          ],
+          "suppressions": [
+            {
+              "kind": "inSource",
+              "justification": "Internal mirror"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

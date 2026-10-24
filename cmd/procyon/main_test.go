@@ -311,3 +311,29 @@ func TestUnwritableOutputFailsBeforeLinting(t *testing.T) {
 		t.Errorf("%s was written although the run stopped", good)
 	}
 }
+
+func TestOutputSARIF(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "procyon.sarif")
+	r := run(t, "lint", "--output", "sarif="+out, spec("prc001-no-auth.yaml"))
+	if r.code != 1 {
+		t.Fatalf("exit code = %d, want 1; stderr: %s", r.code, r.stderr)
+	}
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var log struct {
+		Version string `json:"version"`
+		Runs    []struct {
+			Results []struct {
+				RuleID string `json:"ruleId"`
+			} `json:"results"`
+		} `json:"runs"`
+	}
+	if err := json.Unmarshal(data, &log); err != nil || log.Version != "2.1.0" {
+		t.Fatalf("not SARIF 2.1.0: %v\n%s", err, data)
+	}
+	if len(log.Runs) != 1 || len(log.Runs[0].Results) != 1 || log.Runs[0].Results[0].RuleID != "PRC001" {
+		t.Errorf("unexpected results: %+v", log.Runs)
+	}
+}

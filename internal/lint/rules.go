@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"slices"
 	"sort"
 	"strings"
 
@@ -20,6 +21,11 @@ type Rule struct {
 // DocsURL is the page that explains the rule.
 func (r Rule) DocsURL() string {
 	return "https://github.com/EduardoMG12/procyon/blob/main/docs/rules/" + r.ID + ".md"
+}
+
+// Rules returns every rule Procyon runs, in ID order.
+func Rules() []Rule {
+	return slices.Clone(rules)
 }
 
 // rules is every rule Procyon runs, in ID order.

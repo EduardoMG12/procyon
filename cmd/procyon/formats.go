@@ -18,7 +18,8 @@ var formats = map[string]render{
 	"terminal": func(w io.Writer, r lint.Report, color bool) error {
 		return format.Terminal(w, r, format.TerminalOptions{Color: color})
 	},
-	"json": func(w io.Writer, r lint.Report, _ bool) error { return format.JSON(w, r) },
+	"json":  func(w io.Writer, r lint.Report, _ bool) error { return format.JSON(w, r) },
+	"sarif": func(w io.Writer, r lint.Report, _ bool) error { return format.SARIF(w, r, lint.Rules()) },
 }
 
 func formatNames() string {
