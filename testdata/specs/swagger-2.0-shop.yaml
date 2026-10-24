@@ -1,0 +1,30 @@
+swagger: "2.0"
+info:
+  title: Shop
+  version: 1.0.0
+host: api.example.com
+basePath: /v1
+schemes:
+  - http
+securityDefinitions:
+  basic:
+    type: basic
+paths:
+  /users/{id}:
+    get:
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: string
+      responses:
+        "200":
+          description: A user
+          schema:
+            $ref: "#/definitions/User"
+definitions:
+  User:
+    type: object
+    properties:
+      password:
+        type: string
