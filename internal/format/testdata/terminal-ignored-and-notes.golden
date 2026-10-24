@@ -1,0 +1,12 @@
+No findings.
+
+Ignored (2)
+        PRC001  specs/shop.yaml:9:5  GET /orders
+                Load balancer health check, returns no data
+        PRC004  specs/shop.yaml:6:12  (until 2027-01-31)
+                Internal mirror
+
+Notes (1)
+        specs/shop.yaml:9:5  ignore of PRC010 on GET /orders matches no finding; remove it
+
+PASSED  0 high · 0 medium · 0 low · 2 ignored  (fails at: high)
