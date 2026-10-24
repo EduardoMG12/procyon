@@ -27,10 +27,10 @@ your source code.
 ## Usage
 
 Once a release is published, download the binary for your system from the
-releases page. The repository is private for now, so build from a clone:
+releases page. Until then, install it with Go:
 
 ```sh
-go install ./cmd/procyon
+go install github.com/EduardoMG12/procyon/cmd/procyon@main
 procyon lint openapi.yaml
 ```
 
@@ -69,14 +69,13 @@ or not, and Swagger 2.0 in one file; YAML or JSON.
 
 ### In GitHub Actions
 
-Until binaries are published, install from a checkout of this repository:
+Until binaries are published, install it with Go:
 
 ```yaml
-- uses: actions/checkout@v5
+- uses: actions/setup-go@v6
   with:
-    repository: EduardoMG12/procyon
-    path: procyon
-- run: cd procyon && go install ./cmd/procyon
+    go-version: stable
+- run: go install github.com/EduardoMG12/procyon/cmd/procyon@main
 - run: procyon lint openapi.yaml --output sarif=procyon.sarif --output markdown=$GITHUB_STEP_SUMMARY
 - uses: github/codeql-action/upload-sarif@v3
   if: always()

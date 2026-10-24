@@ -105,6 +105,7 @@ lints all but really invalid ones, with no crash). Left for v0.1: #21 (publishin
 the v0.1.0 release, after the owner's review; the release machinery is in).
 Before every push, run the tests on a clean `git archive` of the commit:
 new files left out of a commit pass locally and fail everywhere else. The
-repository stays private for now, so CI does not run: test locally
-(`gofmt -l .`, `go vet ./...`, `staticcheck`, `go test -race ./...`).
+repository is public since 2026-10-24 and CI runs on every PR, but still
+test locally first (`gofmt -l .`, `go vet ./...`, `staticcheck`,
+`go test -race ./...`).
 Never add Claude attribution to commits or PRs.
