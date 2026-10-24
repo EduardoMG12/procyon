@@ -74,12 +74,18 @@ func TestRules(t *testing.T) {
 			"PRC007 item.yaml:1:1 GET /users/{id}",
 		}},
 		// Numbers that set how much work a request makes (repeats, page size,
-		// retries) need a maximum; prices, enums and other sizes do not.
+		// retries) need a maximum. Not reported: a maximum, an enum, an
+		// operation overriding a path-level parameter with a maximum, and
+		// names where the word means a stored or physical value (creditLimit,
+		// marginTop, waterDepth, stockCount, retryAfter, repeatEvery).
 		{"prc008-counts.yaml", []string{"PRC008"}, []string{
 			"PRC008 prc008-counts.yaml:11:11 GET /items",
+			"PRC008 prc008-counts.yaml:39:11 GET /orders",
 			"PRC008 prc008-counts.yaml:48:9 GET /search",
-			"PRC008 prc008-counts.yaml:64:17 POST /reports",
-			"PRC008 prc008-counts.yaml:74:17 POST /reports",
+			"PRC008 prc008-counts.yaml:69:11 POST /exports",
+			"PRC008 prc008-counts.yaml:84:17 POST /reports",
+			"PRC008 prc008-counts.yaml:94:17 POST /reports",
+			"PRC008 prc008-counts.yaml:96:17 POST /reports",
 		}},
 		// Two undefined schemes in one requirement are two findings.
 		{"prc002-two-undefined.yaml", []string{"PRC002"}, []string{

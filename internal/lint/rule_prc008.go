@@ -45,14 +45,9 @@ func checkPRC008(doc *openapi3.T) []Finding {
 				"This operation returns a whole list with no way to ask for one page, so one request can make the server read and send every record.",
 				"Add paging query parameters (limit and cursor, or page and per_page) and a maximum page size.")
 		}
-		params := slices.Clone(op.Parameters)
-		if item := doc.Paths.Value(path); item != nil {
-			params = append(params, item.Parameters...) // shared by the path's operations
-		}
-		for _, p := range params {
-			if p != nil && p.Value != nil && p.Value.In == openapi3.ParameterInQuery &&
-				p.Value.Schema != nil && unboundedCount(p.Value.Name, p.Value.Schema.Value) {
-				add(locate(p.Value.Origin), unboundedCountWhy, unboundedCountFix)
+		for _, p := range operationParameters(doc, path, op) {
+			if p.In == openapi3.ParameterInQuery && p.Schema != nil && unboundedCount(p.Name, p.Schema.Value, true) {
+				add(locate(p.Origin), unboundedCountWhy, unboundedCountFix)
 			}
 		}
 		if op.RequestBody == nil || op.RequestBody.Value == nil {
@@ -74,7 +69,7 @@ func checkPRC008(doc *openapi3.T) []Finding {
 				return false
 			}
 			check(prop.Value, propertyLocation(prop))
-			if unboundedCount(name, prop.Value) {
+			if unboundedCount(name, prop.Value, false) {
 				add(propertyLocation(prop), unboundedCountWhy, unboundedCountFix)
 			}
 			return true
@@ -107,15 +102,41 @@ const (
 )
 
 // unboundedCount reports whether a field or parameter is a number that sets
-// how much work a request makes (countWords) and has no maximum.
-func unboundedCount(name string, s *openapi3.Schema) bool {
+// how much work a request makes (countWords, and countQueryWords for a query
+// parameter) and has no maximum.
+func unboundedCount(name string, s *openapi3.Schema, query bool) bool {
 	if s == nil || !(s.Type.Includes("integer") || s.Type.Includes("number")) {
 		return false
 	}
 	if s.Max != nil || s.ExclusiveMax.Value != nil || len(s.Enum) > 0 {
 		return false
 	}
-	return matchesWith(name, countWords, countDescribingWords, nil)
+	words := countWords
+	if query {
+		words = append(slices.Clone(countWords), countQueryWords...)
+	}
+	return matchesWith(name, words, countDescribingWords, countReferenceWords)
+}
+
+// operationParameters returns the parameters that apply to an operation:
+// its own, and its path's that it does not redefine (same name and in).
+func operationParameters(doc *openapi3.T, path string, op *openapi3.Operation) []*openapi3.Parameter {
+	var params []*openapi3.Parameter
+	own := map[[2]string]bool{}
+	for _, p := range op.Parameters {
+		if p != nil && p.Value != nil {
+			params = append(params, p.Value)
+			own[[2]string{p.Value.Name, p.Value.In}] = true
+		}
+	}
+	if item := doc.Paths.Value(path); item != nil {
+		for _, p := range item.Parameters {
+			if p != nil && p.Value != nil && !own[[2]string{p.Value.Name, p.Value.In}] {
+				params = append(params, p.Value)
+			}
+		}
+	}
+	return params
 }
 
 func unboundedString(s *openapi3.Schema) bool {

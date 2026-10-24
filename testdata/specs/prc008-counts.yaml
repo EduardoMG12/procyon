@@ -53,6 +53,26 @@ paths:
       responses:
         "200":
           description: Results
+  /exports:
+    parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+    post:
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            maximum: 10
+        - name: pagesize
+          in: query
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Exported
   /reports:
     post:
       requestBody:
@@ -72,6 +92,22 @@ paths:
                   type: integer
                   enum: [1, 2, 3]
                 tentativas:
+                  type: integer
+                tentativa:
+                  type: integer
+                creditLimit:
+                  type: number
+                marginTop:
+                  type: integer
+                waterDepth:
+                  type: number
+                stockCount:
+                  type: integer
+                retryAfter:
+                  type: integer
+                repeatEvery:
+                  type: integer
+                quantidade:
                   type: integer
       responses:
         "201":
