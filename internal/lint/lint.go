@@ -136,15 +136,16 @@ func load(path string, opts Options) (*openapi3.T, *specFiles, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("%s: %w", path, err)
 	}
-	// Wrong examples and defaults are documentation mistakes, not security
+	// Wrong examples, defaults and patterns are documentation mistakes, not security
 	// problems, and common in real specs: they must not stop a lint.
 	err = doc.Validate(context.Background(),
 		openapi3.EnableMultiError(),
 		openapi3.DisableExamplesValidation(),
+		openapi3.DisableSchemaPatternValidation(), // Go's regexp lacks lookaheads (AWS specs use them)
 		openapi3.DisableSchemaDefaultsValidation())
 	// A requirement naming an undefined scheme is a security finding
 	// (PRC002), with a location and a fix, not a reason to refuse the spec.
-	if err = withoutUndefinedSchemes(err); err != nil {
+	if err = withoutTolerated(err); err != nil {
 		// Some validation errors append the schema and value on extra lines;
 		// the first line says what is wrong.
 		msg, _, _ := strings.Cut(err.Error(), "\n")
@@ -224,17 +225,23 @@ func leavesWorkingDir(path string) bool {
 	return !stillInside
 }
 
-// withoutUndefinedSchemes removes from a validation error what must not
-// stop a lint, returning nil when nothing else is left: the "undefined
-// security scheme" errors PRC002 reports, and conflicting paths
-// (/users/{id} and /users/{name}), which OpenAPI forbids but which say
-// nothing about security and are common in large real specs (GitHub's).
-func withoutUndefinedSchemes(err error) error {
+// withoutTolerated removes from a validation error what must not stop a
+// lint, returning nil when nothing else is left: the "undefined security
+// scheme" errors PRC002 reports, and mistakes OpenAPI forbids but that say
+// nothing about security and are common in large real specs: conflicting
+// paths (/users/{id} and /users/{name}, GitHub's spec) and component names
+// outside OpenAPI 3's charset (Order[Draft], Azure's Swagger 2.0 specs).
+func withoutTolerated(err error) error {
 	switch e := err.(type) {
 	case nil:
 		return nil
 	case *openapi3.ConflictingPathsError:
 		return nil
+	case *openapi3.ComponentValidationError:
+		if bad := openapi3.ValidateIdentifier(e.Name); bad != nil && e.Cause != nil && e.Cause.Error() == bad.Error() {
+			return nil // the name is the only problem: kin skips the rest of that component
+		}
+		return err
 	case *openapi3.SecurityRequirementSchemeUndefinedError:
 		if coveredByPRC002(e.JSONPointer) {
 			return nil
@@ -243,7 +250,7 @@ func withoutUndefinedSchemes(err error) error {
 	case openapi3.MultiError:
 		var kept openapi3.MultiError
 		for _, inner := range e {
-			if inner = withoutUndefinedSchemes(inner); inner != nil {
+			if inner = withoutTolerated(inner); inner != nil {
 				kept = append(kept, inner)
 			}
 		}
@@ -256,8 +263,8 @@ func withoutUndefinedSchemes(err error) error {
 		return kept
 	}
 	// A context wrapper ("invalid path /orders: ...") around nothing but
-	// undefined schemes goes too.
-	if inner := errors.Unwrap(err); inner != nil && withoutUndefinedSchemes(inner) == nil {
+	// tolerated errors goes too.
+	if inner := errors.Unwrap(err); inner != nil && withoutTolerated(inner) == nil {
 		return nil
 	}
 	return err

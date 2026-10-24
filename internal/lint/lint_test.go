@@ -18,7 +18,8 @@ func TestRunAcceptsValidSpecs(t *testing.T) {
 		"valid-3.1.json",
 		"valid-wrong-example.yaml", // examples and defaults are not security: never block a lint
 		"valid-wrong-default.yaml",
-		"valid-conflicting-paths.yaml", // /users/{id} and /users/{name}: invalid OpenAPI, not a security problem
+		"valid-conflicting-paths.yaml",   // /users/{id} and /users/{name}: invalid OpenAPI, not a security problem
+		"valid-unsupported-pattern.yaml", // a lookahead Go cannot compile, a [ in a schema name (AWS, Azure)
 		"swagger-2.0.yaml",
 	}
 	for _, name := range specs {
