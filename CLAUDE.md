@@ -97,9 +97,10 @@ lazily. See `docs/agents/domain.md`.
 
 ## Current state
 
-Updated 2026-10-24. v0.1's PRs (#1, #22–#44) are merged into `main`,
-locally on the owner's machine, one commit per PR. Left for v0.1: #21
-(release). Deferred: #13 (Swagger 2.0, see PRD 0001 *Discoveries*). The
+Updated 2026-10-24. v0.1's PRs (#1, #22–#49) are merged into `main`,
+locally on the owner's machine, one commit per PR, including Swagger 2.0
+(#13, landed as #47–#49). Left for v0.1: #21 (publishing the v0.1.0
+release, after the owner's review; the release machinery is in). The
 repository stays private for now, so CI does not run: test locally
 (`gofmt -l .`, `go vet ./...`, `staticcheck`, `go test -race ./...`).
 Never add Claude attribution to commits or PRs.
