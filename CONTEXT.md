@@ -77,6 +77,31 @@ The v0.1 way of running Procyon: read the spec only, never talk to a running
 API.
 _Avoid_: scan, audit, test
 
-**Runtime test** (v0.2+, not built yet):
+**Runtime test** (v0.2, being built):
 Running checks against a live copy of the API in a disposable environment.
 _Avoid_: scan, attack, pentest
+
+**Target**:
+The running copy of the API a runtime test calls: started by Procyon from
+the user's compose file, or given with `--base-url`. Always loopback or a
+private address.
+_Avoid_: host, server, environment
+
+**Test account**:
+One of the two users (A and B) seeded in the target, whose credentials
+Procyon is given. B must never reach A's objects.
+_Avoid_: user, test user, persona
+
+**Harvested ID**:
+A value taken from a test account's response that can fill a path
+parameter of another operation.
+_Avoid_: discovered ID, collected ID
+
+**Evidence**:
+The requests and responses (masked) that prove a runtime finding.
+_Avoid_: proof, trace, log
+
+**Authorization matrix**:
+The table of operations by caller (A, B, anonymous) with what each call
+got: allowed, denied, finding or skipped.
+_Avoid_: access table, permissions grid
