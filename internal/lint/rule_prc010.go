@@ -28,13 +28,13 @@ var adminWords = []string{"admin", "internal", "debug", "management"}
 func checkPRC010(doc *openapi3.T) []Finding {
 	regular := map[string]bool{}
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-		if !adminPath(path) && !unauthenticated(doc, op) {
+		if !adminPath(path) && !unauthenticated(doc, path, op) {
 			regular[securityKey(effectiveSecurity(doc, op))] = true
 		}
 	})
 	var findings []Finding
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-		if !adminPath(path) || unauthenticated(doc, op) || !regular[securityKey(effectiveSecurity(doc, op))] {
+		if !adminPath(path) || unauthenticated(doc, path, op) || !regular[securityKey(effectiveSecurity(doc, op))] {
 			return
 		}
 		findings = append(findings, Finding{

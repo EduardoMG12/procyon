@@ -118,26 +118,6 @@ func unboundedCount(name string, s *openapi3.Schema, query bool) bool {
 	return matchesWith(name, words, countDescribingWords, countReferenceWords)
 }
 
-// operationParameters returns the parameters that apply to an operation:
-// its own, and its path's that it does not redefine (same name and in).
-func operationParameters(doc *openapi3.T, path string, op *openapi3.Operation) []*openapi3.Parameter {
-	var params []*openapi3.Parameter
-	own := map[[2]string]bool{}
-	for _, p := range op.Parameters {
-		if p != nil && p.Value != nil {
-			params = append(params, p.Value)
-			own[[2]string{p.Value.Name, p.Value.In}] = true
-		}
-	}
-	if item := doc.Paths.Value(path); item != nil {
-		for _, p := range item.Parameters {
-			if p != nil && p.Value != nil && !own[[2]string{p.Value.Name, p.Value.In}] {
-				params = append(params, p.Value)
-			}
-		}
-	}
-	return params
-}
 
 func unboundedString(s *openapi3.Schema) bool {
 	return s.Type.Includes("string") && s.MaxLength == nil && len(s.Enum) == 0 &&

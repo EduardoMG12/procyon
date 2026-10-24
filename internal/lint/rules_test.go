@@ -87,6 +87,13 @@ func TestRules(t *testing.T) {
 			"PRC008 prc008-counts.yaml:94:17 POST /reports",
 			"PRC008 prc008-counts.yaml:96:17 POST /reports",
 		}},
+		// A credential sent as a required header or query parameter
+		// (x-access-token, Authorization, api_key), as older specs do, is
+		// authentication. An optional one is not, nor a CSRF token.
+		{"prc001-credential-parameter.yaml", []string{"PRC001"}, []string{
+			"PRC001 prc001-credential-parameter.yaml:43:5 GET /items",
+			"PRC001 prc001-credential-parameter.yaml:54:5 GET /cart",
+		}},
 		// Two undefined schemes in one requirement are two findings.
 		{"prc002-two-undefined.yaml", []string{"PRC002"}, []string{
 			"PRC002 prc002-two-undefined.yaml:5:1 ",

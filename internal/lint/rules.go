@@ -39,7 +39,7 @@ var prc001 = Rule{
 	check: func(doc *openapi3.T) []Finding {
 		var findings []Finding
 		forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-			if !unauthenticated(doc, op) || publicReason(op) != "" {
+			if !unauthenticated(doc, path, op) || publicReason(op) != "" {
 				return
 			}
 			findings = append(findings, Finding{
@@ -56,8 +56,11 @@ var prc001 = Rule{
 // unauthenticated reports whether an operation can be called without
 // credentials: it has no security requirement of its own or inherited, an
 // explicit `security: []`, or an empty requirement (`- {}`), which OpenAPI
-// defines as "anonymous access allowed".
-func unauthenticated(doc *openapi3.T, op *openapi3.Operation) bool {
+// defines as "anonymous access allowed" — and no credential parameter.
+func unauthenticated(doc *openapi3.T, path string, op *openapi3.Operation) bool {
+	if credentialParameter(doc, path, op) {
+		return false
+	}
 	reqs := doc.Security
 	if op.Security != nil {
 		reqs = *op.Security
@@ -71,6 +74,43 @@ func unauthenticated(doc *openapi3.T, op *openapi3.Operation) bool {
 		}
 	}
 	return false
+}
+
+// credentialParameter reports whether an operation requires a credential
+// through a parameter instead of a security scheme, as older specs often
+// do: a required header or query parameter named Authorization or like a
+// credential (x-access-token, api_key). A CSRF token is not one.
+func credentialParameter(doc *openapi3.T, path string, op *openapi3.Operation) bool {
+	for _, p := range operationParameters(doc, path, op) {
+		if !p.Required || (p.In != openapi3.ParameterInHeader && p.In != openapi3.ParameterInQuery) {
+			continue
+		}
+		if strings.EqualFold(p.Name, "authorization") || matches(p.Name, credentialWords) {
+			return true
+		}
+	}
+	return false
+}
+
+// operationParameters returns the parameters that apply to an operation:
+// its own, and its path's that it does not redefine (same name and in).
+func operationParameters(doc *openapi3.T, path string, op *openapi3.Operation) []*openapi3.Parameter {
+	var params []*openapi3.Parameter
+	own := map[[2]string]bool{}
+	for _, p := range op.Parameters {
+		if p != nil && p.Value != nil {
+			params = append(params, p.Value)
+			own[[2]string{p.Value.Name, p.Value.In}] = true
+		}
+	}
+	if item := doc.Paths.Value(path); item != nil {
+		for _, p := range item.Parameters {
+			if p != nil && p.Value != nil && !own[[2]string{p.Value.Name, p.Value.In}] {
+				params = append(params, p.Value)
+			}
+		}
+	}
+	return params
 }
 
 // forEachOperation calls fn for every operation under paths, in a stable
