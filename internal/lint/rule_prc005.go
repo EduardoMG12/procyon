@@ -21,10 +21,10 @@ var prc005 = Rule{
 // reported only in GET responses: issuing one from a POST (a login, a new
 // key) is how they work, but reading one back must never be possible.
 //
-// A schema used by several operations is reported for each of them; the
-// engine shows it once (see Run).
+// A schema used by several operations is reported once, at the property,
+// for every operation that returns it (see onePerPlace).
 func checkPRC005(doc *openapi3.T) []Finding {
-	var findings []Finding
+	var found onePerPlace
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		lists := [][][]string{secretWords}
 		if method == http.MethodGet {
@@ -35,7 +35,7 @@ func checkPRC005(doc *openapi3.T) []Finding {
 				return // hasPassword, passwordSet: about the secret, not the secret
 			}
 			loc := propertyLocation(prop)
-			findings = append(findings, Finding{
+			found.add(Finding{
 				Location:  loc,
 				Operation: method + " " + path,
 				Why: fmt.Sprintf("The response includes %q, which holds a secret. Anyone allowed to read this response gets it, "+
@@ -44,7 +44,7 @@ func checkPRC005(doc *openapi3.T) []Finding {
 			})
 		})
 	})
-	return findings
+	return found.findings
 }
 
 // booleanOnly reports whether a schema can only be a boolean (or null):

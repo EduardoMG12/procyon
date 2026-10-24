@@ -34,10 +34,10 @@ var pagingParameters = []string{
 // maxItems, and GET operations returning a whole list with no way to ask
 // for a page.
 func checkPRC008(doc *openapi3.T) []Finding {
-	var findings []Finding
+	var found onePerPlace
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		add := func(loc Location, why, fix string) {
-			findings = append(findings, Finding{Location: loc, Operation: method + " " + path, Why: why, Fix: fix})
+			found.add(Finding{Location: loc, Operation: method + " " + path, Why: why, Fix: fix})
 		}
 		if method == http.MethodGet && returnsList(op) && !paged(doc, path, op) {
 			add(locate(op.Origin),
@@ -66,7 +66,7 @@ func checkPRC008(doc *openapi3.T) []Finding {
 			return true
 		})
 	})
-	return findings
+	return found.findings
 }
 
 // unbounded explains what is unbounded about a request schema, or returns
