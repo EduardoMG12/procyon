@@ -156,7 +156,7 @@ const usage = `Usage:
 
     --fail-on <severity>      critical, high (default), medium or low.
                               Can also be set as fail-on in .procyon.yaml.
-    --format <format>         What to print: terminal (default) or json.
+    --format <format>         What to print: terminal (default), json or sarif.
     --output <format>=<path>  Also write a format to a file. Repeatable.
   procyon --version     Print the version
 
