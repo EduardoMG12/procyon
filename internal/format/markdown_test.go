@@ -14,8 +14,8 @@ func TestMarkdown(t *testing.T) {
 	report := sarifReport()
 	// Text from the spec is untrusted: it must not inject links, HTML or
 	// break a code span in the job summary.
-	report.Ignored[0].Reason = "Internal mirror <img src=x> [click](https://evil.example)"
-	report.Findings[0].Operation = "GET /orders/`id`"
+	report.Ignored[0].Reason = "Internal mirror <img src=x> [click](https://evil.example)\n# Owned www.evil.example me@evil.example"
+	report.Findings[0].Operation = "`GET /orders/\n# [x](https://evil.example)"
 	var got bytes.Buffer
 	if err := format.Markdown(&got, report); err != nil {
 		t.Fatal(err)

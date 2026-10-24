@@ -74,6 +74,10 @@ func markdownLocation(l lint.Location) string {
 	return fmt.Sprintf("%s:%d:%d", filepath.ToSlash(l.File), l.Line, l.Column)
 }
 
+// oneLine turns line breaks into spaces: a new line could end a list item
+// or a code span and start a heading of the spec's choosing.
+var oneLine = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ")
+
 // markdownEscaper escapes the characters that make Markdown or HTML:
 // emphasis, code, links, images, tags and table cells.
 var markdownEscaper = strings.NewReplacer(
@@ -81,13 +85,21 @@ var markdownEscaper = strings.NewReplacer(
 	"[", `\[`, "]", `\]`, "<", `\<`, ">", `\>`, "|", `\|`,
 )
 
+// autolinks are what GitHub turns into links even without brackets: URLs,
+// www. addresses and email addresses. Escaping one character of each keeps
+// them as plain text.
+var autolinks = strings.NewReplacer("://", `:\/\/`, "www.", `www\.`, "WWW.", `WWW\.`, "@", `\@`)
+
+// escape makes text from the spec safe to place in Markdown as plain text.
 func escape(text string) string {
-	return markdownEscaper.Replace(text)
+	return autolinks.Replace(markdownEscaper.Replace(oneLine.Replace(text)))
 }
 
 // code wraps text in a code span whose backtick fence is longer than any
 // run of backticks inside it, so the text can never close the span early.
+// Line breaks become spaces, since a code span cannot cross blocks.
 func code(text string) string {
+	text = oneLine.Replace(text)
 	longest, run := 0, 0
 	for _, r := range text {
 		if r == '`' {
@@ -98,8 +110,9 @@ func code(text string) string {
 		}
 	}
 	fence := strings.Repeat("`", longest+1)
-	if longest > 0 {
-		return fence + text + " " + fence // a space keeps a trailing ` apart from the fence
+	if strings.HasPrefix(text, "`") || strings.HasSuffix(text, "`") {
+		// A space keeps a backtick at either end apart from the fence.
+		return fence + " " + text + " " + fence
 	}
 	return fence + text + fence
 }

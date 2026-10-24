@@ -14,7 +14,7 @@ The run fails at **high** or above.
 
 #### HIGH · PRC001 · Operation has no authentication
 
-`specs/shop.yaml:9:5` · ``GET /orders/`id` ``
+`specs/shop.yaml:9:5` · `` `GET /orders/ # [x](https://evil.example) ``
 
 **Why:** Anyone can call it.
 
@@ -22,7 +22,7 @@ The run fails at **high** or above.
 
 ### Ignored
 
-- **PRC004** `specs/shop.yaml:6:12`: Internal mirror \<img src=x\> \[click\](https://evil.example)
+- **PRC004** `specs/shop.yaml:6:12`: Internal mirror \<img src=x\> \[click\](https:\/\/evil.example) # Owned www\.evil.example me\@evil.example
 
 ### Notes
 
