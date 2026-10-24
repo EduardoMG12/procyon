@@ -49,15 +49,24 @@ type outputs []output
 func (o *outputs) String() string { return "" }
 
 func (o *outputs) Set(value string) error {
+	out, err := parseOutput(value)
+	if err != nil {
+		return fmt.Errorf("--output %w", err)
+	}
+	*o = append(*o, out)
+	return nil
+}
+
+// parseOutput reads one format=path, from a flag or from .procyon.yaml.
+func parseOutput(value string) (output, error) {
 	name, path, ok := strings.Cut(value, "=")
 	if !ok || path == "" {
-		return fmt.Errorf("--output %q: want format=path, for example json=report.json", value)
+		return output{}, fmt.Errorf("%q: want format=path, for example json=report.json", value)
 	}
 	if formats[name] == nil {
-		return fmt.Errorf("--output %q: unknown format %q (use %s)", value, name, formatNames())
+		return output{}, fmt.Errorf("%q: unknown format %q (use %s)", value, name, formatNames())
 	}
-	*o = append(*o, output{name, path})
-	return nil
+	return output{name, path}, nil
 }
 
 // openOutputs creates (or empties) every --output file before linting, so

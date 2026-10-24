@@ -20,15 +20,23 @@ options for the whole team:
 ```yaml
 fail-on: medium
 ref-root: .
+format: terminal
+output:
+  - sarif=procyon.sarif
+  - markdown=summary.md
 ```
 
-Flags always win over the file.
+Flags always win over the file. One `--output` flag replaces the file's whole
+`output` list, so a local run never writes files you did not ask for.
 
 | Key | Flag | Meaning |
 |---|---|---|
 | `fail-on` | `--fail-on` | The lowest severity that fails the run |
-| `ref-root` | `--ref-root` | A directory `$refs` may read anywhere under, instead of only the spec's own directory: for monorepos whose specs share files from a sibling folder. A relative path counts from the directory Procyon runs in. See [how `$refs` are read](refs.md). | An unknown key is an error, so a typo such as
-`fail_on` never goes unnoticed.
+| `ref-root` | `--ref-root` | A directory `$refs` may read anywhere under, instead of only the spec's own directory: for monorepos whose specs share files from a sibling folder. A relative path counts from the directory Procyon runs in. See [how `$refs` are read](refs.md). |
+| `format` | `--format` | What to print: `terminal` (default), `json`, `sarif` or `markdown` |
+| `output` | `--output` | A list of `format=path`: other formats to write to files |
+
+An unknown key is an error, so a typo such as `fail_on` never goes unnoticed.
 
 The file holds **how** Procyon runs, never **what it ignores**. Ignores live in
 the spec, on the operation they excuse, with a written reason, so the

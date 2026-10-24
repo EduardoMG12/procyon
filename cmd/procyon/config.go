@@ -17,8 +17,12 @@ import (
 const configFile = ".procyon.yaml"
 
 type config struct {
-	FailOn  string `yaml:"fail-on"`
-	RefRoot string `yaml:"ref-root"`
+	FailOn  string   `yaml:"fail-on"`
+	RefRoot string   `yaml:"ref-root"`
+	Format  string   `yaml:"format"`
+	Output  []string `yaml:"output"` // format=path, like --output
+
+	outputs outputs // Output, parsed
 }
 
 // positionedError is implemented by goccy/go-yaml's syntax and decoding
@@ -51,6 +55,16 @@ func loadConfig() (config, error) {
 		if _, err := lint.ParseSeverity(cfg.FailOn); err != nil {
 			return cfg, fmt.Errorf("%s: fail-on: %w", configFile, err)
 		}
+	}
+	if cfg.Format != "" && formats[cfg.Format] == nil {
+		return cfg, fmt.Errorf("%s: format: unknown format %q (use %s)", configFile, cfg.Format, formatNames())
+	}
+	for _, value := range cfg.Output {
+		o, err := parseOutput(value)
+		if err != nil {
+			return cfg, fmt.Errorf("%s: output: %w", configFile, err)
+		}
+		cfg.outputs = append(cfg.outputs, o)
 	}
 	return cfg, nil
 }
