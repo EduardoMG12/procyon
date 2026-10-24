@@ -1,0 +1,145 @@
+openapi: 3.0.3
+info:
+  title: Shop
+  version: 1.0.0
+security:
+  - bearer: []
+paths:
+  /orders:
+    get:
+      responses:
+        "200":
+          description: All orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: string
+                title:
+                  type: string
+                  maxLength: 200
+                status:
+                  type: string
+                  enum: [open, closed]
+                placedAt:
+                  type: string
+                  format: date-time
+                id:
+                  type: string
+                  readOnly: true
+                tags:
+                  type: array
+                  maxItems: 5
+                  items:
+                    type: string
+                avatar:
+                  type: string
+                  format: byte
+                  maxLength: 100000
+                photo:
+                  type: string
+                  format: byte
+                lines:
+                  type: array
+                  maxItems: 100
+                  items:
+                    type: object
+                    properties:
+                      sku:
+                        type: string
+      responses:
+        "201":
+          description: Created
+  /products:
+    parameters:
+      - name: cursor
+        in: query
+        schema:
+          type: string
+          maxLength: 100
+    get:
+      responses:
+        "200":
+          description: A page of products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+  /customers:
+    get:
+      parameters:
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: A page of customers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+  /bulk:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+                maxLength: 50
+      responses:
+        "202":
+          description: Accepted
+  /odata/orders:
+    get:
+      parameters:
+        - name: $top
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: A page of orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+  /stats:
+    get:
+      parameters:
+        - name: count
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Every stat
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
