@@ -56,6 +56,10 @@ type Finding struct {
 	// (a security scheme, a server, an OAuth2 flow, the spec itself), so an
 	// x-procyon-ignore written on that element covers it and nothing else.
 	about any
+
+	// also lists the other operations a finding about a shared schema
+	// applies to (see onePerPlace); Operation is the first one.
+	also []string
 }
 
 // Report is everything one run produced.

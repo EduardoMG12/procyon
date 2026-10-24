@@ -53,8 +53,7 @@ var piiReferenceWords = append(slices.Clone(referenceWords),
 // personal data through it worse, not acceptable. Other methods are not
 // checked: a login or sign-up returns the caller's own data.
 func checkPRC006(doc *openapi3.T) []Finding {
-	var findings []Finding
-	reported := map[Location]bool{}
+	var found onePerPlace
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		if method != http.MethodGet || !reachableAnonymously(doc, op) {
 			return
@@ -64,11 +63,7 @@ func checkPRC006(doc *openapi3.T) []Finding {
 				return // emailVerified, emailSettings: about the data, not the data
 			}
 			loc := propertyLocation(prop)
-			if reported[loc] {
-				return
-			}
-			reported[loc] = true
-			findings = append(findings, Finding{
+			found.add(Finding{
 				Location:  loc,
 				Operation: method + " " + path,
 				Why: fmt.Sprintf("This operation needs no authentication and returns %q, personal data. "+
@@ -77,7 +72,7 @@ func checkPRC006(doc *openapi3.T) []Finding {
 			})
 		})
 	})
-	return findings
+	return found.findings
 }
 
 // textual reports whether a schema holds text, or a list of texts: personal

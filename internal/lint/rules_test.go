@@ -60,6 +60,19 @@ func TestRules(t *testing.T) {
 		{"swagger-2.0-extensions.yaml", []string{"PRC009"}, []string{
 			"PRC009 swagger-2.0-extensions.yaml:22:11 POST /profile",
 		}},
+		// A schema shared by two operations, with the finding ignored on one:
+		// the other still reports it.
+		{"prc009-shared-ignore.yaml", []string{"PRC009"}, []string{
+			"PRC009 prc009-shared-ignore.yaml:41:9 POST /register",
+		}},
+		// One path item file used by two paths: two endpoints, two findings
+		// each, at the same place.
+		{"shared-path-item/spec.yaml", []string{"PRC001", "PRC007"}, []string{
+			"PRC001 item.yaml:1:1 GET /admins/{id}",
+			"PRC001 item.yaml:1:1 GET /users/{id}",
+			"PRC007 item.yaml:1:1 GET /admins/{id}",
+			"PRC007 item.yaml:1:1 GET /users/{id}",
+		}},
 		// Two undefined schemes in one requirement are two findings.
 		{"prc002-two-undefined.yaml", []string{"PRC002"}, []string{
 			"PRC002 prc002-two-undefined.yaml:5:1 ",

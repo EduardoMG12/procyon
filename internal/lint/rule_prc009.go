@@ -25,8 +25,7 @@ var prc009 = Rule{
 // a role) is not the record being assigned. OAuth2 token requests (a body
 // with grant_type) are skipped: asking for a scope is what they are for.
 func checkPRC009(doc *openapi3.T) []Finding {
-	var findings []Finding
-	reported := map[Location]bool{}
+	var found onePerPlace
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		if op.RequestBody == nil || op.RequestBody.Value == nil {
 			return
@@ -40,23 +39,19 @@ func checkPRC009(doc *openapi3.T) []Finding {
 				return false // the client cannot send it, nor anything inside it
 			}
 			if grantsPrivilege(name) {
-				loc := propertyLocation(prop)
-				if !reported[loc] {
-					reported[loc] = true
-					findings = append(findings, Finding{
-						Location:  loc,
-						Operation: method + " " + path,
-						Why: fmt.Sprintf("The request body accepts %q. If the server copies the request into the record, "+
-							"any user can send it and grant themselves privileges.", name),
-						Fix: "Mark the field readOnly: true (or remove it from the request schema), and set it on the server " +
-							"only through an operation that checks who is allowed to change it.",
-					})
-				}
+				found.add(Finding{
+					Location:  propertyLocation(prop),
+					Operation: method + " " + path,
+					Why: fmt.Sprintf("The request body accepts %q. If the server copies the request into the record, "+
+						"any user can send it and grant themselves privileges.", name),
+					Fix: "Mark the field readOnly: true (or remove it from the request schema), and set it on the server " +
+						"only through an operation that checks who is allowed to change it.",
+				})
 			}
 			return !prop.Value.Type.Is("array")
 		})
 	})
-	return findings
+	return found.findings
 }
 
 // readOnly reports whether the client cannot send a schema: readOnly on the

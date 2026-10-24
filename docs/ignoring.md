@@ -49,6 +49,11 @@ An ignore on a security scheme also covers its OAuth2 flows. In a Swagger
 2.0 spec, where servers are built from `schemes` and `host` and cannot carry
 extensions, an ignore at the root also covers them (PRC004).
 
+A schema shared by several operations (a `$ref` used by both `POST /admin/users`
+and `POST /register`) is one finding, shown once where the field is written.
+An ignore on one of those operations covers only that operation: the finding
+is still reported for the others, under the first one not ignored.
+
 So excusing one weak scheme never hides a second one added later.
 
 ```yaml

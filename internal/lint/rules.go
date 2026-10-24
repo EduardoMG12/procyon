@@ -117,3 +117,33 @@ func locateField(origin *openapi3.Origin, field string) Location {
 	}
 	return locate(origin)
 }
+
+// onePerPlace collects a rule's findings about schema properties. A schema
+// shared by several operations is one problem, fixed where it is written:
+// one finding at that place, listing every operation that reaches it, so an
+// ignore on one of them covers only that one (see applyIgnores).
+type onePerPlace struct {
+	findings []Finding
+	at       map[Location]int // place -> index in findings
+}
+
+func (p *onePerPlace) add(f Finding) {
+	if i, ok := p.at[f.Location]; ok {
+		g := &p.findings[i]
+		// Operations are visited one after another, so a repeat (the same
+		// schema under two media types) is always the last one added.
+		last := g.Operation
+		if n := len(g.also); n > 0 {
+			last = g.also[n-1]
+		}
+		if last != f.Operation {
+			g.also = append(g.also, f.Operation)
+		}
+		return
+	}
+	if p.at == nil {
+		p.at = map[Location]int{}
+	}
+	p.at[f.Location] = len(p.findings)
+	p.findings = append(p.findings, f)
+}

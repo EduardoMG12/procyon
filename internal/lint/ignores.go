@@ -199,13 +199,25 @@ func applyIgnores(report *Report, ignores []*ignore, today time.Time) {
 	}
 	kept := report.Findings[:0]
 	for _, f := range report.Findings {
-		i := slices.IndexFunc(ignores, func(ig *ignore) bool { return ig.covers(f) && !expired(ig) })
-		if i < 0 {
-			kept = append(kept, f)
-			continue
+		// A finding about a shared schema is checked operation by
+		// operation: an ignore on one covers that one only, and the finding
+		// is gone only when every operation is ignored.
+		var left []string
+		for _, op := range append([]string{f.Operation}, f.also...) {
+			one := f
+			one.Operation, one.also = op, nil
+			i := slices.IndexFunc(ignores, func(ig *ignore) bool { return ig.covers(one) && !expired(ig) })
+			if i < 0 {
+				left = append(left, op)
+				continue
+			}
+			ignores[i].used = true
+			report.Ignored = append(report.Ignored, IgnoredFinding{Finding: one, Reason: ignores[i].reason, Expires: ignores[i].expires})
 		}
-		ignores[i].used = true
-		report.Ignored = append(report.Ignored, IgnoredFinding{Finding: f, Reason: ignores[i].reason, Expires: ignores[i].expires})
+		if len(left) > 0 {
+			f.Operation, f.also = left[0], left[1:]
+			kept = append(kept, f)
+		}
 	}
 	report.Findings = kept
 	for _, ig := range ignores {
