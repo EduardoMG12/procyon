@@ -45,6 +45,10 @@ nothing else:
 | an OAuth2 flow (`flows.implicit`, ...) | that flow's findings (PRC011) |
 | the spec's root | findings about the spec as a whole (PRC002 on the default `security`) |
 
+An ignore on a security scheme also covers its OAuth2 flows. In a Swagger
+2.0 spec, where servers are built from `schemes` and `host` and cannot carry
+extensions, an ignore at the root also covers them (PRC004).
+
 So excusing one weak scheme never hides a second one added later.
 
 ```yaml

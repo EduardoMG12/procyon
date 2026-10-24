@@ -36,6 +36,16 @@ func TestRules(t *testing.T) {
 		{"swagger-2.0-body.json", []string{"PRC009"}, []string{
 			"PRC009 swagger-2.0-body.json:18:17 POST /users",
 		}},
+		// Swagger 2.0 edges: a global body parameter, a global response, a
+		// body declared on the path item and shared by two operations (one
+		// finding each, at the property; two media types add none), and ignores for
+		// PRC004 at the root and PRC011 on the scheme that holds its flow.
+		{"swagger-2.0-edges.yaml", []string{"PRC004", "PRC005", "PRC009", "PRC011"}, []string{
+			"PRC009 swagger-2.0-edges.yaml:33:9 POST /admins",
+			"PRC005 swagger-2.0-edges.yaml:41:9 GET /me",
+			"PRC009 swagger-2.0-edges.yaml:51:13 POST /accounts",
+			"PRC009 swagger-2.0-edges.yaml:51:13 PUT /accounts",
+		}},
 		// Swagger 2.0: formData fields, an operation-level http scheme, a
 		// path-level body whose POST copy is ignored but PUT copy is not,
 		// and nulls inside examples and x- extensions (valid).

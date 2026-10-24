@@ -44,7 +44,7 @@ func Run(path string, opts Options) (Report, error) {
 		report.FailOn = High
 	}
 	asGiven := files.asGiven
-	ignores, err := parseIgnores(doc, asGiven)
+	ignores, err := parseIgnores(doc, asGiven, files.back != nil)
 	if err != nil {
 		return Report{}, err
 	}

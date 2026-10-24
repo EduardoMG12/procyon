@@ -38,7 +38,7 @@ type ignore struct {
 	expires   string    // as written
 	until     time.Time // the expiry date (its day, month and year only)
 	operation string    // the operation it is written on, or ""
-	about     any       // the element it is written on, when not an operation
+	about     []any     // the elements it covers, when not an operation
 	where     string    // how notes name that element
 	location  Location
 	used      bool
@@ -60,16 +60,20 @@ func (ig *ignore) covers(f Finding) bool {
 	if ig.operation != "" {
 		return ig.operation == f.Operation
 	}
-	return ig.about != nil && ig.about == f.about
+	return f.about != nil && slices.Contains(ig.about, f.about)
 }
 
 // parseIgnores reads every x-procyon-ignore in the spec. A malformed entry
 // is an error: a typo must never silently ignore something.
-func parseIgnores(doc *openapi3.T, asGiven func(Location) Location) ([]*ignore, error) {
+//
+// An ignore on a security scheme also covers its OAuth2 flows. In a spec
+// converted from Swagger 2.0, an ignore at the root also covers the servers
+// (built from schemes and host, which cannot carry extensions).
+func parseIgnores(doc *openapi3.T, asGiven func(Location) Location, swagger bool) ([]*ignore, error) {
 	var ignores []*ignore
 	var firstErr error
 	// add parses the ignores written on one element.
-	add := func(ext map[string]any, origin *openapi3.Origin, operation string, about any, where string) {
+	add := func(ext map[string]any, origin *openapi3.Origin, operation string, where string, about ...any) {
 		if firstErr != nil {
 			return
 		}
@@ -79,35 +83,47 @@ func parseIgnores(doc *openapi3.T, asGiven func(Location) Location) ([]*ignore, 
 		}
 		ignores, firstErr = append(ignores, more...), err
 	}
-	add(doc.Extensions, doc.Origin, "", doc, "the spec")
+	root := []any{doc}
+	if swagger {
+		for _, server := range doc.Servers {
+			root = append(root, server)
+		}
+	}
+	add(doc.Extensions, doc.Origin, "", "the spec", root...)
 	for _, server := range doc.Servers {
-		add(server.Extensions, server.Origin, "", server, "server "+server.URL)
+		add(server.Extensions, server.Origin, "", "server "+server.URL, server)
 	}
 	if doc.Paths != nil {
 		for _, item := range doc.Paths.Map() {
 			for _, server := range item.Servers {
-				add(server.Extensions, server.Origin, "", server, "server "+server.URL)
+				add(server.Extensions, server.Origin, "", "server "+server.URL, server)
 			}
 		}
 	}
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-		add(op.Extensions, op.Origin, method+" "+path, nil, "")
+		add(op.Extensions, op.Origin, method+" "+path, "")
 		if op.Servers != nil {
 			for _, server := range *op.Servers {
-				add(server.Extensions, server.Origin, "", server, "server "+server.URL)
+				add(server.Extensions, server.Origin, "", "server "+server.URL, server)
 			}
 		}
 	})
 	forEachScheme(doc, func(name string, scheme *openapi3.SecurityScheme) {
-		add(scheme.Extensions, scheme.Origin, "", scheme, "security scheme "+name)
+		covered := []any{scheme}
+		var flows []*openapi3.OAuthFlow
 		if f := scheme.Flows; f != nil {
-			for flowName, flow := range map[string]*openapi3.OAuthFlow{
-				"implicit": f.Implicit, "password": f.Password,
-				"clientCredentials": f.ClientCredentials, "authorizationCode": f.AuthorizationCode,
-			} {
-				if flow != nil {
-					add(flow.Extensions, flow.Origin, "", flow, "the "+flowName+" flow of "+name)
-				}
+			flows = []*openapi3.OAuthFlow{f.Implicit, f.Password, f.ClientCredentials, f.AuthorizationCode}
+		}
+		for _, flow := range flows {
+			if flow != nil {
+				covered = append(covered, flow)
+			}
+		}
+		add(scheme.Extensions, scheme.Origin, "", "security scheme "+name, covered...)
+		names := []string{"implicit", "password", "clientCredentials", "authorizationCode"}
+		for i, flow := range flows {
+			if flow != nil {
+				add(flow.Extensions, flow.Origin, "", "the "+names[i]+" flow of "+name, flow)
 			}
 		}
 	})
