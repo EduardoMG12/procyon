@@ -1,6 +1,6 @@
 # 0000 — Procyon Vision
 
-> Status: **draft** · Owner: EduardoMG12 · Last updated: 2026-10-23
+> Status: **draft** · Owner: EduardoMG12 · Last updated: 2026-10-24
 >
 > This is the map. Milestone PRDs (`0001`, `0002`, …) are the territory.
 > When they disagree, the milestone PRD wins and this file gets updated.
@@ -40,7 +40,8 @@ experience, not on the number of checks.
    in any language, and it does not become a SAST tool (Semgrep and CodeQL
    own that space).
 2. **Zero-config by default.** `procyon lint openapi.yaml` works with no
-   config file. Every option has a sensible default.
+   config file. Every option has a sensible default. `procyon test` needs
+   the one thing a spec cannot say: the credentials of two test accounts.
 3. **Correct before broad.** Few rules, each one deterministic, documented
    and tested against real specs. A missed problem gives false confidence,
    which is worse than no tool at all. A noisy rule gets the tool switched
@@ -48,7 +49,9 @@ experience, not on the number of checks.
 4. **Every finding teaches.** Each finding says where it is (file, line,
    column), why it is a risk, and how to fix it, in plain words.
 5. **Deterministic.** The same spec and the same Procyon version always give
-   the same report. No network access while linting.
+   the same report. No network access while linting. `procyon test` sends
+   its requests in a fixed order with no randomness, so the same API
+   behaviour gives the same report.
 6. **Exceptions are visible.** A user can silence a finding, but only with a
    written reason, and the silenced finding keeps appearing in the report.
 
@@ -57,7 +60,7 @@ experience, not on the number of checks.
 | Milestone | What it does | Where it runs | PRD |
 |---|---|---|---|
 | **v0.1 — Lint** | Reads the spec and reports security problems in the API's *design* | CI, on every PR | [0001](0001-v0.1-spec-lint.md) |
-| **v0.2 — Runtime tests** | Starts a disposable copy of the API (Docker) with seeded test accounts, checks that user A's objects are unreachable by user B and by anonymous callers (BOLA), checks TLS, checks that malformed input is rejected, then tears everything down. Only tests operations changed in the PR. Posts a PR comment with an authorization matrix | CI, on every PR | not written |
+| **v0.2 — Runtime tests** | Starts a disposable copy of the API (Docker) with seeded test accounts, checks that user A's objects are unreachable by user B and by anonymous callers (BOLA), checks TLS, checks that malformed input is rejected, then tears everything down. Only tests operations changed in the PR. Posts a PR comment with an authorization matrix | CI, on every PR | [0002](0002-v0.2-runtime-tests.md) |
 | **v0.3 — Security QA environment** | Runs continuously against a permanent security-QA environment (next to staging and prod), keeps history and trends, reads the spec from a URL | A long-lived environment | not written |
 
 **Benchmark against known-vulnerable APIs.** v0.2 is validated against every
