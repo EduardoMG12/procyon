@@ -57,6 +57,8 @@ func Terminal(w io.Writer, report lint.Report, opts TerminalOptions) error {
 	for _, f := range findings {
 		t.finding(f, report.Sources[f.Location.File])
 	}
+	t.ignored(report.Ignored)
+	t.notes(report.Notes)
 	t.summary(report)
 	_, err := io.WriteString(w, t.b.String())
 	return err
@@ -83,7 +85,7 @@ func (t *terminal) finding(f lint.Finding, source []string) {
 	label := fmt.Sprintf("%-8s", strings.ToUpper(f.Rule.Severity.String()))
 	t.line(t.paint(severityColor[f.Rule.Severity], label) + f.Rule.ID + "  " + f.Rule.Title)
 
-	loc := fmt.Sprintf("%s:%d:%d", filepath.ToSlash(f.Location.File), f.Location.Line, f.Location.Column)
+	loc := location(f.Location)
 	if f.Operation != "" {
 		loc += "  " + f.Operation
 	}
@@ -132,6 +134,43 @@ func (t *terminal) labelled(label, text string) {
 	}
 }
 
+// ignored lists the findings an x-procyon-ignore matched, each with its
+// reason: exceptions stay visible on every run.
+func (t *terminal) ignored(ignored []lint.IgnoredFinding) {
+	if len(ignored) == 0 {
+		return
+	}
+	t.line(fmt.Sprintf("Ignored (%d)", len(ignored)))
+	for _, i := range ignored {
+		line := indent + i.Finding.Rule.ID + "  " + location(i.Finding.Location)
+		if i.Finding.Operation != "" {
+			line += "  " + i.Finding.Operation
+		}
+		if i.Expires != "" {
+			line += "  (until " + i.Expires + ")"
+		}
+		t.line(line)
+		t.line(indent + indent + i.Reason)
+	}
+	t.line("")
+}
+
+// notes lists what the reader should know that is not a finding.
+func (t *terminal) notes(notes []lint.Note) {
+	if len(notes) == 0 {
+		return
+	}
+	t.line(fmt.Sprintf("Notes (%d)", len(notes)))
+	for _, n := range notes {
+		t.line(indent + location(n.Location) + "  " + n.Message)
+	}
+	t.line("")
+}
+
+func location(loc lint.Location) string {
+	return fmt.Sprintf("%s:%d:%d", filepath.ToSlash(loc.File), loc.Line, loc.Column)
+}
+
 func (t *terminal) summary(report lint.Report) {
 	count := map[lint.Severity]int{}
 	for _, f := range report.Findings {
@@ -141,7 +180,8 @@ func (t *terminal) summary(report lint.Report) {
 	if report.Failed {
 		verdict = t.paint(red, "FAILED")
 	}
-	counts := fmt.Sprintf("%d high · %d medium · %d low", count[lint.High], count[lint.Medium], count[lint.Low])
+	counts := fmt.Sprintf("%d high · %d medium · %d low · %d ignored",
+		count[lint.High], count[lint.Medium], count[lint.Low], len(report.Ignored))
 	if count[lint.Critical] > 0 {
 		counts = fmt.Sprintf("%d critical · %s", count[lint.Critical], counts)
 	}

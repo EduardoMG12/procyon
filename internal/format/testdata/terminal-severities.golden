@@ -48,4 +48,4 @@ LOW     PRC008  Unbounded input or output
         Fix:  Add paging.
         More: https://github.com/EduardoMG12/procyon/blob/main/docs/rules/PRC008.md
 
-FAILED  1 high · 1 medium · 2 low  (fails at: medium)
+FAILED  1 high · 1 medium · 2 low · 0 ignored  (fails at: medium)
