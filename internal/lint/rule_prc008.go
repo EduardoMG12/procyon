@@ -118,7 +118,6 @@ func unboundedCount(name string, s *openapi3.Schema, query bool) bool {
 	return matchesWith(name, words, countDescribingWords, countReferenceWords)
 }
 
-
 func unboundedString(s *openapi3.Schema) bool {
 	return s.Type.Includes("string") && s.MaxLength == nil && len(s.Enum) == 0 &&
 		!slices.Contains(boundedFormats, s.Format)

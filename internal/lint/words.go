@@ -49,6 +49,14 @@ var (
 		"pagination", "csrf", "xsrf",
 	}
 
+	// credentialParameterWords name a parameter that carries the caller's
+	// credential, when a spec sends it as a parameter rather than through a
+	// security scheme.
+	credentialParameterWords = [][]string{
+		{"authorization"}, {"access", "token"}, {"auth", "token"},
+		{"session", "token"}, {"apikey"}, {"api", "key"}, {"access", "key"},
+	}
+
 	// countWords name numbers that set how much work one request makes
 	// the server do: how many items, repeats or retries. splitWords cannot
 	// split an all-lowercase name, so pagesize and perpage are listed too.

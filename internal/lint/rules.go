@@ -58,7 +58,7 @@ var prc001 = Rule{
 // explicit `security: []`, or an empty requirement (`- {}`), which OpenAPI
 // defines as "anonymous access allowed" — and no credential parameter.
 func unauthenticated(doc *openapi3.T, path string, op *openapi3.Operation) bool {
-	if credentialParameter(doc, path, op) {
+	if credentialParameter(doc, path, op) != "" {
 		return false
 	}
 	reqs := doc.Security
@@ -76,20 +76,22 @@ func unauthenticated(doc *openapi3.T, path string, op *openapi3.Operation) bool 
 	return false
 }
 
-// credentialParameter reports whether an operation requires a credential
-// through a parameter instead of a security scheme, as older specs often
-// do: a required header or query parameter named Authorization or like a
-// credential (x-access-token, api_key). A CSRF token is not one.
-func credentialParameter(doc *openapi3.T, path string, op *openapi3.Operation) bool {
+// credentialParameter returns the name of the parameter through which an
+// operation requires a credential instead of a security scheme, as older
+// specs often do, or "": a required header or query parameter named like a
+// credential (credentialParameterWords: Authorization, x-access-token,
+// api_key). A bare token is not one: it is as often a one-time link's, a
+// captcha's or a device's.
+func credentialParameter(doc *openapi3.T, path string, op *openapi3.Operation) string {
 	for _, p := range operationParameters(doc, path, op) {
 		if !p.Required || (p.In != openapi3.ParameterInHeader && p.In != openapi3.ParameterInQuery) {
 			continue
 		}
-		if strings.EqualFold(p.Name, "authorization") || matches(p.Name, credentialWords) {
-			return true
+		if matches(p.Name, credentialParameterWords) {
+			return p.Name
 		}
 	}
-	return false
+	return ""
 }
 
 // operationParameters returns the parameters that apply to an operation:
