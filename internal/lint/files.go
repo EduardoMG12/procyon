@@ -116,11 +116,30 @@ func (f *specFiles) close() {
 //  3. The file is opened through os.Root with that same cleaned path, which
 //     refuses symlinks and ".." leading out of the root, and must be a
 //     regular file of reasonable size.
+//
+// localPath returns the file path a $ref location names, or false for a
+// URL. url.Parse reads a Windows drive letter as a scheme (c:/specs/a.yaml
+// has scheme "c"), so a one-letter scheme that this system takes for a
+// volume is a path; it then goes through the same checks as any other.
+func localPath(location *url.URL) (string, bool) {
+	if location.Host != "" {
+		return "", false
+	}
+	if location.Scheme == "" {
+		return location.Path, true
+	}
+	if drive := location.Scheme + ":" + location.Path; len(location.Scheme) == 1 && filepath.VolumeName(drive) != "" {
+		return drive, true
+	}
+	return "", false
+}
+
 func (f *specFiles) read(_ *openapi3.Loader, location *url.URL) ([]byte, error) {
-	if location.Scheme != "" || location.Host != "" {
+	local, ok := localPath(location)
+	if !ok {
 		return nil, fmt.Errorf("$ref %q is a URL: Procyon never fetches remote references while linting; download the file and refer to it by a local path", location)
 	}
-	path := filepath.Clean(filepath.FromSlash(location.Path))
+	path := filepath.Clean(filepath.FromSlash(local))
 	if f.reads++; f.reads > maxRefReads {
 		return nil, fmt.Errorf("$ref %q: the spec resolves more than %d $refs", path, maxRefReads)
 	}

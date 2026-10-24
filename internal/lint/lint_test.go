@@ -133,7 +133,7 @@ func TestSpecsSplitAcrossLocalFiles(t *testing.T) {
 	}
 	f := report.Findings[0]
 	// The operation is written in paths/orders.yaml, line 1, column 1.
-	want := spec("split/paths/orders.yaml")
+	want := filepath.Clean(spec("split/paths/orders.yaml")) // \ on Windows, like the location
 	if f.Location.File != want || f.Location.Line != 1 || f.Location.Column != 1 {
 		t.Errorf("location = %s:%d:%d, want %s:1:1", f.Location.File, f.Location.Line, f.Location.Column, want)
 	}
