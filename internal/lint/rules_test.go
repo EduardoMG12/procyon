@@ -115,6 +115,26 @@ func TestRules(t *testing.T) {
 			"PRC005 prc005-references.yaml:64:19 GET /volumes",
 			"PRC005 prc005-references.yaml:66:19 GET /volumes",
 		}},
+		// A role on /memberships/{username} is what the operation assigns,
+		// and an enum of only low values (guestRole: viewer | commenter)
+		// cannot grant anything. Everything else still counts: tenantId or
+		// isAdmin on a grant path, a /members collection, /permissions-check,
+		// boolean, numeric and tenant enums, superadmin, delete:users.
+		{"prc009-grants-and-enums.yaml", []string{"PRC009"}, []string{
+			"PRC009 prc009-grants-and-enums.yaml:32:17 PUT /orgs/{org}/memberships/{username}",
+			"PRC009 prc009-grants-and-enums.yaml:53:17 PATCH /orgs/{org}/settings", // write_scope: values not known to be low
+			"PRC009 prc009-grants-and-enums.yaml:56:17 PATCH /orgs/{org}/settings",
+			"PRC009 prc009-grants-and-enums.yaml:62:17 PATCH /orgs/{org}/settings",
+			"PRC009 prc009-grants-and-enums.yaml:67:17 PATCH /orgs/{org}/settings",
+			"PRC009 prc009-grants-and-enums.yaml:87:17 PUT /members/{id}",
+			"PRC009 prc009-grants-and-enums.yaml:100:17 POST /api/members",
+			"PRC009 prc009-grants-and-enums.yaml:114:17 POST /permissions-check",
+			"PRC009 prc009-grants-and-enums.yaml:128:17 PATCH /flags",
+			"PRC009 prc009-grants-and-enums.yaml:131:17 PATCH /flags",
+			"PRC009 prc009-grants-and-enums.yaml:134:17 PATCH /flags",
+			"PRC009 prc009-grants-and-enums.yaml:137:17 PATCH /flags",
+			"PRC009 prc009-grants-and-enums.yaml:140:17 PATCH /flags",
+		}},
 		// Two undefined schemes in one requirement are two findings.
 		{"prc002-two-undefined.yaml", []string{"PRC002"}, []string{
 			"PRC002 prc002-two-undefined.yaml:5:1 ",

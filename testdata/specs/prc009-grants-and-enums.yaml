@@ -1,0 +1,153 @@
+openapi: 3.0.3
+info:
+  title: Org
+  version: 1.0.0
+security:
+  - key: []
+paths:
+  /orgs/{org}/memberships/{username}:
+    parameters:
+      - name: org
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 39
+      - name: username
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 39
+    put:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  type: string
+                  enum: [admin, member]
+                tenantId:
+                  type: string
+                  maxLength: 36
+      responses:
+        "200":
+          description: Membership
+  /orgs/{org}/settings:
+    parameters:
+      - name: org
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 39
+    patch:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                write_scope:
+                  type: string
+                  enum: [trigger, repository]
+                default_role:
+                  type: string
+                  enum: [reader, writer, admin]
+                guestRole:
+                  type: string
+                  enum: [viewer, commenter]
+                memberRoles:
+                  type: array
+                  items:
+                    type: string
+                    enum: [viewer, owner]
+                isAdmin:
+                  type: boolean
+      responses:
+        "200":
+          description: Settings
+  /members/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 39
+    put:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                isAdmin:
+                  type: boolean
+      responses:
+        "200":
+          description: Done
+  /api/members:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  type: string
+                  enum: [member, admin]
+      responses:
+        "200":
+          description: Done
+  /permissions-check:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                permission:
+                  type: string
+                  maxLength: 20
+      responses:
+        "200":
+          description: Done
+  /flags:
+    patch:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                isSuperuser:
+                  type: boolean
+                  enum: [true, false]
+                roleLevel:
+                  type: integer
+                  enum: [0, 1, 2]
+                tenant:
+                  type: string
+                  enum: [acme, globex]
+                accessRole:
+                  type: string
+                  enum: [viewer, superadmin]
+                scopes:
+                  type: array
+                  items:
+                    type: string
+                    enum: ["read:users", "delete:users"]
+      responses:
+        "200":
+          description: Done
+components:
+  securitySchemes:
+    key:
+      type: apiKey
+      in: header
+      name: X-Key
