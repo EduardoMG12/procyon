@@ -29,6 +29,22 @@ func TestRules(t *testing.T) {
 		{"public-operation.yaml", []string{
 			"PRC001 public-operation.yaml:13:5 GET /orders",
 		}},
+		// 2 schemes × 70 regions × 3 versions: more combinations than
+		// Procyon expands, and http must still be found, on every run.
+		{"prc004-many-values.yaml", []string{
+			"PRC004 prc004-many-values.yaml:6:5 ",
+		}},
+		// 40 × 40 scheme values: too many to check, so Procyon fails closed
+		// and reports, even though none of them is http.
+		{"prc004-too-many-combinations.yaml", []string{
+			"PRC004 prc004-too-many-combinations.yaml:6:5 ",
+		}},
+		{"prc004-servers.yaml", []string{
+			"PRC004 prc004-servers.yaml:6:5 ",
+			"PRC004 prc004-servers.yaml:12:5 ",
+			"PRC004 prc004-servers.yaml:22:9 ",
+			"PRC004 prc004-servers.yaml:25:11 GET /orders",
+		}},
 		{"prc001-empty-override.yaml", []string{
 			"PRC001 prc001-empty-override.yaml:13:5 DELETE /orders",
 		}},
