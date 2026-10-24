@@ -1,0 +1,129 @@
+package main_test
+
+import (
+	"bytes"
+	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+)
+
+// procyon is the path to a binary built once for all tests.
+var procyon string
+
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "procyon-test")
+	if err != nil {
+		panic(err)
+	}
+	procyon = filepath.Join(dir, "procyon")
+	if runtime.GOOS == "windows" {
+		procyon += ".exe"
+	}
+	build := exec.Command("go", "build", "-o", procyon, ".")
+	build.Stderr = os.Stderr
+	if err := build.Run(); err != nil {
+		panic(err)
+	}
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
+}
+
+type result struct {
+	code           int
+	stdout, stderr string
+}
+
+func run(t *testing.T, args ...string) result {
+	t.Helper()
+	cmd := exec.Command(procyon, args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err := cmd.Run()
+	code := 0
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		code = exitErr.ExitCode()
+	} else if err != nil {
+		t.Fatalf("running procyon: %v", err)
+	}
+	return result{code, stdout.String(), stderr.String()}
+}
+
+func spec(name string) string {
+	return filepath.Join("..", "..", "testdata", "specs", name)
+}
+
+func TestLintValidSpecExitsZero(t *testing.T) {
+	r := run(t, "lint", spec("valid-3.0.yaml"))
+	if r.code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", r.code, r.stderr)
+	}
+}
+
+func TestLintBadInputExitsTwoWithOneLine(t *testing.T) {
+	r := run(t, "lint", spec("invalid-yaml.yaml"))
+	if r.code != 2 {
+		t.Fatalf("exit code = %d, want 2", r.code)
+	}
+	if r.stdout != "" {
+		t.Errorf("stdout = %q, want nothing", r.stdout)
+	}
+	if lines := strings.Count(r.stderr, "\n"); lines != 1 {
+		t.Errorf("stderr has %d lines, want 1: %q", lines, r.stderr)
+	}
+	if want := "invalid-yaml.yaml:7:10:"; !strings.Contains(r.stderr, want) {
+		t.Errorf("stderr %q does not contain %q", r.stderr, want)
+	}
+}
+
+func TestUsageErrorsExitTwoAndShowUsage(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"no arguments", nil},
+		{"unknown command", []string{"scan"}},
+		{"lint without a spec", []string{"lint"}},
+		{"lint with two specs", []string{"lint", "a.yaml", "b.yaml"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := run(t, tt.args...)
+			if r.code != 2 {
+				t.Errorf("exit code = %d, want 2", r.code)
+			}
+			if !strings.Contains(r.stderr, "Usage:") {
+				t.Errorf("stderr does not show usage: %q", r.stderr)
+			}
+		})
+	}
+}
+
+func TestVersion(t *testing.T) {
+	r := run(t, "--version")
+	if r.code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", r.code, r.stderr)
+	}
+	if !strings.HasPrefix(r.stdout, "procyon ") {
+		t.Errorf("stdout = %q, want it to start with %q", r.stdout, "procyon ")
+	}
+}
+
+func TestHelpExitsZeroAndShowsUsage(t *testing.T) {
+	for _, arg := range []string{"--help", "-h", "help"} {
+		t.Run(arg, func(t *testing.T) {
+			r := run(t, arg)
+			if r.code != 0 {
+				t.Errorf("exit code = %d, want 0", r.code)
+			}
+			if !strings.Contains(r.stdout, "Usage:") {
+				t.Errorf("stdout does not show usage: %q", r.stdout)
+			}
+		})
+	}
+}
