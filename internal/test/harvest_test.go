@@ -65,7 +65,7 @@ func TestDiscoverFollowsDependencies(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := &runner{client: newClient(target, 0, 10), target: target}
-	if _, err := r.discover(context.Background(), ops, caller{name: "A"}, newHarvest(nil)); err != nil {
+	if _, _, err := r.discover(context.Background(), ops, caller{name: "A"}, newHarvest(nil)); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{"/projects", "/projects/p1", "/owners/u7"}

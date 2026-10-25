@@ -64,14 +64,14 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 
 	ops := inTestOrder(spec.Operations())
 	a := caller{name: "A", token: opts.TokenA}
-	ofA, err := r.discover(ctx, ops, a, newHarvest(opts.IDs))
+	ofA, asReads, err := r.discover(ctx, ops, a, newHarvest(opts.IDs))
 	if err != nil {
 		return lint.Report{}, err
 	}
 	// What B's own reads show is B's, or shared with B: finding such a value
 	// in a response to B proves nothing.
 	b := caller{name: "B", token: opts.TokenB}
-	ofB, err := r.discover(ctx, ops, b, newHarvest(nil))
+	ofB, _, err := r.discover(ctx, ops, b, newHarvest(nil))
 	if err != nil {
 		return lint.Report{}, err
 	}
@@ -87,29 +87,38 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 
 	var findings []lint.Finding
 	var notes []lint.Note
+	var matrix []lint.MatrixRow
 	for _, op := range ops {
+		row := lint.MatrixRow{Operation: op.Method + " " + op.Path, A: asReads[op.Method+" "+op.Path]}
 		path, values, err := ofA.fill(op.Path)
 		if err != nil {
 			notes = append(notes, lint.Note{Location: op.Location, Message: fmt.Sprintf(
 				"%s %s not tested: %v in A's responses; declare one under test.ids in .procyon.yaml", op.Method, op.Path, err)})
+			skipped := lint.Cell{Outcome: lint.Skipped}
+			matrix = append(matrix, lint.MatrixRow{Operation: row.Operation, A: skipped, B: skipped, Anonymous: skipped})
 			continue
 		}
+		row.Anonymous = lint.Cell{Outcome: lint.Public}
 		if !op.Public {
 			exchange, err := r.send(ctx, op, path, anonymous)
 			if err != nil {
 				return lint.Report{}, err
 			}
+			row.Anonymous = cellOf(exchange, success(exchange))
 			if success(exchange) {
 				findings = append(findings, anonymousAccess(op, exchange))
 			}
 		}
 		if len(values) == 0 {
+			matrix = append(matrix, row)
 			continue // no object in the path: nothing of A's to reach
 		}
-		finding, note, err := r.otherAccount(ctx, op, path, values, ofB, readers, a, b)
+		finding, note, cell, err := r.otherAccount(ctx, op, path, values, ofB, readers, a, b)
 		if err != nil {
 			return lint.Report{}, err
 		}
+		row.B = cell
+		matrix = append(matrix, row)
 		if finding != nil {
 			findings = append(findings, *finding)
 		}
@@ -117,7 +126,21 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 			notes = append(notes, lint.Note{Location: op.Location, Message: op.Method + " " + op.Path + ": " + note})
 		}
 	}
-	return spec.Finish(findings, notes, lint.Options{FailOn: opts.FailOn}), nil
+	report := spec.Finish(findings, notes, lint.Options{FailOn: opts.FailOn})
+	report.Matrix = matrix
+	return report, nil
+}
+
+// cellOf is the matrix cell of a call: a finding when reached, otherwise
+// allowed or denied by its status.
+func cellOf(exchange lint.Exchange, reached bool) lint.Cell {
+	switch {
+	case reached:
+		return lint.Cell{Outcome: lint.Reached, Status: exchange.Status}
+	case success(exchange):
+		return lint.Cell{Outcome: lint.Allowed, Status: exchange.Status}
+	}
+	return lint.Cell{Outcome: lint.Denied, Status: exchange.Status}
 }
 
 // anonymousAccess is a PRC101 finding.
@@ -142,40 +165,41 @@ func anonymousAccess(op lint.Operation, exchange lint.Exchange) lint.Finding {
 // sees it changed or gone; without a GET on the same path, a write counts
 // when its 2xx answer holds A's values, and a delete cannot be told.
 func (r *runner) otherAccount(ctx context.Context, op lint.Operation, path string, values []string,
-	ofB *harvest, readers map[string]lint.Operation, a, b caller) (*lint.Finding, string, error) {
+	ofB *harvest, readers map[string]lint.Operation, a, b caller) (*lint.Finding, string, lint.Cell, error) {
+	skipped := lint.Cell{Outcome: lint.Skipped}
 	ofAs := unseen(values, ofB)
 	if len(ofAs) == 0 {
-		return nil, "", nil // every value in the path is one B sees too
+		return nil, "", lint.Cell{}, nil // every value in the path is one B sees too
 	}
 	if op.Method != http.MethodGet && op.NeedsBody && op.Body == nil {
-		return nil, "not tested as B: it needs a request body and the spec gives no example", nil
+		return nil, "not tested as B: it needs a request body and the spec gives no example", skipped, nil
 	}
 	reader, canRead := readers[op.Path]
 	if op.Method == http.MethodDelete && !canRead {
-		return nil, "not tested as B: without a GET on the same path, Procyon cannot tell whether a delete worked", nil
+		return nil, "not tested as B: without a GET on the same path, Procyon cannot tell whether a delete worked", skipped, nil
 	}
 
 	var before []byte
 	if op.Method != http.MethodGet && canRead {
 		exchange, body, err := r.sendFull(ctx, reader, path, a)
 		if err != nil || !success(exchange) {
-			return nil, "not tested as B: A could not read the object first", err
+			return nil, "not tested as B: A could not read the object first", skipped, err
 		}
 		before = body
 		if op.Method != http.MethodDelete && holds(before, op.Body) {
-			return nil, "not tested as B: A's object already holds the request example's values, so a change could not be seen", nil
+			return nil, "not tested as B: A's object already holds the request example's values, so a change could not be seen", skipped, nil
 		}
 	}
 	exchange, body, err := r.sendFull(ctx, op, path, b)
 	if err != nil || !success(exchange) {
-		return nil, "", err
+		return nil, "", cellOf(exchange, false), err
 	}
 	evidence := []lint.Exchange{exchange}
 	reached := shows(body, ofAs)
 	if before != nil {
 		after, afterBody, err := r.sendFull(ctx, reader, path, a)
 		if err != nil {
-			return nil, "", err
+			return nil, "", lint.Cell{}, err
 		}
 		evidence = append(evidence, after)
 		switch {
@@ -183,7 +207,7 @@ func (r *runner) otherAccount(ctx context.Context, op lint.Operation, path strin
 			reached = true // gone
 		case op.Method == http.MethodDelete && !success(after):
 			// A 429 or a 503 says nothing about the object.
-			return nil, fmt.Sprintf("not confirmed: after B's delete, A's read got %d", after.Status), nil
+			return nil, fmt.Sprintf("not confirmed: after B's delete, A's read got %d", after.Status), skipped, nil
 		case op.Method == http.MethodDelete:
 			reached = false // still there
 		default:
@@ -193,7 +217,7 @@ func (r *runner) otherAccount(ctx context.Context, op lint.Operation, path strin
 		}
 	}
 	if !reached {
-		return nil, "", nil
+		return nil, "", cellOf(exchange, false), nil
 	}
 	what := map[string]string{http.MethodGet: "read", http.MethodDelete: "delete"}[op.Method]
 	if what == "" {
@@ -208,7 +232,7 @@ func (r *runner) otherAccount(ctx context.Context, op lint.Operation, path strin
 		Fix: "On the server, check that the object belongs to the caller (or that the caller may " + what +
 			" it) before acting, and answer 404 otherwise.",
 		Evidence: evidence,
-	}, "", nil
+	}, "", cellOf(exchange, true), nil
 }
 
 // holds reports whether a JSON object body has every top-level field of
@@ -332,7 +356,10 @@ func (r *runner) sendFull(ctx context.Context, op lint.Operation, path string, w
 // response has shown one, so it runs as soon as its parameters can be
 // filled: GET /notes before GET /notes/{id}. Each pass calls every read
 // that has become callable; it stops when a pass calls nothing new.
-func (r *runner) discover(ctx context.Context, ops []lint.Operation, who caller, h *harvest) (*harvest, error) {
+//
+// It also returns what each read got, by operation, for the matrix.
+func (r *runner) discover(ctx context.Context, ops []lint.Operation, who caller, h *harvest) (*harvest, map[string]lint.Cell, error) {
+	cells := map[string]lint.Cell{}
 	done := make([]bool, len(ops))
 	for progress := true; progress; {
 		progress = false
@@ -347,14 +374,15 @@ func (r *runner) discover(ctx context.Context, ops []lint.Operation, who caller,
 			done[i], progress = true, true
 			exchange, body, err := r.sendFull(ctx, op, path, who)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
-			if exchange.Status >= 200 && exchange.Status < 300 {
+			cells[op.Method+" "+op.Path] = cellOf(exchange, false)
+			if success(exchange) {
 				h.add(op.Path, body)
 			}
 		}
 	}
-	return h, nil
+	return h, cells, nil
 }
 
 func lookupHost(ctx context.Context, host string) ([]netip.Addr, error) {

@@ -1,0 +1,38 @@
+## Procyon: ❌ failed
+
+| Severity | Findings |
+|---|---|
+| critical | 1 |
+| high | 0 |
+| medium | 0 |
+| low | 0 |
+| ignored | 0 |
+
+The run fails at **high** or above.
+
+### Findings
+
+#### CRITICAL · PRC102 · Another account reached A's object
+
+`specs/shop.yaml:9:5` · `DELETE /orders/{id}`
+
+**Why:** B deleted A's order.
+
+**Fix:** Check the owner. [More about PRC102](https://github.com/EduardoMG12/procyon/blob/main/docs/rules/PRC102.md)
+
+**Proof:**
+
+- `B: DELETE /orders/1 → 204`
+- `A: GET /orders/1 → 404` `{ "error": "no such order" }`
+
+### Authorization matrix
+
+What each caller got: ✅ allowed · 🚫 denied · ❌ finding · 🌐 public · ⏭️ skipped (see notes) · – not tested
+
+| Operation | A | B (A's objects) | Anonymous |
+|---|---|---|---|
+| `GET /health` | – | – | 🌐 |
+| `GET /orders` | ✅ 200 | – | 🚫 401 |
+| `GET /orders/{id}` | ✅ 200 | 🚫 404 | 🚫 401 |
+| `DELETE /orders/{id}` | – | ❌ 204 | 🚫 401 |
+| `GET /reports/{id}` | ⏭️ | ⏭️ | ⏭️ |

@@ -229,3 +229,24 @@ func TestEvidenceNeverHoldsPartOfAToken(t *testing.T) {
 		t.Errorf("evidence body ends %q, holding part of the token", exchange.Body[len(exchange.Body)-20:])
 	}
 }
+
+func TestRunFillsTheAuthorizationMatrix(t *testing.T) {
+	report, _ := runAgainst(t, false)
+	var got []string
+	for _, row := range report.Matrix {
+		got = append(got, fmt.Sprintf("%s A=%s %d B=%s %d anon=%s %d", row.Operation,
+			row.A.Outcome, row.A.Status, row.B.Outcome, row.B.Status, row.Anonymous.Outcome, row.Anonymous.Status))
+	}
+	want := []string{
+		"GET /health A=allowed 200 B= 0 anon=public 0",
+		"GET /me A=allowed 200 B= 0 anon=denied 401",
+		"GET /notes A=allowed 200 B= 0 anon=finding 200",
+		"GET /notes/{id} A=allowed 200 B=finding 200 anon=denied 401",
+		"POST /notes A= 0 B= 0 anon=denied 401",
+		"PUT /notes/{id} A= 0 B=finding 200 anon=denied 401",
+		"DELETE /notes/{id} A= 0 B=finding 204 anon=denied 401",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("matrix:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}

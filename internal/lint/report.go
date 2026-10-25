@@ -79,6 +79,9 @@ type Report struct {
 	Notes []Note
 	// FailOn is the fail threshold the run used.
 	FailOn Severity
+	// Matrix is a runtime test's authorization matrix, one row per
+	// operation in test order; empty for a lint.
+	Matrix []MatrixRow
 	// Sources holds the lines of every spec file read, by the same path
 	// findings use, so formats can show excerpts without reading files.
 	Sources map[string][]string
