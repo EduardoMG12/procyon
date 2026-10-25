@@ -79,6 +79,13 @@ func sarifFinding(f lint.Finding, index map[string]int, uri func(string) string)
 	if f.Operation != "" {
 		text = f.Operation + ": " + text
 	}
+	for i, e := range f.Evidence {
+		sep := " Proof: "
+		if i > 0 {
+			sep = "; "
+		}
+		text += sep + exchangeLine(e)
+	}
 	return sarifResult{
 		RuleID:    f.Rule.ID,
 		RuleIndex: index[f.Rule.ID],

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/EduardoMG12/procyon/internal/format"
@@ -159,5 +160,17 @@ func TestSARIFArtifactURIs(t *testing.T) {
 		if uri := log.Runs[0].Results[0].Locations[0].PhysicalLocation.ArtifactLocation.URI; uri != want {
 			t.Errorf("%s: uri = %q, want %q", file, uri, want)
 		}
+	}
+}
+
+func TestSARIFEvidence(t *testing.T) {
+	var got bytes.Buffer
+	report := lint.Report{FailOn: lint.High, Findings: []lint.Finding{bola}}
+	if err := format.SARIF(&got, report, "", []lint.Rule{bola.Rule}); err != nil {
+		t.Fatal(err)
+	}
+	want := "Proof: B: DELETE /orders/1 → 204; A: GET /orders/1 → 404"
+	if !strings.Contains(got.String(), want) {
+		t.Errorf("SARIF message does not contain %q:\n%s", want, got.String())
 	}
 }

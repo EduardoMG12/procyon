@@ -3,7 +3,7 @@
   "failed": true,
   "failOn": "high",
   "summary": {
-    "critical": 0,
+    "critical": 1,
     "high": 1,
     "medium": 0,
     "low": 0,
@@ -26,6 +26,39 @@
       "operation": "GET /orders",
       "why": "Anyone can call it.",
       "fix": "Add security."
+    },
+    {
+      "rule": {
+        "id": "PRC102",
+        "title": "Another account reached A's object",
+        "severity": "critical",
+        "owasp": "API1:2023 Broken Object Level Authorization",
+        "docs": "https://github.com/EduardoMG12/procyon/blob/main/docs/rules/PRC102.md"
+      },
+      "location": {
+        "file": "specs/shop.yaml",
+        "line": 9,
+        "column": 5
+      },
+      "operation": "DELETE /orders/{id}",
+      "why": "B deleted A's order.",
+      "fix": "Check the owner.",
+      "evidence": [
+        {
+          "caller": "B",
+          "method": "DELETE",
+          "url": "/orders/1",
+          "status": 204,
+          "body": ""
+        },
+        {
+          "caller": "A",
+          "method": "GET",
+          "url": "/orders/1",
+          "status": 404,
+          "body": "{\n  \"error\": \"no such order\"\n}"
+        }
+      ]
     }
   ],
   "ignored": [
