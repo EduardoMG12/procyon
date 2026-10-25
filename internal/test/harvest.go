@@ -1,13 +1,13 @@
 package test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"maps"
 	"net/url"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 )
 
@@ -22,8 +22,11 @@ type harvest struct {
 
 func newHarvest(declared map[string][]string) *harvest {
 	h := &harvest{byPath: map[string]map[string][]string{}, declared: map[string][]string{}}
-	for name, values := range declared {
-		h.declared[normalize(name)] = values
+	// Sorted, so order_id and orderId both declared give the same values
+	// on every run.
+	for _, name := range sortedKeys(declared) {
+		key := normalize(name)
+		h.declared[key] = append(h.declared[key], declared[name]...)
 	}
 	return h
 }
@@ -36,8 +39,8 @@ func normalize(name string) string {
 // add records the scalar fields of a JSON response body from path. A body
 // that is not JSON shows nothing.
 func (h *harvest) add(path string, body []byte) {
-	var v any
-	if json.Unmarshal(body, &v) != nil {
+	v, ok := decode(body)
+	if !ok {
 		return
 	}
 	fields := h.byPath[path]
@@ -47,32 +50,47 @@ func (h *harvest) add(path string, body []byte) {
 	}
 	walk(v, func(name, value string) {
 		key := normalize(name)
-		for _, seen := range fields[key] {
-			if seen == value {
-				return
-			}
+		if !slices.Contains(fields[key], value) {
+			fields[key] = append(fields[key], value)
 		}
-		fields[key] = append(fields[key], value)
 	})
 }
 
-// walk calls fn for every string or number field in v, at any depth.
+// decode parses JSON keeping numbers as written: as float64, the ID
+// 1234567890123456789 would become 1234567890123456800.
+func decode(body []byte) (any, bool) {
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	var v any
+	if dec.Decode(&v) != nil {
+		return nil, false
+	}
+	return v, true
+}
+
+// walk calls fn for every string or number field in v, breadth first: an
+// object's own fields before those of the objects inside it, so in
+// [{"id": "o7", "customer": {"id": "c1"}}] the order's id comes first.
+// Keys are visited in sorted order, so values are found in the same order
+// on every run.
 func walk(v any, fn func(name, value string)) {
-	switch v := v.(type) {
-	case map[string]any:
-		for _, name := range sortedKeys(v) { // so values are found in the same order every run
-			switch field := v[name].(type) {
-			case string:
-				fn(name, field)
-			case float64:
-				fn(name, strconv.FormatFloat(field, 'f', -1, 64))
-			default:
-				walk(v[name], fn)
+	queue := []any{v}
+	for len(queue) > 0 {
+		v, queue = queue[0], queue[1:]
+		switch v := v.(type) {
+		case map[string]any:
+			for _, name := range sortedKeys(v) {
+				switch field := v[name].(type) {
+				case string:
+					fn(name, field)
+				case json.Number:
+					fn(name, field.String())
+				case map[string]any, []any:
+					queue = append(queue, field)
+				}
 			}
-		}
-	case []any:
-		for _, item := range v {
-			walk(item, fn)
+		case []any:
+			queue = append(queue, v...)
 		}
 	}
 }
@@ -146,8 +164,8 @@ func (h *harvest) saw(value string) bool {
 // shows reports whether a JSON body holds one of values in any field: the
 // response is about the object those values name.
 func shows(body []byte, values []string) bool {
-	var v any
-	if json.Unmarshal(body, &v) != nil {
+	v, ok := decode(body)
+	if !ok {
 		return false
 	}
 	found := false

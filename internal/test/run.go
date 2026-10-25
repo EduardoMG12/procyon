@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -161,6 +162,9 @@ func (r *runner) otherAccount(ctx context.Context, op lint.Operation, path strin
 			return nil, "not tested as B: A could not read the object first", err
 		}
 		before = body
+		if op.Method != http.MethodDelete && holds(before, op.Body) {
+			return nil, "not tested as B: A's object already holds the request example's values, so a change could not be seen", nil
+		}
 	}
 	exchange, body, err := r.sendFull(ctx, op, path, b)
 	if err != nil || !success(exchange) {
@@ -174,10 +178,18 @@ func (r *runner) otherAccount(ctx context.Context, op lint.Operation, path strin
 			return nil, "", err
 		}
 		evidence = append(evidence, after)
-		if op.Method == http.MethodDelete {
-			reached = !success(after)
-		} else {
-			reached = success(after) && !bytes.Equal(before, afterBody)
+		switch {
+		case op.Method == http.MethodDelete && (after.Status == http.StatusNotFound || after.Status == http.StatusGone):
+			reached = true // gone
+		case op.Method == http.MethodDelete && !success(after):
+			// A 429 or a 503 says nothing about the object.
+			return nil, fmt.Sprintf("not confirmed: after B's delete, A's read got %d", after.Status), nil
+		case op.Method == http.MethodDelete:
+			reached = false // still there
+		default:
+			// Only the fields B sent count: a timestamp or a view counter
+			// changes on every read.
+			reached = success(after) && holds(afterBody, op.Body)
 		}
 	}
 	if !reached {
@@ -199,6 +211,25 @@ func (r *runner) otherAccount(ctx context.Context, op lint.Operation, path strin
 	}, "", nil
 }
 
+// holds reports whether a JSON object body has every top-level field of
+// the JSON object example with the same value. An example that is not an
+// object proves nothing either way.
+func holds(body, example []byte) bool {
+	got, ok1 := decode(body)
+	want, ok2 := decode(example)
+	gotFields, ok3 := got.(map[string]any)
+	wantFields, ok4 := want.(map[string]any)
+	if !ok1 || !ok2 || !ok3 || !ok4 || len(wantFields) == 0 {
+		return false
+	}
+	for name, value := range wantFields {
+		if !reflect.DeepEqual(gotFields[name], value) {
+			return false
+		}
+	}
+	return true
+}
+
 func success(exchange lint.Exchange) bool {
 	return exchange.Status >= 200 && exchange.Status < 300
 }
@@ -216,8 +247,9 @@ func unseen(values []string, ofB *harvest) []string {
 
 // inTestOrder orders operations as runtime tests run them: reads, then
 // writes, then deletes, so a destructive request never removes what a later
-// one needs. Within each group the spec's order (by path, then method) is
-// kept, so every run sends the same requests in the same order.
+// one needs. Within reads and writes the spec's order (by path, then method)
+// is kept; deletes go deepest path first. Every run sends the same requests
+// in the same order.
 func inTestOrder(ops []lint.Operation) []lint.Operation {
 	group := func(method string) int {
 		switch method {
@@ -229,7 +261,14 @@ func inTestOrder(ops []lint.Operation) []lint.Operation {
 		return 1 // POST, PUT, PATCH and anything else changes something
 	}
 	ops = slices.Clone(ops)
-	slices.SortStableFunc(ops, func(a, b lint.Operation) int { return cmp.Compare(group(a.Method), group(b.Method)) })
+	slices.SortStableFunc(ops, func(a, b lint.Operation) int {
+		if c := cmp.Compare(group(a.Method), group(b.Method)); c != 0 || group(a.Method) != 2 {
+			return c
+		}
+		// Deletes go deepest first: /users/{id}/notes/{noteId} before
+		// /users/{id}, whose delete could take the note with it.
+		return cmp.Compare(strings.Count(b.Path, "/"), strings.Count(a.Path, "/"))
+	})
 	return ops
 }
 
@@ -274,13 +313,16 @@ func (r *runner) sendFull(ctx context.Context, op lint.Operation, path string, w
 	if err != nil {
 		return lint.Exchange{}, nil, fmt.Errorf("%s %s: reading the response: %w", op.Method, op.Path, err)
 	}
-	excerpt := got[:min(len(got), maxBody)]
+	// Masked before it is cut: a token across the cut would otherwise
+	// leave its first characters unmasked.
+	excerpt := mask(string(got), r.tokens...)
+	excerpt = excerpt[:min(len(excerpt), maxBody)]
 	return lint.Exchange{
 		Caller: who.name,
 		Method: op.Method,
-		URL:    mask(req.URL.String(), r.tokens...),
+		URL:    mask(req.URL.RequestURI(), r.tokens...),
 		Status: resp.StatusCode,
-		Body:   mask(string(excerpt), r.tokens...),
+		Body:   excerpt,
 	}, got, nil
 }
 

@@ -2,11 +2,13 @@ package test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/EduardoMG12/procyon/internal/lint"
 	"github.com/EduardoMG12/procyon/internal/vulnapi"
@@ -75,12 +77,13 @@ func TestInTestOrder(t *testing.T) {
 	ops := []lint.Operation{
 		{Method: "DELETE", Path: "/a"}, {Method: "GET", Path: "/a"}, {Method: "POST", Path: "/a"},
 		{Method: "GET", Path: "/b"}, {Method: "PUT", Path: "/b"},
+		{Method: "DELETE", Path: "/a/{id}"}, {Method: "DELETE", Path: "/a/{id}/notes/{noteId}"},
 	}
 	var got []string
 	for _, op := range inTestOrder(ops) {
 		got = append(got, op.Method+" "+op.Path)
 	}
-	want := []string{"GET /a", "GET /b", "POST /a", "PUT /b", "DELETE /a"}
+	want := []string{"GET /a", "GET /b", "POST /a", "PUT /b", "DELETE /a/{id}/notes/{noteId}", "DELETE /a/{id}", "DELETE /a"}
 	if !slices.Equal(got, want) {
 		t.Errorf("order = %q, want %q", got, want)
 	}
@@ -130,8 +133,12 @@ func TestPRC102NeedsAsObjectInTheResponse(t *testing.T) {
 // A write that answers 2xx to B but leaves A's object as it was is a pass:
 // A reads it before and after.
 func TestPRC102WritesAreConfirmedByA(t *testing.T) {
+	var sentByB []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("Authorization")
+		if r.Method != "GET" && token == "Bearer "+vulnapi.TokenB {
+			sentByB = append(sentByB, r.Method+" "+r.URL.Path)
+		}
 		switch {
 		case token == "":
 			w.WriteHeader(http.StatusUnauthorized)
@@ -141,8 +148,10 @@ func TestPRC102WritesAreConfirmedByA(t *testing.T) {
 			w.Write([]byte(`{"id": "3", "owner": "bob"}`))
 		case r.Method == "GET" && token == "Bearer "+vulnapi.TokenB:
 			w.WriteHeader(http.StatusNotFound)
-		case r.Method == "GET": // A's own notes, never changed
+		case r.Method == "GET" && r.URL.Path == "/notes": // A's notes
 			w.Write([]byte(`[{"id": "1", "owner": "alice"}]`))
+		case r.Method == "GET": // A's note, never changed, but read at a new time on every read
+			fmt.Fprintf(w, `{"id": "1", "owner": "alice", "title": "Groceries", "readAt": %d}`, time.Now().UnixNano())
 		default: // B's PUT and DELETE say yes and do nothing
 			w.WriteHeader(http.StatusOK)
 		}
@@ -156,5 +165,67 @@ func TestPRC102WritesAreConfirmedByA(t *testing.T) {
 		if f.Rule.ID == "PRC102" {
 			t.Errorf("PRC102 on %s, want none: A's note never changed", f.Operation)
 		}
+	}
+	if want := []string{"PUT /notes/1", "DELETE /notes/1"}; !slices.Equal(sentByB, want) {
+		t.Errorf("B sent %q, want %q", sentByB, want)
+	}
+}
+
+// After B's delete, A's read failing for another reason (a rate limit, a
+// server error) is not proof the object is gone.
+func TestPRC102DeleteNeedsA404(t *testing.T) {
+	deleted := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := r.Header.Get("Authorization")
+		switch {
+		case token == "":
+			w.WriteHeader(http.StatusUnauthorized)
+		case r.Method == "DELETE":
+			deleted = true
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == "GET" && deleted:
+			w.WriteHeader(http.StatusTooManyRequests)
+		case r.Method == "GET" && r.URL.Path == "/notes" && token == "Bearer "+vulnapi.TokenA:
+			w.Write([]byte(`[{"id": "1"}]`))
+		case r.Method == "GET" && token == "Bearer "+vulnapi.TokenA:
+			w.Write([]byte(`{"id": "1"}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+	report, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range report.Findings {
+		if f.Operation == "DELETE /notes/{id}" {
+			t.Errorf("PRC102 on DELETE after a 429, want a note")
+		}
+	}
+	if !slices.ContainsFunc(report.Notes, func(n lint.Note) bool { return strings.Contains(n.Message, "A's read got 429") }) {
+		t.Errorf("notes = %v, want one saying A's read got 429", report.Notes)
+	}
+}
+
+// A token the API echoes across the excerpt's cut is still masked.
+func TestEvidenceNeverHoldsPartOfAToken(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(strings.Repeat("x", maxBody-10) + r.Header.Get("Authorization")))
+	}))
+	defer srv.Close()
+	target, err := checkTarget(context.Background(), srv.URL, lookupHost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := "secret-token-value"
+	r := &runner{client: newClient(target, time.Second, 10), target: target, tokens: []string{token}}
+	op := lint.Operation{Method: "GET", Path: "/me", Credential: &lint.Credential{In: "header", Name: "Authorization", Prefix: "Bearer "}}
+	exchange, err := r.send(context.Background(), op, "/me", caller{name: "A", token: token})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(exchange.Body, "secret") || strings.Contains(exchange.Body, "sec") {
+		t.Errorf("evidence body ends %q, holding part of the token", exchange.Body[len(exchange.Body)-20:])
 	}
 }

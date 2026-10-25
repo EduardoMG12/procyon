@@ -15,14 +15,16 @@ func TestHarvestFillsPathParameters(t *testing.T) {
 	h.add("/orders", []byte(`[{"id": 7, "customer": {"customerId": "c 1"}}, {"id": 8}]`))
 	h.add("/me", []byte(`{"id": "u1", "teamId": "t1"}`))
 	h.add("/broken", []byte(`not json`))
+	h.add("/invoices", []byte(`[{"customer": {"id": "c9"}, "id": 1234567890123456789}]`))
 
 	tests := []struct{ path, want, err string }{
 		{"/orders/{id}", "/orders/7", ""},                    // the parent collection's id, in order
 		{"/orders/{orderId}", "/orders/7", ""},               // a parent's id fills {orderId}
 		{"/customers/{customer_id}", "/customers/c%201", ""}, // the same name anywhere; escaped
 		{"/teams/{teamId}/members", "/teams/t1/members", ""},
-		{"/reports/{reportId}", "/reports/r-9", ""}, // declared in .procyon.yaml
-		{"/invoices/{invoiceId}", "", "no value for {invoiceId}"},
+		{"/reports/{reportId}", "/reports/r-9", ""},             // declared in .procyon.yaml
+		{"/invoices/{id}", "/invoices/1234567890123456789", ""}, // its own id, not the nested customer's; no float rounding
+		{"/payments/{paymentId}", "", "no value for {paymentId}"},
 	}
 	for _, tt := range tests {
 		got, _, err := h.fill(tt.path)
@@ -69,5 +71,16 @@ func TestDiscoverFollowsDependencies(t *testing.T) {
 	want := []string{"/projects", "/projects/p1", "/owners/u7"}
 	if !slices.Equal(calls, want) {
 		t.Errorf("calls = %q, want %q", calls, want)
+	}
+}
+
+// Two declared names that mean the same parameter give the same value on
+// every run.
+func TestDeclaredIDsAreDeterministic(t *testing.T) {
+	for range 20 {
+		h := newHarvest(map[string][]string{"order_id": {"a"}, "orderId": {"b"}})
+		if got, _, _ := h.fill("/o/{orderId}"); got != "/o/b" {
+			t.Fatalf("fill = %q, want /o/b (orderId sorts before order_id)", got)
+		}
 	}
 }
