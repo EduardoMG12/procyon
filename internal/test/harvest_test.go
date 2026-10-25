@@ -1,0 +1,73 @@
+package test
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"slices"
+	"testing"
+
+	"github.com/EduardoMG12/procyon/internal/lint"
+)
+
+func TestHarvestFillsPathParameters(t *testing.T) {
+	h := newHarvest(map[string][]string{"report_id": {"r-9"}})
+	h.add("/orders", []byte(`[{"id": 7, "customer": {"customerId": "c 1"}}, {"id": 8}]`))
+	h.add("/me", []byte(`{"id": "u1", "teamId": "t1"}`))
+	h.add("/broken", []byte(`not json`))
+
+	tests := []struct{ path, want, err string }{
+		{"/orders/{id}", "/orders/7", ""},                    // the parent collection's id, in order
+		{"/orders/{orderId}", "/orders/7", ""},               // a parent's id fills {orderId}
+		{"/customers/{customer_id}", "/customers/c%201", ""}, // the same name anywhere; escaped
+		{"/teams/{teamId}/members", "/teams/t1/members", ""},
+		{"/reports/{reportId}", "/reports/r-9", ""}, // declared in .procyon.yaml
+		{"/invoices/{invoiceId}", "", "no value for {invoiceId}"},
+	}
+	for _, tt := range tests {
+		got, err := h.fill(tt.path)
+		if tt.err != "" {
+			if err == nil || err.Error() != tt.err {
+				t.Errorf("fill(%s) error = %v, want %q", tt.path, err, tt.err)
+			}
+			continue
+		}
+		if err != nil || got != tt.want {
+			t.Errorf("fill(%s) = %q, %v; want %q", tt.path, got, err, tt.want)
+		}
+	}
+}
+
+// discover calls a read as soon as an earlier response gave it a value,
+// however the operations are ordered.
+func TestDiscoverFollowsDependencies(t *testing.T) {
+	var calls []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.URL.Path)
+		switch r.URL.Path {
+		case "/projects":
+			w.Write([]byte(`[{"id": "p1"}]`))
+		case "/projects/p1":
+			w.Write([]byte(`{"id": "p1", "ownerId": "u7"}`))
+		}
+	}))
+	defer srv.Close()
+	ops := []lint.Operation{ // a later read unlocks an earlier one
+		{Method: "GET", Path: "/owners/{ownerId}"},
+		{Method: "GET", Path: "/projects/{id}"},
+		{Method: "GET", Path: "/projects"},
+		{Method: "DELETE", Path: "/projects/{id}"}, // never called while discovering
+	}
+	target, err := checkTarget(context.Background(), srv.URL, lookupHost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &runner{client: newClient(target, 0, 10), target: target}
+	if _, err := r.discover(context.Background(), ops, caller{name: "A"}, newHarvest(nil)); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"/projects", "/projects/p1", "/owners/u7"}
+	if !slices.Equal(calls, want) {
+		t.Errorf("calls = %q, want %q", calls, want)
+	}
+}

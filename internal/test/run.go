@@ -31,10 +31,17 @@ type Options struct {
 	// TokenA and TokenB are the test accounts' tokens (PROCYON_USER_A_TOKEN,
 	// PROCYON_USER_B_TOKEN). B must not be allowed to touch A's objects.
 	TokenA, TokenB string
+	// IDs are values of A's objects by path parameter name, for objects A's
+	// responses never show (test.ids in .procyon.yaml).
+	IDs map[string][]string
 }
 
-// maxBody is how much of a response body evidence keeps.
-const maxBody = 200
+// maxBody is how much of a response body evidence keeps; maxResponse is
+// how much of it Procyon reads, to find IDs in.
+const (
+	maxBody     = 200
+	maxResponse = 1 << 20
+)
 
 // Run tests the API at opts.BaseURL against the spec at specPath.
 func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error) {
@@ -53,18 +60,26 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 	c := newClient(target, cmp.Or(opts.Timeout, 10*time.Second), cmp.Or(opts.Budget, 1000))
 	r := &runner{client: c, target: target, tokens: []string{opts.TokenA, opts.TokenB}}
 
+	ops := inTestOrder(spec.Operations())
+	a := caller{name: "A", token: opts.TokenA}
+	ofA, err := r.discover(ctx, ops, a, newHarvest(opts.IDs))
+	if err != nil {
+		return lint.Report{}, err
+	}
+
 	var findings []lint.Finding
 	var notes []lint.Note
-	for _, op := range inTestOrder(spec.Operations()) {
-		if strings.Contains(op.Path, "{") {
-			notes = append(notes, lint.Note{Location: op.Location,
-				Message: fmt.Sprintf("%s %s not tested yet: its path needs a value Procyon cannot fill", op.Method, op.Path)})
+	for _, op := range ops {
+		path, err := ofA.fill(op.Path)
+		if err != nil {
+			notes = append(notes, lint.Note{Location: op.Location, Message: fmt.Sprintf(
+				"%s %s not tested: %v in A's responses; declare one under test.ids in .procyon.yaml", op.Method, op.Path, err)})
 			continue
 		}
 		if op.Public {
 			continue
 		}
-		exchange, err := r.send(ctx, op, anonymous)
+		exchange, err := r.send(ctx, op, path, anonymous)
 		if err != nil {
 			return lint.Report{}, err
 		}
@@ -118,31 +133,69 @@ type runner struct {
 // send calls one operation as who and records the exchange, with every
 // token masked. A request that cannot be sent at all (the API is down, the
 // budget is used up) stops the run: its findings would be incomplete.
-func (r *runner) send(ctx context.Context, op lint.Operation, who caller) (lint.Exchange, error) {
+func (r *runner) send(ctx context.Context, op lint.Operation, path string, who caller) (lint.Exchange, error) {
+	exchange, _, err := r.sendFull(ctx, op, path, who)
+	return exchange, err
+}
+
+// sendFull is send, also returning the response body (up to maxResponse).
+func (r *runner) sendFull(ctx context.Context, op lint.Operation, path string, who caller) (lint.Exchange, []byte, error) {
 	u := *r.target
-	u.Path = strings.TrimSuffix(r.target.Path, "/") + op.Path
+	u.Path = strings.TrimSuffix(r.target.Path, "/") + path
 	req, err := http.NewRequestWithContext(ctx, op.Method, u.String(), nil)
 	if err != nil {
-		return lint.Exchange{}, fmt.Errorf("%s %s: %w", op.Method, op.Path, err)
+		return lint.Exchange{}, nil, fmt.Errorf("%s %s: %w", op.Method, op.Path, err)
 	}
 	authorize(req, op.Credential, who.token)
 	resp, err := r.client.do(req)
 	if err != nil {
 		// The error may quote the URL, and a query-string token with it.
-		return lint.Exchange{}, fmt.Errorf("%s %s: %s", op.Method, op.Path, mask(err.Error(), r.tokens...))
+		return lint.Exchange{}, nil, fmt.Errorf("%s %s: %s", op.Method, op.Path, mask(err.Error(), r.tokens...))
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse))
 	if err != nil {
-		return lint.Exchange{}, fmt.Errorf("%s %s: reading the response: %w", op.Method, op.Path, err)
+		return lint.Exchange{}, nil, fmt.Errorf("%s %s: reading the response: %w", op.Method, op.Path, err)
 	}
+	excerpt := body[:min(len(body), maxBody)]
 	return lint.Exchange{
 		Caller: who.name,
 		Method: op.Method,
 		URL:    mask(req.URL.String(), r.tokens...),
 		Status: resp.StatusCode,
-		Body:   mask(string(body), r.tokens...),
-	}, nil
+		Body:   mask(string(excerpt), r.tokens...),
+	}, body, nil
+}
+
+// discover calls who's reads (GET operations) and records what their
+// responses show, so other operations' path parameters can be filled with
+// who's objects. A read whose path needs a value waits until an earlier
+// response has shown one, so it runs as soon as its parameters can be
+// filled: GET /notes before GET /notes/{id}. Each pass calls every read
+// that has become callable; it stops when a pass calls nothing new.
+func (r *runner) discover(ctx context.Context, ops []lint.Operation, who caller, h *harvest) (*harvest, error) {
+	done := make([]bool, len(ops))
+	for progress := true; progress; {
+		progress = false
+		for i, op := range ops {
+			if done[i] || op.Method != http.MethodGet {
+				continue
+			}
+			path, err := h.fill(op.Path)
+			if err != nil {
+				continue // not yet
+			}
+			done[i], progress = true, true
+			exchange, body, err := r.sendFull(ctx, op, path, who)
+			if err != nil {
+				return nil, err
+			}
+			if exchange.Status >= 200 && exchange.Status < 300 {
+				h.add(op.Path, body)
+			}
+		}
+	}
+	return h, nil
 }
 
 func lookupHost(ctx context.Context, host string) ([]netip.Addr, error) {

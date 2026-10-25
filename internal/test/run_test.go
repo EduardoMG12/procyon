@@ -51,9 +51,10 @@ func TestRunFindsNothingInTheFixedTwin(t *testing.T) {
 	if len(got) != 0 || report.Failed {
 		t.Errorf("fixed API: findings %q, failed %v; want none", got, report.Failed)
 	}
-	// Operations Procyon cannot call yet are visible, never silently passed.
-	if len(report.Notes) != 3 {
-		t.Errorf("notes = %v, want one per operation on /notes/{id}", report.Notes)
+	// A's GET /notes showed note IDs, so every operation on /notes/{id} was
+	// called: nothing is left untested.
+	if len(report.Notes) != 0 {
+		t.Errorf("notes = %v, want none", report.Notes)
 	}
 }
 

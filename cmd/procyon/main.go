@@ -54,12 +54,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 type command struct {
 	name  string
 	flags func(*flag.FlagSet) // registers the command's own flags, or nil
-	run   func(spec string, failOn lint.Severity, refRoot string) (lint.Report, error)
+	run   func(spec string, failOn lint.Severity, refRoot string, cfg config) (lint.Report, error)
 }
 
 var lintCommand = command{
 	name: "lint",
-	run: func(spec string, failOn lint.Severity, refRoot string) (lint.Report, error) {
+	run: func(spec string, failOn lint.Severity, refRoot string, _ config) (lint.Report, error) {
 		return lint.Run(spec, lint.Options{FailOn: failOn, RefRoot: refRoot})
 	},
 }
@@ -69,13 +69,14 @@ func testCommand() command {
 	return command{
 		name:  "test",
 		flags: func(f *flag.FlagSet) { f.StringVar(&baseURL, "base-url", "", "") },
-		run: func(spec string, failOn lint.Severity, refRoot string) (lint.Report, error) {
+		run: func(spec string, failOn lint.Severity, refRoot string, cfg config) (lint.Report, error) {
 			if baseURL == "" {
 				return lint.Report{}, errors.New("--base-url is required: where the copy of your API under test runs")
 			}
 			return test.Run(context.Background(), spec, test.Options{
 				BaseURL: baseURL, FailOn: failOn, RefRoot: refRoot,
 				TokenA: os.Getenv("PROCYON_USER_A_TOKEN"), TokenB: os.Getenv("PROCYON_USER_B_TOKEN"),
+				IDs: cfg.Test.IDs,
 			})
 		},
 	}
@@ -137,7 +138,7 @@ func runCommand(cmd command, args []string, stdout, stderr io.Writer) int {
 	}
 	defer closeAll(files)
 
-	report, err := cmd.run(specs[0], threshold, *refRoot)
+	report, err := cmd.run(specs[0], threshold, *refRoot, cfg)
 	if err != nil {
 		fmt.Fprintf(stderr, "procyon: %v\n", err)
 		return exitUsage
