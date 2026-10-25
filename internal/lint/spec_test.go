@@ -161,3 +161,22 @@ func TestRootIgnoreCoversARuntimeFindingAboutTheSpec(t *testing.T) {
 		t.Errorf("findings %v, ignored %v; want PRC105 ignored", report.Findings, report.Ignored)
 	}
 }
+
+func TestExampleBodyFromPropertyExamples(t *testing.T) {
+	spec, err := Load("../../testdata/specs/runtime-vampi-like.yaml", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, op := range spec.Operations() {
+		switch op.Method + " " + op.Path {
+		case "PUT /users/{username}/password":
+			if string(op.Body) != `{"password":"new-password"}` || !op.NeedsAuth {
+				t.Errorf("password body %s, needs auth %v", op.Body, op.NeedsAuth)
+			}
+		case "GET /users":
+			if op.NeedsAuth {
+				t.Error("GET /users has no security, NeedsAuth is true")
+			}
+		}
+	}
+}

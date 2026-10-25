@@ -95,29 +95,38 @@ func walk(v any, fn func(name, value string)) {
 	}
 }
 
-// value returns a value for parameter param of path, or false. In order:
+// pick returns a value for parameter param of path, or false. In order:
 //
 //  1. the parent collection's field of the same name, then its "id":
 //     GET /notes fills /notes/{id} and /notes/{noteId};
 //  2. a field of the same name anywhere, for paths sorted by name;
 //  3. a value declared in .procyon.yaml.
-func (h *harvest) value(path, param string) (string, bool) {
+//
+// It takes the first value found or, with last, the last one (another of
+// A's objects, when there are several).
+func (h *harvest) pick(path, param string, last bool) (string, bool) {
+	choose := func(values []string) string {
+		if last {
+			return values[len(values)-1]
+		}
+		return values[0]
+	}
 	key := normalize(param)
 	parent, _, _ := strings.Cut(path, "/{"+param+"}")
 	if fields := h.byPath[parent]; fields != nil {
 		for _, field := range []string{key, "id"} {
 			if values := fields[field]; len(values) > 0 {
-				return values[0], true
+				return choose(values), true
 			}
 		}
 	}
 	for _, p := range sortedKeys(h.byPath) {
 		if values := h.byPath[p][key]; len(values) > 0 {
-			return values[0], true
+			return choose(values), true
 		}
 	}
 	if values := h.declared[key]; len(values) > 0 {
-		return values[0], true
+		return choose(values), true
 	}
 	return "", false
 }
@@ -132,11 +141,16 @@ var pathParam = regexp.MustCompile(`\{([^}]+)\}`)
 // fill replaces every parameter of path with a value, or reports the first
 // one it has none for. It also returns the values used, unescaped.
 func (h *harvest) fill(path string) (string, []string, error) {
+	return h.fillWith(path, false)
+}
+
+// fillWith is fill, with the last value of each parameter when last is set.
+func (h *harvest) fillWith(path string, last bool) (string, []string, error) {
 	var missing string
 	var values []string
 	filled := pathParam.ReplaceAllStringFunc(path, func(m string) string {
 		name := m[1 : len(m)-1]
-		v, ok := h.value(path, name)
+		v, ok := h.pick(path, name, last)
 		if !ok && missing == "" {
 			missing = name
 		}

@@ -108,6 +108,7 @@ func testCommand() command {
 				IDs:    cfg.Test.IDs,
 				LoginA: cfg.Test.Accounts.A.Login, LoginB: cfg.Test.Accounts.B.Login,
 				BaseSpec: baseSpec,
+				Skip:     cfg.Test.Skip,
 			})
 		},
 	}

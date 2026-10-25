@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
+	"net"
 	"slices"
 	"strings"
 
@@ -131,6 +133,17 @@ func (r *runner) malformed(ctx context.Context, op lint.Operation, path string, 
 		bad := op
 		bad.Body = m.body
 		exchange, err := r.send(ctx, bad, path, a)
+		var timeout net.Error
+		if errors.As(err, &timeout) && timeout.Timeout() {
+			// No answer at all is the worst way to fail: a body that keeps
+			// the server busy (a regular expression that backtracks, a
+			// loop) takes it down for everyone.
+			crashed = append(crashed, m.what+": no answer within the timeout")
+			sent := mask(string(m.body), r.tokens...)
+			crashEvidence = append(crashEvidence, lint.Exchange{Caller: a.name, Method: op.Method, URL: path,
+				Sent: sent[:min(len(sent), maxBody)], Body: "(no answer)"})
+			continue
+		}
 		if err != nil {
 			return nil, "", err
 		}

@@ -324,3 +324,57 @@ func TestRunWithABaseSpecTestsOnlyChangedOperations(t *testing.T) {
 		t.Errorf("skipped rows %d, notes %v; want 5 and the unchanged note", skipped, report.Notes)
 	}
 }
+
+// What the VAmPI benchmark taught: an operation the spec leaves open is not
+// PRC101; IDs every user can list still lead to a PRC102 when B gets A's
+// secret; a write Procyon cannot check is a note; a body that hangs the
+// server is PRC103 and the run goes on; test.skip is never called.
+func TestLessonsFromVAmPI(t *testing.T) {
+	reset := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := map[string]string{"Bearer " + vulnapi.TokenA: "alice", "Bearer " + vulnapi.TokenB: "bob"}[r.Header.Get("Authorization")]
+		switch {
+		case r.URL.Path == "/reset":
+			reset = true
+		case r.URL.Path == "/users":
+			w.Write([]byte(`[{"username": "alice"}, {"username": "bob"}]`))
+		case user == "":
+			w.WriteHeader(http.StatusUnauthorized)
+		case r.URL.Path == "/books":
+			w.Write([]byte(`[{"title": "alices-book", "user": "alice"}, {"title": "bobs-book", "user": "bob"}]`))
+		case strings.HasPrefix(r.URL.Path, "/books/"):
+			title := strings.TrimPrefix(r.URL.Path, "/books/")
+			fmt.Fprintf(w, `{"title": %q, "secret": "secret of %s"}`, title, title)
+		case strings.HasSuffix(r.URL.Path, "/password"):
+			w.WriteHeader(http.StatusNoContent)
+		case r.URL.Path == "/comments":
+			if r.ContentLength > 1000 {
+				time.Sleep(time.Second) // a regular expression that backtracks
+			}
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	}))
+	defer srv.Close()
+	report, err := Run(context.Background(), "../../testdata/specs/runtime-vampi-like.yaml", Options{
+		BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB,
+		Timeout: 300 * time.Millisecond, Skip: []string{"GET /reset"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, f := range report.Findings {
+		got = append(got, f.Rule.ID+" "+f.Operation)
+	}
+	if want := []string{"PRC102 GET /books/{title}", "PRC103 POST /comments"}; !slices.Equal(got, want) {
+		t.Errorf("findings %q, want %q", got, want)
+	}
+	if reset {
+		t.Error("GET /reset was called, though listed in Skip")
+	}
+	for _, want := range []string{"PUT /users/{username}/password: not confirmed", "GET /reset not called"} {
+		if !slices.ContainsFunc(report.Notes, func(n lint.Note) bool { return strings.Contains(n.Message, want) }) {
+			t.Errorf("no note %q in %v", want, report.Notes)
+		}
+	}
+}

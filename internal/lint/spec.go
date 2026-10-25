@@ -25,6 +25,9 @@ type Operation struct {
 	Location Location
 	// Public is true when the operation is marked x-procyon-public.
 	Public bool
+	// NeedsAuth is true when the spec requires credentials for it (a
+	// security requirement, or a required credential parameter).
+	NeedsAuth bool
 	// Credential is how a caller's token goes into a request: the first way
 	// the spec allows. Nil when the operation needs none, or only ways
 	// Procyon cannot send (mutual TLS, several schemes at once).
@@ -82,6 +85,7 @@ func (s *Spec) Operations() []Operation {
 			Path:       path,
 			Location:   s.files.asGiven(locate(op.Origin)),
 			Public:     publicReason(op) != "",
+			NeedsAuth:  !unauthenticated(s.doc, path, op),
 			Credential: credentialOf(s.doc, path, op),
 			Body:       exampleBody(op),
 			NeedsBody:  op.RequestBody != nil && op.RequestBody.Value != nil && op.RequestBody.Value.Required,
@@ -161,6 +165,9 @@ func exampleBody(op *openapi3.Operation) []byte {
 	}
 	if example == nil && media.Schema != nil && media.Schema.Value != nil {
 		example = media.Schema.Value.Example
+		if example == nil {
+			example = fromProperties(media.Schema.Value)
+		}
 	}
 	if example == nil {
 		return nil
@@ -170,6 +177,28 @@ func exampleBody(op *openapi3.Operation) []byte {
 		return nil
 	}
 	return body
+}
+
+// fromProperties builds an object example from its properties' own
+// examples (`password: {type: string, example: pass4}`), or nil when a
+// required property has none: a body missing it would be refused for the
+// wrong reason.
+func fromProperties(schema *openapi3.Schema) any {
+	example := map[string]any{}
+	for name, prop := range schema.Properties {
+		if prop != nil && prop.Value != nil && prop.Value.Example != nil && !prop.Value.ReadOnly {
+			example[name] = prop.Value.Example
+		}
+	}
+	for _, name := range schema.Required {
+		if _, ok := example[name]; !ok {
+			return nil
+		}
+	}
+	if len(example) == 0 {
+		return nil
+	}
+	return example
 }
 
 // bodyFields lists the top-level properties of an operation's JSON request

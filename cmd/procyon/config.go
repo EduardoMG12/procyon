@@ -26,6 +26,8 @@ type config struct {
 		// IDs are values of test account A's objects by path parameter
 		// name, for objects A's responses never show.
 		IDs map[string][]string `yaml:"ids"`
+		// Skip lists operations never called ("GET /createdb").
+		Skip []string `yaml:"skip"`
 		// Accounts declare how test accounts A and B log in.
 		Accounts struct {
 			A struct {
