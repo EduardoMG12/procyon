@@ -11,6 +11,7 @@ CRITICAL PRC102  Another account reached A's object
         Fix:  Check the owner.
         Proof:
           B: DELETE /orders/1 → 204
+            sent {"reason": "x"}
           A: GET /orders/1 → 404
             { "error": "no such order" }
         More: https://github.com/EduardoMG12/procyon/blob/main/docs/rules/PRC102.md

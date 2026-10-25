@@ -49,6 +49,9 @@ func Markdown(w io.Writer, report lint.Report) error {
 		}
 		for _, e := range f.Evidence {
 			fmt.Fprintf(&b, "- %s", code(exchangeLine(e)))
+			if sent := flatten(e.Sent); sent != "" {
+				b.WriteString(" sent " + code(sent))
+			}
 			if body := flatten(e.Body); body != "" {
 				b.WriteString(" " + code(body))
 			}

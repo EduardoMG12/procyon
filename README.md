@@ -119,6 +119,8 @@ Runtime rules, found by `procyon test` against a running copy of the API
 |---|---|---|
 | [PRC101](docs/rules/PRC101.md) | critical | Anonymous caller reached an operation that requires authentication |
 | [PRC102](docs/rules/PRC102.md) | critical | Another account reached A's object (BOLA) |
+| [PRC103](docs/rules/PRC103.md) | medium | Malformed request made the server fail |
+| [PRC104](docs/rules/PRC104.md) | low | Server accepted a request the spec forbids |
 
 ## What it can and cannot see
 

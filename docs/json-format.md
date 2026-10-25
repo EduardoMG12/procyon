@@ -51,7 +51,7 @@ version; removing or renaming one bumps it. Scripts should check
 | `summary` | Findings per severity, and how many were ignored |
 | `findings` | What is wrong, most serious first is **not** guaranteed: they are in file, line, column order |
 | `findings[].operation` | `"GET /orders"`; absent for findings about no operation (a scheme, a server) |
-| `findings[].evidence` | Runtime findings only (`procyon test`): the requests that prove it, in order, each `{caller, method, url, status, body}`. `caller` is `"A"`, `"B"` or `"anonymous"`, `url` the path and query sent, `body` the start of the response. Tokens are masked as `****`. Absent for lint findings |
+| `findings[].evidence` | Runtime findings only (`procyon test`): the requests that prove it, in order, each `{caller, method, url, status, body, sent}`. `caller` is `"A"`, `"B"` or `"anonymous"`, `url` the path and query sent, `body` the start of the response, `sent` the start of the request body (absent when there was none). Tokens are masked as `****`. Absent for lint findings |
 | `ignored` | Findings an `x-procyon-ignore` matched, with its `reason` and optional `expires` |
 | `notes` | Expired or unused ignores; they never fail the run |
 

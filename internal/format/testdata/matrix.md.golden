@@ -22,7 +22,7 @@ The run fails at **high** or above.
 
 **Proof:**
 
-- `B: DELETE /orders/1 → 204`
+- `B: DELETE /orders/1 → 204` sent `{"reason": "x"}`
 - `A: GET /orders/1 → 404` `{ "error": "no such order" }`
 
 ### Authorization matrix

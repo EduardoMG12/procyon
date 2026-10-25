@@ -47,7 +47,7 @@ var bola = lint.Finding{
 	Why:       "B deleted A's order.",
 	Fix:       "Check the owner.",
 	Evidence: []lint.Exchange{
-		{Caller: "B", Method: "DELETE", URL: "/orders/1", Status: 204},
+		{Caller: "B", Method: "DELETE", URL: "/orders/1", Status: 204, Sent: `{"reason": "x"}`},
 		{Caller: "A", Method: "GET", URL: "/orders/1", Status: 404, Body: "{\n  \"error\": \"no such order\"\n}"},
 	},
 }

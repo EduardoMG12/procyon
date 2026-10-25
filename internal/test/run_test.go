@@ -35,14 +35,19 @@ func runAgainst(t *testing.T, fixed bool) (lint.Report, []string) {
 
 func TestRunFindsThePlantedVulnerabilities(t *testing.T) {
 	report, got := runAgainst(t, false)
-	want := []string{"PRC101 GET /notes", "PRC102 GET /notes/{id}", "PRC102 PUT /notes/{id}", "PRC102 DELETE /notes/{id}"}
+	want := []string{
+		"PRC101 GET /notes",
+		"PRC103 POST /notes", "PRC104 POST /notes",
+		"PRC102 GET /notes/{id}", "PRC102 PUT /notes/{id}", "PRC103 PUT /notes/{id}", "PRC104 PUT /notes/{id}",
+		"PRC102 DELETE /notes/{id}",
+	}
 	if !slices.Equal(got, want) {
 		t.Errorf("vulnerable API: findings %q, want %q", got, want)
 	}
 	if !report.Failed {
 		t.Error("a critical finding did not fail the run")
 	}
-	bola := report.Findings[1].Evidence
+	bola := report.Findings[slices.Index(got, "PRC102 GET /notes/{id}")].Evidence
 	if len(bola) != 1 || bola[0].Caller != "B" || !strings.HasSuffix(bola[0].URL, "/notes/1") ||
 		strings.Contains(bola[0].URL+bola[0].Body, vulnapi.TokenB) {
 		t.Errorf("PRC102 evidence = %+v, want B's GET /notes/1, with no token", bola)
@@ -249,5 +254,31 @@ func TestRunFillsTheAuthorizationMatrix(t *testing.T) {
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("matrix:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// A lax server stores an accepted malformed write, which can leave A's
+// object holding the example; B's checks run first, so PRC102 is still
+// found (the malformed pass runs after every write's B check).
+func TestMalformedWritesNeverHidePRC102(t *testing.T) {
+	srv := httptest.NewServer(vulnapi.New(false))
+	defer srv.Close()
+	report, err := Run(context.Background(), "../../testdata/specs/runtime-notes-title-only.yaml",
+		Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(report.Findings, func(f lint.Finding) bool { return f.Rule.ID == "PRC102" && f.Operation == "PUT /notes/{id}" }) {
+		t.Errorf("findings %v, want PRC102 on PUT /notes/{id}", report.Findings)
+	}
+	// What was sent is in the evidence: each mutation tells itself apart.
+	for _, f := range report.Findings {
+		if f.Rule.ID == "PRC104" {
+			for _, e := range f.Evidence {
+				if e.Sent == "" {
+					t.Errorf("PRC104 evidence %+v has no request body", e)
+				}
+			}
+		}
 	}
 }

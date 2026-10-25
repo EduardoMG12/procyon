@@ -49,7 +49,8 @@
           "method": "DELETE",
           "url": "/orders/1",
           "status": 204,
-          "body": ""
+          "body": "",
+          "sent": "{\"reason\": \"x\"}"
         },
         {
           "caller": "A",

@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -120,6 +121,30 @@ func TestOperationExampleBodies(t *testing.T) {
 		}
 		if string(op.Body) != want || op.NeedsBody != needs {
 			t.Errorf("%s %s: body %s, needs %v; want %s, %v", op.Method, op.Path, op.Body, op.NeedsBody, want, needs)
+		}
+	}
+}
+
+func TestOperationBodyFields(t *testing.T) {
+	spec, err := Load("../vulnapi/openapi.yaml", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, op := range spec.Operations() {
+		if op.Method != "POST" || op.Path != "/notes" {
+			continue
+		}
+		var got []string
+		for _, f := range op.Fields {
+			max := "none"
+			if f.MaxLength != nil {
+				max = fmt.Sprint(*f.MaxLength)
+			}
+			got = append(got, fmt.Sprintf("%s %v required=%v max=%s", f.Name, f.Types, f.Required, max))
+		}
+		want := []string{"body [string] required=false max=10000", "title [string] required=true max=100"}
+		if !slices.Equal(got, want) {
+			t.Errorf("fields = %q, want %q", got, want)
 		}
 	}
 }

@@ -61,6 +61,7 @@ type jsonExchange struct {
 	URL    string `json:"url"`
 	Status int    `json:"status"`
 	Body   string `json:"body"`
+	Sent   string `json:"sent,omitempty"`
 }
 
 type jsonIgnored struct {
@@ -127,7 +128,7 @@ func toJSON(f lint.Finding) jsonFinding {
 func evidenceJSON(exchanges []lint.Exchange) []jsonExchange {
 	var out []jsonExchange
 	for _, e := range exchanges {
-		out = append(out, jsonExchange{e.Caller, e.Method, e.URL, e.Status, e.Body})
+		out = append(out, jsonExchange{e.Caller, e.Method, e.URL, e.Status, e.Body, e.Sent})
 	}
 	return out
 }

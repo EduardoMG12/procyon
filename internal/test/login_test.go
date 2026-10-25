@@ -35,7 +35,8 @@ func TestLoginGivesTheSameFindingsAsTokens(t *testing.T) {
 			}
 		}
 	}
-	want := []string{"PRC101 GET /notes", "PRC102 GET /notes/{id}", "PRC102 PUT /notes/{id}", "PRC102 DELETE /notes/{id}"}
+	want := []string{"PRC101 GET /notes", "PRC103 POST /notes", "PRC104 POST /notes", "PRC102 GET /notes/{id}",
+		"PRC102 PUT /notes/{id}", "PRC103 PUT /notes/{id}", "PRC104 PUT /notes/{id}", "PRC102 DELETE /notes/{id}"}
 	if !slices.Equal(got, want) {
 		t.Errorf("findings %q, want %q", got, want)
 	}

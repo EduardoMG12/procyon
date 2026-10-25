@@ -27,7 +27,7 @@ Two seeded test accounts, by bearer token:
 | PRC102 | `PUT /notes/{id}` | B changes A's note | `404` |
 | PRC102 | `DELETE /notes/{id}` | B deletes A's note | `404` |
 | PRC103 | `POST`, `PUT /notes…` | a body that is not a note (`{"title": 42}`) gives a `500` | `400` |
-| PRC104 | `POST`, `PUT /notes…` | a missing `title`, or one past `maxLength: 100`, is accepted | `400` |
+| PRC104 | `POST`, `PUT /notes…` | a missing `title`, or a `title` or `body` past its `maxLength`, is accepted | `400` |
 
 Not vulnerable in either: `GET /health` and `POST /login` (public on purpose), `GET /me`, and
 anonymous calls to every other operation (`401`).

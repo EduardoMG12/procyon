@@ -10,7 +10,7 @@ import (
 // linting the spec. Their catalog lives here, next to the lint rules, so an
 // x-procyon-ignore can name either kind and a typo in either is caught.
 // They have no check: internal/test produces their findings.
-var runtimeRules = []Rule{prc101, prc102}
+var runtimeRules = []Rule{prc101, prc102, prc103, prc104}
 
 var prc101 = Rule{
 	ID:       "PRC101",
@@ -24,6 +24,20 @@ var prc102 = Rule{
 	Title:    "Another account reached A's object",
 	Severity: Critical,
 	OWASP:    "API1:2023 Broken Object Level Authorization",
+}
+
+var prc103 = Rule{
+	ID:       "PRC103",
+	Title:    "Malformed request made the server fail",
+	Severity: Medium,
+	OWASP:    "API8:2023 Security Misconfiguration",
+}
+
+var prc104 = Rule{
+	ID:       "PRC104",
+	Title:    "Server accepted a request the spec forbids",
+	Severity: Low,
+	OWASP:    "API8:2023 Security Misconfiguration",
 }
 
 // RuntimeRules returns every runtime rule, in ID order.
@@ -49,6 +63,7 @@ type Exchange struct {
 	URL    string // the path and query, as sent: "/notes/1"
 	Status int
 	Body   string // the start of the response body
+	Sent   string // the start of the request body, when there was one
 }
 
 // MatrixRow is one operation of a runtime test's authorization matrix:
