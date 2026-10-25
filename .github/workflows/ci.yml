@@ -53,3 +53,29 @@ jobs:
         with:
           sarif_file: procyon.sarif
           checkout_path: procyon
+
+  # procyon test --compose against the vulnerable notes API and its fixed
+  # twin: startup, port discovery and teardown with a real Docker.
+  compose:
+    runs-on: ubuntu-latest
+    env:
+      PROCYON_USER_A_TOKEN: token-alice
+      PROCYON_USER_B_TOKEN: token-bob
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go build -o procyon ./cmd/procyon
+      - name: The vulnerable API fails the run
+        run: |
+          set +e
+          ./procyon test internal/vulnapi/openapi.yaml --compose internal/vulnapi/docker-compose.yml --service api --port 8080 --format json > vulnerable.json
+          code=$?
+          set -e
+          test "$code" = 1
+          test "$(jq '.summary.critical' vulnerable.json)" = 4
+      - name: The fixed twin passes
+        run: FIXED=true ./procyon test internal/vulnapi/openapi.yaml --compose internal/vulnapi/docker-compose.yml --service api --port 8080
+      - name: Nothing is left running
+        run: test -z "$(docker ps -aq --filter name=procyon-test)"
