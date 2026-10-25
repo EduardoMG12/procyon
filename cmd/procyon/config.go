@@ -21,6 +21,11 @@ type config struct {
 	RefRoot string   `yaml:"ref-root"`
 	Format  string   `yaml:"format"`
 	Output  []string `yaml:"output"` // format=path, like --output
+	Test    struct {
+		// IDs are values of test account A's objects by path parameter
+		// name, for objects A's responses never show.
+		IDs map[string][]string `yaml:"ids"`
+	} `yaml:"test"`
 
 	outputs outputs // Output, parsed
 }

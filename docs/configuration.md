@@ -35,6 +35,7 @@ Flags always win over the file. One `--output` flag replaces the file's whole
 | `ref-root` | `--ref-root` | A directory `$refs` may read anywhere under, instead of only the spec's own directory: for monorepos whose specs share files from a sibling folder. A relative path counts from the directory Procyon runs in. See [how `$refs` are read](refs.md). |
 | `format` | `--format` | What to print: `terminal` (default), `json`, `sarif` or `markdown` |
 | `output` | `--output` | A list of `format=path`: other formats to write to files |
+| `test.ids` | | For `procyon test`: values of test account A's objects by path parameter name (`orderId: ["42"]`), for objects A's responses never show |
 
 An unknown key is an error, so a typo such as `fail_on` never goes unnoticed.
 
