@@ -112,6 +112,13 @@ Run Procyon before any step that writes credentials into the workspace
 | [PRC010](docs/rules/PRC010.md) | medium | Admin operation protected like regular ones |
 | [PRC011](docs/rules/PRC011.md) | medium | Deprecated OAuth2 flow |
 
+Runtime rules, found by `procyon test` against a running copy of the API
+(v0.2, in progress):
+
+| ID | Severity | Catches |
+|---|---|---|
+| [PRC101](docs/rules/PRC101.md) | critical | Anonymous caller reached an operation that requires authentication |
+
 ## What it can and cannot see
 
 Procyon reads the spec, so it finds what the spec says: an operation open to
