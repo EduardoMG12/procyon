@@ -9,6 +9,7 @@ package test
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -96,6 +97,11 @@ func newClient(target *url.URL, timeout time.Duration, budget int) *client {
 		// somewhere else, past checkDial.
 		DialContext:         dialer.DialContext,
 		TLSHandshakeTimeout: timeout,
+		// A disposable copy on loopback or a private network rarely has a
+		// certificate a public CA signed. Its TLS is judged by PRC105
+		// instead of refusing every request.
+		// TLS 1.0 is allowed too: PRC105 reports it, and the run goes on.
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS10},
 	}
 	return &client{
 		budget: budget,

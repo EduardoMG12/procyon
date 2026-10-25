@@ -63,6 +63,24 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 		return lint.Report{}, err
 	}
 	c := newClient(target, cmp.Or(opts.Timeout, 10*time.Second), cmp.Or(opts.Budget, 1000))
+
+	// TLS first: a server that speaks only an old protocol is reported
+	// before anything else can fail on it.
+	var findings []lint.Finding
+	var notes []lint.Note
+	root := lint.Location{File: specPath, Line: 1, Column: 1}
+	if target.Scheme == "https" {
+		problems, note := checkTLS(ctx, target, cmp.Or(opts.Timeout, 10*time.Second))
+		if len(problems) > 0 {
+			findings = append(findings, weakTLS(root, target, problems))
+		}
+		if note != "" {
+			notes = append(notes, lint.Note{Location: root, Message: note})
+		}
+	} else {
+		notes = append(notes, lint.Note{Location: root, Message: "TLS not checked: the target is plain http " +
+			"(a disposable copy usually is; TLS belongs to the production proxy). PRC105 runs on https targets."})
+	}
 	r := &runner{client: c, target: target, tokens: []string{opts.TokenA, opts.TokenB}}
 	// A token from the environment wins over a login.
 	for _, account := range []struct {
@@ -102,8 +120,6 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 		}
 	}
 
-	var findings []lint.Finding
-	var notes []lint.Note
 	var matrix []lint.MatrixRow
 	// Malformed requests (PRC103, PRC104) run as A in their own pass, after
 	// every write's B check and before the deletes: an accepted mutation

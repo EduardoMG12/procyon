@@ -65,9 +65,9 @@ func TestRunFindsNothingInTheFixedTwin(t *testing.T) {
 		t.Errorf("fixed API: findings %q, failed %v; want none", got, report.Failed)
 	}
 	// A's GET /notes showed note IDs, so every operation on /notes/{id} was
-	// called: nothing is left untested.
-	if len(report.Notes) != 0 {
-		t.Errorf("notes = %v, want none", report.Notes)
+	// called: the only note is that a plain http target has no TLS to check.
+	if len(report.Notes) != 1 || !strings.HasPrefix(report.Notes[0].Message, "TLS not checked") {
+		t.Errorf("notes = %v, want only the TLS one", report.Notes)
 	}
 }
 
@@ -280,5 +280,19 @@ func TestMalformedWritesNeverHidePRC102(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// An https copy with httptest's self-signed certificate is tested like any
+// other, and its modern TLS gives no PRC105.
+func TestRunOverHTTPS(t *testing.T) {
+	srv := httptest.NewTLSServer(vulnapi.New(true))
+	defer srv.Close()
+	report, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Findings) != 0 || len(report.Notes) != 0 {
+		t.Errorf("findings %v, notes %v; want none", report.Findings, report.Notes)
 	}
 }

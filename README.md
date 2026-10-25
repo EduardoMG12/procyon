@@ -121,6 +121,7 @@ Runtime rules, found by `procyon test` against a running copy of the API
 | [PRC102](docs/rules/PRC102.md) | critical | Another account reached A's object (BOLA) |
 | [PRC103](docs/rules/PRC103.md) | medium | Malformed request made the server fail |
 | [PRC104](docs/rules/PRC104.md) | low | Server accepted a request the spec forbids |
+| [PRC105](docs/rules/PRC105.md) | high | The API's TLS is weak |
 
 ## What it can and cannot see
 

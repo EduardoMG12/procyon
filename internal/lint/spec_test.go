@@ -148,3 +148,16 @@ func TestOperationBodyFields(t *testing.T) {
 		}
 	}
 }
+
+// A runtime finding about no operation (PRC105) is covered by an ignore at
+// the spec's root.
+func TestRootIgnoreCoversARuntimeFindingAboutTheSpec(t *testing.T) {
+	spec, err := Load("../../testdata/specs/runtime-root-ignore.yaml", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := spec.Finish([]Finding{{Rule: RuntimeRule("PRC105"), Location: Location{Line: 1, Column: 1}}}, nil, Options{})
+	if len(report.Findings) != 0 || len(report.Ignored) != 1 {
+		t.Errorf("findings %v, ignored %v; want PRC105 ignored", report.Findings, report.Ignored)
+	}
+}
