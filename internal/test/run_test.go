@@ -392,25 +392,33 @@ func TestLessonsFromVAmPI(t *testing.T) {
 	}
 }
 
-// A secure API where every user can read every note but only its owner can
-// delete it: no PRC102, whichever note comes first in the shared list.
+// A secure API that answers B with B's own note whatever ID it asks for,
+// or echoes the ID with an error: no PRC102, even with generic words in
+// both notes and a view counter that changes on every read.
 func TestNoPRC102OnObjectsEveryoneMayRead(t *testing.T) {
 	for name, answer := range map[string]string{
-		"B's own note first in a shared list": `{"id": "%s", "text": "readable by all"}`,
-		"generic values in B's own object":    `{"id": "3", "status": "active", "version": 1}`,
-		"the asked ID echoed back":            `{"id": "%s", "error": "not yours"}`,
+		"B's own note, generic values in both": `{"id": "3", "owner": "bob", "status": "active", "kind": "draft"}`,
+		"the asked ID echoed back":             `{"id": "%s", "error": "not yours"}`,
 	} {
 		t.Run(name, func(t *testing.T) {
+			views := 0
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				user := map[string]string{"Bearer " + vulnapi.TokenA: "alice", "Bearer " + vulnapi.TokenB: "bob"}[r.Header.Get("Authorization")]
 				id := strings.TrimPrefix(r.URL.Path, "/notes/")
 				switch {
+				case r.URL.Path == "/health":
+					w.Write([]byte(`{}`))
 				case user == "":
 					w.WriteHeader(http.StatusUnauthorized)
-				case r.URL.Path == "/notes":
-					w.Write([]byte(`[{"id": "3", "owner": "bob"}, {"id": "1", "owner": "alice"}]`))
+				case r.URL.Path == "/me":
+					fmt.Fprintf(w, `{"name": %q}`, user)
+				case r.URL.Path == "/notes" && strings.Contains(answer, "%s") && user == "bob":
+					w.Write([]byte(`[{"id": "3", "owner": "bob"}]`)) // A's IDs unseen by B: only the echo filter stops it
+				case r.URL.Path == "/notes": // a shared list, with a counter in every item
+					views++
+					fmt.Fprintf(w, `[{"id": "3", "owner": "bob", "views": %d}, {"id": "1", "owner": "alice", "views": %d}]`, views*1000, views*1000+1)
 				case r.Method == "GET" && user == "alice":
-					fmt.Fprintf(w, `{"id": %q, "status": "active", "version": 1, "text": "readable by all"}`, id)
+					fmt.Fprintf(w, `{"id": %q, "owner": "alice", "status": "active", "kind": "draft"}`, id)
 				case r.Method == "GET":
 					if strings.Contains(answer, "%s") {
 						fmt.Fprintf(w, answer, id)
@@ -430,6 +438,13 @@ func TestNoPRC102OnObjectsEveryoneMayRead(t *testing.T) {
 				if f.Rule.ID == "PRC102" {
 					t.Errorf("PRC102 on %s: %+v", f.Operation, f.Evidence)
 				}
+			}
+			// A's note was found by A's name in GET /me, not by order: B's
+			// test ran on note 1.
+			if !slices.ContainsFunc(report.Matrix, func(row lint.MatrixRow) bool {
+				return row.Operation == "GET /notes/{id}" && row.B.Outcome == lint.Allowed
+			}) {
+				t.Errorf("B was not tested on A's note: %+v", report.Matrix)
 			}
 		})
 	}

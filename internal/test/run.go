@@ -135,7 +135,7 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 	if err != nil {
 		return lint.Report{}, err
 	}
-	ofA.identity = identity(ofA, ofB)
+	ofA.identity, ofB.identity = identity(ofA, ofB), identity(ofB, ofA)
 
 	// readers are the GETs by path: how A checks whether B changed or
 	// deleted A's object.
@@ -368,7 +368,23 @@ func (r *runner) otherAccount(ctx context.Context, op lint.Operation, f filled,
 	var reached bool
 	switch {
 	case op.Method == http.MethodGet:
-		reached = len(sharedUnseen(body, ofA.bodies[path], ofB.harvest, values)) > 0
+		shared := sharedUnseen(body, ofA.bodies[path], ofB.harvest, values)
+		// Values B's own object on the same path also holds ("active", a
+		// type, a year) are not A's data.
+		if own, err := ofB.fill(op.Path); len(shared) > 0 && err == nil && own.own && own.path != path {
+			mine, mineBody, err := r.sendFull(ctx, op, own.path, b)
+			if err != nil {
+				return nil, "", lint.Cell{}, err
+			}
+			if success(mine) {
+				var inMine []string
+				if v, ok := decode(mineBody); ok {
+					walk(v, func(value string) { inMine = append(inMine, value) })
+				}
+				shared = slices.DeleteFunc(shared, func(v string) bool { return slices.Contains(inMine, v) })
+			}
+		}
+		reached = len(shared) > 0
 	case before == nil && !shows(body, unseen(values, ofB.harvest)):
 		// A 2xx to a write Procyon cannot check is not a pass.
 		return nil, fmt.Sprintf("not confirmed: B got %d, and without a GET on the same path Procyon cannot tell whether "+
@@ -455,20 +471,32 @@ func sharedUnseen(toB, toA []byte, ofB *harvest, pathValues []string) []string {
 	return shared
 }
 
-// identity lists the values that mark A's own objects: for each read both
-// accounts made (paths with no parameter), what A was shown and B was not.
-// GET /me shows A its username and B another one; a list every user gets
-// in full shows both the same, so it marks nothing.
-func identity(ofA, ofB *discovery) []string {
-	var marks []string
-	for _, path := range sortedKeys(ofA.byPath) {
-		if _, both := ofB.byPath[path]; !both {
+// identity lists the values that mark one account's own objects, by the
+// path they came from: for each read both accounts made that answers one
+// object (GET /me, not a list), the fields where the account's answer
+// differs from the other's. A list is never used: a counter or a signed URL
+// in every item would mark every item. A short value counts only in a field
+// named like an identity (id, user, name, email, login): "17" as userId, but
+// not "1" as a count.
+func identity(mine, theirs *discovery) map[string]string {
+	marks := map[string]string{}
+	for _, path := range sortedKeys(mine.byPath) {
+		if !mine.single[path] || !theirs.single[path] {
 			continue
 		}
-		seenByB := ofB.values(path)
-		for _, v := range ofA.values(path) {
-			if len(v) >= 4 && !slices.Contains(seenByB, v) && !slices.Contains(marks, v) {
-				marks = append(marks, v)
+		// Objects in the same place of both answers ({"data": {...}} nests
+		// the user one level down), compared field by field.
+		for i := range min(len(mine.byPath[path]), len(theirs.byPath[path])) {
+			own, other := mine.byPath[path][i], theirs.byPath[path][i]
+			for _, field := range sortedKeys(own) {
+				v := own[field]
+				idLike := strings.HasSuffix(field, "id") || strings.Contains(field, "user") || strings.Contains(field, "name") ||
+					strings.Contains(field, "email") || strings.Contains(field, "login")
+				if v != other[field] && v != "" && v != "true" && v != "false" && (len(v) >= 4 || idLike) {
+					if _, seen := marks[v]; !seen {
+						marks[v] = path
+					}
+				}
 			}
 		}
 	}

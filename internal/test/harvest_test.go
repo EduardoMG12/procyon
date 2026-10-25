@@ -95,7 +95,7 @@ func TestPickPrefersAsOwnObject(t *testing.T) {
 	if err != nil || f.path != "/books/bobs-book" || f.own {
 		t.Errorf("without an identity: %+v, %v; want the first book, not known to be own", f, err)
 	}
-	h.identity = []string{"alice"}
+	h.identity = map[string]string{"alice": "/me"}
 	if f, _ := h.fill("/books/{title}"); f.path != "/books/alices-book" || !f.own {
 		t.Errorf("with A's identity: %+v; want alice's book, own", f)
 	}

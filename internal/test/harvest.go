@@ -17,11 +17,12 @@ import (
 // shows {"id": "1"}, which fills /notes/{id}.
 type harvest struct {
 	byPath   map[string][]object // path → the objects seen, breadth first
+	single   map[string]bool     // path → its response is one JSON object (GET /me), not a list
 	declared map[string][]string // normalized parameter name → values from .procyon.yaml
-	// identity holds values that mark the account's own objects: what its
-	// reads of a path showed and the other account's reads of the same
-	// path did not (A's username in GET /me). Set after discovery.
-	identity []string
+	// identity holds values that mark the account's own objects, by the
+	// path they came from: what the account's GET /me showed and the other
+	// account's did not (its username). Set after discovery.
+	identity map[string]string
 }
 
 // object is one JSON object of a response: its scalar fields, by
@@ -29,7 +30,7 @@ type harvest struct {
 type object map[string]string
 
 func newHarvest(declared map[string][]string) *harvest {
-	h := &harvest{byPath: map[string][]object{}, declared: map[string][]string{}}
+	h := &harvest{byPath: map[string][]object{}, single: map[string]bool{}, declared: map[string][]string{}}
 	// Sorted, so order_id and orderId both declared give the same values
 	// on every run.
 	for _, name := range sortedKeys(declared) {
@@ -51,18 +52,8 @@ func (h *harvest) add(path string, body []byte) {
 	if !ok {
 		return
 	}
+	_, h.single[path] = v.(map[string]any)
 	objects(v, func(o object) { h.byPath[path] = append(h.byPath[path], o) })
-}
-
-// values lists every scalar value a path's responses showed.
-func (h *harvest) values(path string) []string {
-	var all []string
-	for _, o := range h.byPath[path] {
-		for _, name := range sortedKeys(o) {
-			all = append(all, o[name])
-		}
-	}
-	return all
 }
 
 // decode parses JSON keeping numbers as written: as float64, the ID
@@ -117,23 +108,21 @@ func walk(v any, fn func(value string)) {
 // pick returns a value for parameter param of path, and whether it is
 // known to be the account's own. In order:
 //
-//  1. a value declared in .procyon.yaml (own, by definition);
-//  2. the parent collection's objects' field of the same name, then their
+//  1. the parent collection's objects' field of the same name, then their
 //     "id": GET /notes fills /notes/{id} and /notes/{noteId};
-//  3. a field of the same name in any path's objects, paths by name.
+//  2. a field of the same name in any path's objects, paths by name;
+//  3. a value declared in .procyon.yaml, which is the account's own.
 //
-// Among the objects of 2 or 3, one that holds an identity value (a book
-// whose "user" is A's username) wins: it is the account's own. Otherwise
-// the first one is taken, not known to be own.
+// Among the objects of 1 or 2, one that holds an identity value from
+// another path (a book whose "user" is the username GET /me showed) wins:
+// it is the account's own. Otherwise the first one is taken, not known to
+// be own, and a declared value, when there is one, is preferred to it.
 func (h *harvest) pick(path, param string) (value string, own, ok bool) {
 	key := normalize(param)
-	if values := h.declared[key]; len(values) > 0 {
-		return values[0], true, true
-	}
-	choose := func(objs []object, fields ...string) (string, bool, bool) {
+	choose := func(from string, fields ...string) (string, bool, bool) {
 		first := ""
 		for _, field := range fields {
-			for _, o := range objs {
+			for _, o := range h.byPath[from] {
 				v, has := o[field]
 				if !has {
 					continue
@@ -142,7 +131,7 @@ func (h *harvest) pick(path, param string) (value string, own, ok bool) {
 					first = v
 				}
 				for _, value := range o {
-					if slices.Contains(h.identity, value) {
+					if source, mark := h.identity[value]; mark && source != from {
 						return v, true, true
 					}
 				}
@@ -154,15 +143,17 @@ func (h *harvest) pick(path, param string) (value string, own, ok bool) {
 		return "", false, false
 	}
 	parent, _, _ := strings.Cut(path, "/{"+param+"}")
-	if v, own, ok := choose(h.byPath[parent], key, "id"); ok {
-		return v, own, true
-	}
+	v, own, ok := choose(parent, key, "id")
 	for _, p := range sortedKeys(h.byPath) {
-		if v, own, ok := choose(h.byPath[p], key); ok {
-			return v, own, true
+		if ok {
+			break
 		}
+		v, own, ok = choose(p, key)
 	}
-	return "", false, false
+	if declared := h.declared[key]; len(declared) > 0 && !own {
+		return declared[0], true, true
+	}
+	return v, own, ok
 }
 
 func sortedKeys[V any](m map[string]V) []string {
