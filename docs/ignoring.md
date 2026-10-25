@@ -74,6 +74,10 @@ count again and the report says it expired.
 An ignored finding never fails the run, but it is listed under **Ignored**
 with its reason in every format.
 
+Ignores of runtime rules (PRC1xx, found by `procyon test`) are written the
+same way, on the operation. `procyon lint` checks they are well formed but
+never calls them unused, and `procyon test` does the same for lint rules.
+
 ## Mistakes are errors
 
 A missing reason, an unknown rule ID (`PRC01`), a date that is not a date,

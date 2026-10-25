@@ -6,8 +6,9 @@ import "github.com/getkin/kin-openapi/openapi3"
 // lint report: `procyon test` loads the spec it tests through it, so both
 // commands read specs, and refuse bad ones, the same way.
 type Spec struct {
-	doc   *openapi3.T
-	files *specFiles
+	doc     *openapi3.T
+	files   *specFiles
+	ignores []*ignore
 }
 
 // Operation is one operation of a spec.
@@ -25,11 +26,12 @@ func Load(path string, opts Options) (*Spec, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Ignores are parsed so a typo in one stops `procyon test` too.
-	if _, err := parseIgnores(doc, files.asGiven, files.back != nil); err != nil {
+	// A typo in an ignore stops `procyon test` too.
+	ignores, err := parseIgnores(doc, files.asGiven, files.back != nil)
+	if err != nil {
 		return nil, err
 	}
-	return &Spec{doc: doc, files: files}, nil
+	return &Spec{doc: doc, files: files, ignores: ignores}, nil
 }
 
 // Operations returns every operation, sorted by path and then method, so

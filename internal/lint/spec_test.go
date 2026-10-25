@@ -47,3 +47,33 @@ func TestLoadRefusesWhatRunRefuses(t *testing.T) {
 		}
 	}
 }
+
+// Each kind of run applies the ignores of its own rules and never calls the
+// other kind's unused.
+func TestIgnoresOfLintAndRuntimeRulesStayApart(t *testing.T) {
+	path := "../../testdata/specs/runtime-ignores.yaml"
+	report, err := Run(path, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Ignored) != 1 || report.Ignored[0].Finding.Rule.ID != "PRC001" || len(report.Notes) != 0 {
+		t.Errorf("lint: ignored %v, notes %v; want PRC001 ignored and no notes", report.Ignored, report.Notes)
+	}
+
+	spec, err := Load(path, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	op := spec.Operations()[0]
+	finding := Finding{Rule: RuntimeRule("PRC101"), Location: op.Location, Operation: op.Method + " " + op.Path}
+	report = spec.Finish([]Finding{finding}, nil, Options{})
+	if len(report.Findings) != 0 || len(report.Ignored) != 1 || len(report.Notes) != 0 || report.Failed {
+		t.Errorf("runtime: findings %v, ignored %v, notes %v, failed %v; want PRC101 ignored, no notes, not failed",
+			report.Findings, report.Ignored, report.Notes, report.Failed)
+	}
+
+	report = spec.Finish([]Finding{{Rule: RuntimeRule("PRC101"), Operation: "GET /other"}}, nil, Options{})
+	if len(report.Findings) != 1 || !report.Failed {
+		t.Errorf("an unignored critical finding: findings %v, failed %v; want it kept and the run failed", report.Findings, report.Failed)
+	}
+}

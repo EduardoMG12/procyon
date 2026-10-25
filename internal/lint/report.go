@@ -60,6 +60,10 @@ type Finding struct {
 	// also lists the other operations a finding about a shared schema
 	// applies to (see onePerPlace); Operation is the first one.
 	also []string
+
+	// Evidence is what a runtime test sent and got that proves the finding;
+	// empty for lint findings.
+	Evidence []Exchange
 }
 
 // Report is everything one run produced.
