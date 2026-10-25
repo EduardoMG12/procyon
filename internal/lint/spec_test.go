@@ -21,6 +21,7 @@ func TestLoadListsOperationsInOrder(t *testing.T) {
 	}
 	want := []string{
 		"GET /health public",
+		"POST /login public",
 		"GET /me",
 		"GET /notes",
 		"POST /notes",
@@ -112,7 +113,9 @@ func TestOperationExampleBodies(t *testing.T) {
 	}
 	for _, op := range spec.Operations() {
 		want, needs := "", false
-		if op.Method == "POST" || op.Method == "PUT" {
+		if op.Path == "/login" {
+			want, needs = "", true // a schema with no example
+		} else if op.Method == "POST" || op.Method == "PUT" {
 			want, needs = `{"body":"bread, coffee","title":"Shopping list"}`, true
 		}
 		if string(op.Body) != want || op.NeedsBody != needs {

@@ -35,7 +35,23 @@ Flags always win over the file. One `--output` flag replaces the file's whole
 | `ref-root` | `--ref-root` | A directory `$refs` may read anywhere under, instead of only the spec's own directory: for monorepos whose specs share files from a sibling folder. A relative path counts from the directory Procyon runs in. See [how `$refs` are read](refs.md). |
 | `format` | `--format` | What to print: `terminal` (default), `json`, `sarif` or `markdown` |
 | `output` | `--output` | A list of `format=path`: other formats to write to files |
+| `test.accounts.a.login`, `test.accounts.b.login` | | For `procyon test`: how test account A or B logs in, when `PROCYON_USER_A_TOKEN` / `PROCYON_USER_B_TOKEN` is not set. `operation` (`POST /login`, as in the spec), `body` (sent as JSON; `${VAR}` reads an environment variable, so no password is written in the file) and `token` (a JSON pointer to the token in the response, such as `/token` or `/session/token`) |
 | `test.ids` | | For `procyon test`: values of test account A's objects by path parameter name (`orderId: ["42"]`), for objects A's responses never show |
+
+```yaml
+test:
+  accounts:
+    a:
+      login:
+        operation: POST /login
+        body: {username: alice, password: "${PROCYON_A_PASSWORD}"}
+        token: /session/token
+    b:
+      login:
+        operation: POST /login
+        body: {username: bob, password: "${PROCYON_B_PASSWORD}"}
+        token: /session/token
+```
 
 An unknown key is an error, so a typo such as `fail_on` never goes unnoticed.
 
