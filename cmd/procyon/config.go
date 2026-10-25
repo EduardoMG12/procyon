@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/test"
 	"github.com/goccy/go-yaml"
 	"github.com/goccy/go-yaml/token"
 )
@@ -25,6 +26,15 @@ type config struct {
 		// IDs are values of test account A's objects by path parameter
 		// name, for objects A's responses never show.
 		IDs map[string][]string `yaml:"ids"`
+		// Accounts declare how test accounts A and B log in.
+		Accounts struct {
+			A struct {
+				Login *test.Login `yaml:"login"`
+			} `yaml:"a"`
+			B struct {
+				Login *test.Login `yaml:"login"`
+			} `yaml:"b"`
+		} `yaml:"accounts"`
 	} `yaml:"test"`
 
 	outputs outputs // Output, parsed
@@ -63,6 +73,12 @@ func loadConfig() (config, error) {
 	}
 	if cfg.Format != "" && formats[cfg.Format] == nil {
 		return cfg, fmt.Errorf("%s: format: unknown format %q (use %s)", configFile, cfg.Format, formatNames())
+	}
+	for i, l := range []*test.Login{cfg.Test.Accounts.A.Login, cfg.Test.Accounts.B.Login} {
+		name := []string{"a", "b"}[i]
+		if l != nil && (l.Operation == "" || l.Token == "") {
+			return cfg, fmt.Errorf("%s: test.accounts.%s.login needs operation (\"POST /login\") and token (a JSON pointer such as /token)", configFile, name)
+		}
 	}
 	for _, value := range cfg.Output {
 		o, err := parseOutput(value)

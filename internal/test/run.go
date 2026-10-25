@@ -36,6 +36,8 @@ type Options struct {
 	// IDs are values of A's objects by path parameter name, for objects A's
 	// responses never show (test.ids in .procyon.yaml).
 	IDs map[string][]string
+	// LoginA and LoginB sign the accounts in when their token is not set.
+	LoginA, LoginB *Login
 }
 
 // maxBody is how much of a response body evidence keeps; maxResponse is
@@ -47,9 +49,10 @@ const (
 
 // Run tests the API at opts.BaseURL against the spec at specPath.
 func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error) {
-	if opts.TokenA == "" || opts.TokenB == "" {
+	if (opts.TokenA == "" && opts.LoginA == nil) || (opts.TokenB == "" && opts.LoginB == nil) {
 		return lint.Report{}, fmt.Errorf("set %s and %s to the tokens of two test accounts seeded in the API "+
-			"(the bare token: Procyon adds \"Bearer \" when the spec asks for it)", envTokenA, envTokenB)
+			"(the bare token: Procyon adds \"Bearer \" when the spec asks for it), "+
+			"or declare how they log in under test.accounts in .procyon.yaml", envTokenA, envTokenB)
 	}
 	spec, err := lint.Load(specPath, lint.Options{RefRoot: opts.RefRoot})
 	if err != nil {
@@ -61,6 +64,20 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 	}
 	c := newClient(target, cmp.Or(opts.Timeout, 10*time.Second), cmp.Or(opts.Budget, 1000))
 	r := &runner{client: c, target: target, tokens: []string{opts.TokenA, opts.TokenB}}
+	// A token from the environment wins over a login.
+	for _, account := range []struct {
+		name  string
+		token *string
+		login *Login
+	}{{"A", &opts.TokenA, opts.LoginA}, {"B", &opts.TokenB, opts.LoginB}} {
+		if *account.token != "" {
+			continue
+		}
+		if *account.token, err = r.login(ctx, spec, account.name, account.login); err != nil {
+			return lint.Report{}, err
+		}
+		r.tokens = append(r.tokens, *account.token)
+	}
 
 	ops := inTestOrder(spec.Operations())
 	a := caller{name: "A", token: opts.TokenA}

@@ -242,6 +242,7 @@ func TestRunFillsTheAuthorizationMatrix(t *testing.T) {
 		"GET /me A=allowed 200 B= 0 anon=denied 401",
 		"GET /notes A=allowed 200 B= 0 anon=finding 200",
 		"GET /notes/{id} A=allowed 200 B=finding 200 anon=denied 401",
+		"POST /login A= 0 B= 0 anon=public 0",
 		"POST /notes A= 0 B= 0 anon=denied 401",
 		"PUT /notes/{id} A= 0 B=finding 200 anon=denied 401",
 		"DELETE /notes/{id} A= 0 B=finding 204 anon=denied 401",

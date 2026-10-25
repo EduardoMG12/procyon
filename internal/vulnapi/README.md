@@ -15,6 +15,9 @@ Two seeded test accounts, by bearer token:
 | A (alice) | `token-alice` | notes `1`, `2` |
 | B (bob) | `token-bob` | note `3` |
 
+`POST /login` with `{"username": "alice", "password": "alice-password"}`
+(or bob's, `bob-password`) answers `{"session": {"token": "token-alice"}}`.
+
 ## Planted vulnerabilities
 
 | Rule | Operation | Vulnerable API | Fixed twin |
@@ -26,7 +29,7 @@ Two seeded test accounts, by bearer token:
 | PRC103 | `POST`, `PUT /notes…` | a body that is not a note (`{"title": 42}`) gives a `500` | `400` |
 | PRC104 | `POST`, `PUT /notes…` | a missing `title`, or one past `maxLength: 100`, is accepted | `400` |
 
-Not vulnerable in either: `GET /health` (public on purpose), `GET /me`, and
+Not vulnerable in either: `GET /health` and `POST /login` (public on purpose), `GET /me`, and
 anonymous calls to every other operation (`401`).
 
 `procyon lint openapi.yaml` reports one low finding (PRC008: `GET /notes`

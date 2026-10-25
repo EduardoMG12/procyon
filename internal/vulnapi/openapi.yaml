@@ -66,6 +66,31 @@ paths:
       responses:
         "200":
           description: The API is up.
+  /login:
+    post:
+      x-procyon-public: "Signing in needs no account yet"
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                  maxLength: 50
+                password:
+                  type: string
+                  format: password
+                  maxLength: 100
+      responses:
+        "200":
+          description: The account's token, under session.token.
+        "401":
+          description: Wrong username or password.
   /me:
     get:
       operationId: me

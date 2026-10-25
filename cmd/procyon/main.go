@@ -104,7 +104,8 @@ func testCommand() command {
 			return test.Run(ctx, spec, test.Options{
 				BaseURL: baseURL, FailOn: failOn, RefRoot: refRoot,
 				TokenA: os.Getenv("PROCYON_USER_A_TOKEN"), TokenB: os.Getenv("PROCYON_USER_B_TOKEN"),
-				IDs: cfg.Test.IDs,
+				IDs:    cfg.Test.IDs,
+				LoginA: cfg.Test.Accounts.A.Login, LoginB: cfg.Test.Accounts.B.Login,
 			})
 		},
 	}

@@ -51,6 +51,7 @@ func New(fixed bool) http.Handler {
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
+	mux.HandleFunc("POST /login", s.login)
 	mux.HandleFunc("GET /me", s.me)
 	mux.HandleFunc("GET /notes", s.list)
 	mux.HandleFunc("POST /notes", s.create)
@@ -79,6 +80,24 @@ func caller(r *http.Request) string {
 		return "bob"
 	}
 	return ""
+}
+
+// passwords are the seeded accounts' passwords, for POST /login.
+var passwords = map[string]string{"alice": "alice-password", "bob": "bob-password"}
+
+// login trades a username and password for the account's token.
+func (s *server) login(w http.ResponseWriter, r *http.Request) {
+	var in struct{ Username, Password string }
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&in); err != nil {
+		writeJSON(w, http.StatusBadRequest, errorBody("want {username, password}"))
+		return
+	}
+	if want, ok := passwords[in.Username]; !ok || in.Password != want {
+		writeJSON(w, http.StatusUnauthorized, errorBody("wrong username or password"))
+		return
+	}
+	token := map[string]string{"alice": TokenA, "bob": TokenB}[in.Username]
+	writeJSON(w, http.StatusOK, map[string]any{"session": map[string]string{"token": token}})
 }
 
 func (s *server) me(w http.ResponseWriter, r *http.Request) {
