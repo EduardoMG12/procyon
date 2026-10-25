@@ -114,13 +114,14 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 		r.tokens = append(r.tokens, *account.token)
 	}
 
-	var ops, skippedOps []lint.Operation
-	for _, op := range inTestOrder(spec.Operations()) {
-		if slices.Contains(opts.Skip, op.Method+" "+op.Path) {
-			skippedOps = append(skippedOps, op)
-		} else {
-			ops = append(ops, op)
+	ops := inTestOrder(spec.Operations())
+	r.skip = map[string]bool{}
+	for _, name := range opts.Skip {
+		if !slices.ContainsFunc(ops, func(op lint.Operation) bool { return op.Method+" "+op.Path == name }) {
+			// A typo must not quietly call what was meant to be skipped.
+			notes = append(notes, lint.Note{Location: root, Message: fmt.Sprintf("test.skip lists %q, which is no operation of the spec", name)})
 		}
+		r.skip[name] = true
 	}
 	a := caller{name: "A", token: opts.TokenA}
 	ofA, err := r.discover(ctx, ops, a, newHarvest(opts.IDs), false)
@@ -134,6 +135,7 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 	if err != nil {
 		return lint.Report{}, err
 	}
+	ofA.identity = identity(ofA, ofB)
 
 	// readers are the GETs by path: how A checks whether B changed or
 	// deleted A's object.
@@ -145,19 +147,18 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 	}
 
 	var matrix []lint.MatrixRow
-	// Malformed requests (PRC103, PRC104) run as A in their own pass, last:
-	// an accepted mutation changes A's object, which must not hide what B
-	// can do to it, and a body that hangs the server (a regular expression
-	// that backtracks) must not stop the other tests.
+	// Malformed requests (PRC103, PRC104) run as A in their own pass, after
+	// every write's B check and before the deletes: an accepted mutation
+	// changes A's object, which must not hide what B can do to it.
 	var toBreak []filledOp
-	broken := false
+	broken, hung := false, false
 	breakAll := func() error {
 		if broken {
 			return nil
 		}
 		broken = true
 		for i, f := range toBreak {
-			bad, note, err := r.malformed(ctx, f.op, f.path, a)
+			bad, note, stopped, err := r.malformed(ctx, f.op, f.path, a)
 			if err != nil {
 				return err
 			}
@@ -165,9 +166,11 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 			if note != "" {
 				notes = append(notes, lint.Note{Location: f.op.Location, Message: f.op.Method + " " + f.op.Path + ": " + note})
 			}
-			if hung(bad) {
-				// The server may stay busy for minutes: the rest would only
-				// time out too.
+			if stopped {
+				// A body that hangs the server (a regular expression that
+				// backtracks) may keep it busy for minutes: whatever comes
+				// next would only time out too.
+				hung = true
 				for _, rest := range toBreak[i+1:] {
 					notes = append(notes, lint.Note{Location: rest.op.Location, Message: rest.op.Method + " " + rest.op.Path +
 						": malformed input not tested: the server stopped answering after an earlier malformed request"})
@@ -179,26 +182,42 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 	}
 	unchanged := 0
 	for _, op := range ops {
-		row := lint.MatrixRow{Operation: op.Method + " " + op.Path, A: ofA.cells[op.Method+" "+op.Path]}
+		key := op.Method + " " + op.Path
+		skipped := lint.Cell{Outcome: lint.Skipped}
+		if op.Method == http.MethodDelete {
+			if err := breakAll(); err != nil {
+				return lint.Report{}, err
+			}
+		}
+		switch {
+		case r.skip[key]:
+			notes = append(notes, lint.Note{Location: op.Location, Message: key + " not called: listed under test.skip"})
+			matrix = append(matrix, lint.MatrixRow{Operation: key, A: skipped, B: skipped, Anonymous: skipped})
+			continue
+		case hung:
+			notes = append(notes, lint.Note{Location: op.Location, Message: key + " not tested: the server stopped answering after a malformed request"})
+			matrix = append(matrix, lint.MatrixRow{Operation: key, A: ofA.cells[key], B: skipped, Anonymous: skipped})
+			continue
+		}
+		row := lint.MatrixRow{Operation: key, A: ofA.cells[key]}
 		// Unchanged operations are still read as A above, to find IDs for
 		// the changed ones; they are just not tested.
-		if changed != nil && !changed[row.Operation] {
+		if changed != nil && !changed[key] {
 			unchanged++
 			row.B, row.Anonymous = lint.Cell{Outcome: lint.Unchanged}, lint.Cell{Outcome: lint.Unchanged}
 			matrix = append(matrix, row)
 			continue
 		}
-		path, values, err := ofA.fill(op.Path)
+		f, err := ofA.fill(op.Path)
 		if err != nil {
 			notes = append(notes, lint.Note{Location: op.Location, Message: fmt.Sprintf(
-				"%s %s not tested: %v in A's responses; declare one under test.ids in .procyon.yaml", op.Method, op.Path, err)})
-			skipped := lint.Cell{Outcome: lint.Skipped}
-			matrix = append(matrix, lint.MatrixRow{Operation: row.Operation, A: skipped, B: skipped, Anonymous: skipped})
+				"%s not tested: %v in A's responses; declare one under test.ids in .procyon.yaml", key, err)})
+			matrix = append(matrix, lint.MatrixRow{Operation: key, A: skipped, B: skipped, Anonymous: skipped})
 			continue
 		}
 		row.Anonymous = lint.Cell{Outcome: lint.Public}
 		if !op.Public {
-			exchange, err := r.send(ctx, op, path, anonymous)
+			exchange, err := r.send(ctx, op, f.path, anonymous)
 			if err != nil {
 				return lint.Report{}, err
 			}
@@ -211,35 +230,37 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 			}
 		}
 		if op.Method != http.MethodGet && op.Method != http.MethodDelete && !op.Public && op.Body != nil {
-			// Another of A's objects when there are several: B's delete
-			// may have removed the first by the time this pass runs, last.
-			other, _, _ := ofA.fillWith(op.Path, true)
-			toBreak = append(toBreak, filledOp{op, other})
+			toBreak = append(toBreak, filledOp{op, f.path})
 		}
-		if len(values) == 0 {
+		if len(f.values) == 0 {
 			matrix = append(matrix, row)
 			continue // no object in the path: nothing of A's to reach
 		}
-		finding, note, cell, err := r.otherAccount(ctx, op, path, values, ofA, ofB, readers, a, b)
-		if err != nil {
-			return lint.Report{}, err
+		var finding *lint.Finding
+		var note string
+		if !f.own && len(unseen(f.values, ofB.harvest)) == 0 {
+			// Every user is shown these IDs (a public list of every book),
+			// and nothing says which object is A's: B reaching it proves
+			// nothing.
+			note = "not tested as B: every user is shown this object's ID and nothing marks it as A's; " +
+				"declare one of A's under test.ids in .procyon.yaml"
+			row.B = skipped
+		} else {
+			finding, note, row.B, err = r.otherAccount(ctx, op, f, ofA, ofB, readers, a, b)
+			if err != nil {
+				return lint.Report{}, err
+			}
 		}
-		row.B = cell
 		matrix = append(matrix, row)
 		if finding != nil {
 			findings = append(findings, *finding)
 		}
 		if note != "" {
-			notes = append(notes, lint.Note{Location: op.Location, Message: op.Method + " " + op.Path + ": " + note})
+			notes = append(notes, lint.Note{Location: op.Location, Message: key + ": " + note})
 		}
 	}
 	if err := breakAll(); err != nil {
 		return lint.Report{}, err
-	}
-	for _, op := range skippedOps {
-		notes = append(notes, lint.Note{Location: op.Location, Message: op.Method + " " + op.Path + " not called: listed under test.skip"})
-		skipped := lint.Cell{Outcome: lint.Skipped}
-		matrix = append(matrix, lint.MatrixRow{Operation: op.Method + " " + op.Path, A: skipped, B: skipped, Anonymous: skipped})
 	}
 	if baseNote != "" {
 		notes = append(notes, lint.Note{Location: root, Message: baseNote})
@@ -263,13 +284,6 @@ func cellOf(exchange lint.Exchange, reached bool) lint.Cell {
 		return lint.Cell{Outcome: lint.Allowed, Status: exchange.Status}
 	}
 	return lint.Cell{Outcome: lint.Denied, Status: exchange.Status}
-}
-
-// hung reports whether a malformed request got no answer at all.
-func hung(findings []lint.Finding) bool {
-	return slices.ContainsFunc(findings, func(f lint.Finding) bool {
-		return strings.Contains(f.Why, "no answer within the timeout")
-	})
 }
 
 // requestError is a request that could not be sent or answered: its
@@ -311,12 +325,18 @@ func anonymousAccess(op lint.Operation, exchange lint.Exchange) lint.Finding {
 // when A, reading the object before and after, sees it changed or gone;
 // without a GET on the same path, a write counts when its 2xx answer holds
 // A's path values, and a delete cannot be told.
-func (r *runner) otherAccount(ctx context.Context, op lint.Operation, path string, values []string,
+func (r *runner) otherAccount(ctx context.Context, op lint.Operation, f filled,
 	ofA, ofB *discovery, readers map[string]lint.Operation, a, b caller) (*lint.Finding, string, lint.Cell, error) {
 	skipped := lint.Cell{Outcome: lint.Skipped}
-	key := op.Method + " " + op.Path
-	if op.Method == http.MethodGet && ofA.bodies[key] == nil {
-		return nil, "not tested as B: A's own read of it failed", skipped, nil
+	path, values := f.path, f.values
+	if op.Method == http.MethodGet && ofA.bodies[path] == nil {
+		// Discovery read another object (A's own was not known yet): A
+		// reads this one now, to compare with what B gets.
+		exchange, body, err := r.sendFull(ctx, op, path, a)
+		if err != nil || !success(exchange) {
+			return nil, "not tested as B: A's own read of it failed", skipped, err
+		}
+		ofA.bodies[path] = body
 	}
 	if op.Method != http.MethodGet && op.NeedsBody && op.Body == nil {
 		return nil, "not tested as B: it needs a request body and the spec gives no example", skipped, nil
@@ -348,7 +368,7 @@ func (r *runner) otherAccount(ctx context.Context, op lint.Operation, path strin
 	var reached bool
 	switch {
 	case op.Method == http.MethodGet:
-		reached = len(sharedUnseen(body, ofA.bodies[key], ofB.harvest)) > 0
+		reached = len(sharedUnseen(body, ofA.bodies[path], ofB.harvest, values)) > 0
 	case before == nil && !shows(body, unseen(values, ofB.harvest)):
 		// A 2xx to a write Procyon cannot check is not a pass.
 		return nil, fmt.Sprintf("not confirmed: B got %d, and without a GET on the same path Procyon cannot tell whether "+
@@ -414,21 +434,45 @@ func shown(body, example []byte) bool {
 }
 
 // sharedUnseen lists the field values B's answer and A's answer both hold
-// that B's own reads never showed.
-func sharedUnseen(toB, toA []byte, ofB *harvest) []string {
+// that B's own reads never showed: A's data. Values that prove nothing are
+// left out: the path's own values (an API may echo the ID it was asked
+// for), booleans, short numbers and short words ("ok", "1", a status any
+// object can have).
+func sharedUnseen(toB, toA []byte, ofB *harvest, pathValues []string) []string {
 	var inA []string
 	if v, ok := decode(toA); ok {
-		walk(v, func(_, value string) { inA = append(inA, value) })
+		walk(v, func(value string) { inA = append(inA, value) })
 	}
 	var shared []string
 	if v, ok := decode(toB); ok {
-		walk(v, func(_, value string) {
-			if slices.Contains(inA, value) && !ofB.saw(value) && !slices.Contains(shared, value) {
+		walk(v, func(value string) {
+			telling := len(value) >= 4 && value != "true" && value != "false" && !slices.Contains(pathValues, value)
+			if telling && slices.Contains(inA, value) && !ofB.saw(value) && !slices.Contains(shared, value) {
 				shared = append(shared, value)
 			}
 		})
 	}
 	return shared
+}
+
+// identity lists the values that mark A's own objects: for each read both
+// accounts made (paths with no parameter), what A was shown and B was not.
+// GET /me shows A its username and B another one; a list every user gets
+// in full shows both the same, so it marks nothing.
+func identity(ofA, ofB *discovery) []string {
+	var marks []string
+	for _, path := range sortedKeys(ofA.byPath) {
+		if _, both := ofB.byPath[path]; !both {
+			continue
+		}
+		seenByB := ofB.values(path)
+		for _, v := range ofA.values(path) {
+			if len(v) >= 4 && !slices.Contains(seenByB, v) && !slices.Contains(marks, v) {
+				marks = append(marks, v)
+			}
+		}
+	}
+	return marks
 }
 
 // holds reports whether a JSON object body has every top-level field of
@@ -496,7 +540,8 @@ func inTestOrder(ops []lint.Operation) []lint.Operation {
 type runner struct {
 	client *client
 	target *url.URL
-	tokens []string // every token, to mask in evidence
+	tokens []string        // every token, to mask in evidence
+	skip   map[string]bool // operations never called (test.skip)
 }
 
 // send calls one operation as who and records the exchange, with every
@@ -570,13 +615,14 @@ func (r *runner) discover(ctx context.Context, ops []lint.Operation, who caller,
 	for progress := true; progress; {
 		progress = false
 		for i, op := range ops {
-			if done[i] || op.Method != http.MethodGet || (topLevel && strings.Contains(op.Path, "{")) {
+			if done[i] || op.Method != http.MethodGet || (topLevel && strings.Contains(op.Path, "{")) || r.skip[op.Method+" "+op.Path] {
 				continue
 			}
-			path, _, err := h.fill(op.Path)
+			f, err := h.fill(op.Path)
 			if err != nil {
 				continue // not yet
 			}
+			path := f.path
 			done[i], progress = true, true
 			exchange, body, err := r.sendFull(ctx, op, path, who)
 			if err != nil {
@@ -586,7 +632,7 @@ func (r *runner) discover(ctx context.Context, ops []lint.Operation, who caller,
 			d.cells[key] = cellOf(exchange, false)
 			if success(exchange) {
 				h.add(op.Path, body)
-				d.bodies[key] = body
+				d.bodies[path] = body
 			}
 		}
 	}
@@ -596,8 +642,8 @@ func (r *runner) discover(ctx context.Context, ops []lint.Operation, who caller,
 // discovery is what one caller's reads showed.
 type discovery struct {
 	*harvest
-	cells  map[string]lint.Cell // what each read got, for the matrix
-	bodies map[string][]byte    // each successful read's response body
+	cells  map[string]lint.Cell // what each read got, by operation, for the matrix
+	bodies map[string][]byte    // each successful read's response body, by the path sent
 }
 
 func lookupHost(ctx context.Context, host string) ([]netip.Addr, error) {

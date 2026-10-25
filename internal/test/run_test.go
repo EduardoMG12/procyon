@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -340,18 +341,30 @@ func TestLessonsFromVAmPI(t *testing.T) {
 			w.Write([]byte(`[{"username": "alice"}, {"username": "bob"}]`))
 		case user == "":
 			w.WriteHeader(http.StatusUnauthorized)
-		case r.URL.Path == "/books":
-			w.Write([]byte(`[{"title": "alices-book", "user": "alice"}, {"title": "bobs-book", "user": "bob"}]`))
+		case r.URL.Path == "/me":
+			fmt.Fprintf(w, `{"username": %q}`, user)
+		case r.URL.Path == "/books": // bob's first: A's book is found by A's username, not by order
+			w.Write([]byte(`[{"title": "bobs-book", "user": "bob"}, {"title": "alices-book", "user": "alice"}]`))
 		case strings.HasPrefix(r.URL.Path, "/books/"):
 			title := strings.TrimPrefix(r.URL.Path, "/books/")
 			fmt.Fprintf(w, `{"title": %q, "secret": "secret of %s"}`, title, title)
 		case strings.HasSuffix(r.URL.Path, "/password"):
+			var in struct{ Password string }
+			if json.NewDecoder(r.Body).Decode(&in) != nil || len(in.Password) > 50 {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
 			w.WriteHeader(http.StatusNoContent)
 		case r.URL.Path == "/comments":
+			var in struct{ Text string }
+			if r.ContentLength <= 1000 && json.NewDecoder(r.Body).Decode(&in) != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
 			if r.ContentLength > 1000 {
 				time.Sleep(time.Second) // a regular expression that backtracks
 			}
-			w.WriteHeader(http.StatusBadRequest)
+			w.WriteHeader(http.StatusCreated)
 		}
 	}))
 	defer srv.Close()
@@ -376,5 +389,48 @@ func TestLessonsFromVAmPI(t *testing.T) {
 		if !slices.ContainsFunc(report.Notes, func(n lint.Note) bool { return strings.Contains(n.Message, want) }) {
 			t.Errorf("no note %q in %v", want, report.Notes)
 		}
+	}
+}
+
+// A secure API where every user can read every note but only its owner can
+// delete it: no PRC102, whichever note comes first in the shared list.
+func TestNoPRC102OnObjectsEveryoneMayRead(t *testing.T) {
+	for name, answer := range map[string]string{
+		"B's own note first in a shared list": `{"id": "%s", "text": "readable by all"}`,
+		"generic values in B's own object":    `{"id": "3", "status": "active", "version": 1}`,
+		"the asked ID echoed back":            `{"id": "%s", "error": "not yours"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				user := map[string]string{"Bearer " + vulnapi.TokenA: "alice", "Bearer " + vulnapi.TokenB: "bob"}[r.Header.Get("Authorization")]
+				id := strings.TrimPrefix(r.URL.Path, "/notes/")
+				switch {
+				case user == "":
+					w.WriteHeader(http.StatusUnauthorized)
+				case r.URL.Path == "/notes":
+					w.Write([]byte(`[{"id": "3", "owner": "bob"}, {"id": "1", "owner": "alice"}]`))
+				case r.Method == "GET" && user == "alice":
+					fmt.Fprintf(w, `{"id": %q, "status": "active", "version": 1, "text": "readable by all"}`, id)
+				case r.Method == "GET":
+					if strings.Contains(answer, "%s") {
+						fmt.Fprintf(w, answer, id)
+					} else {
+						w.Write([]byte(answer))
+					}
+				default: // only the owner may change or delete
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer srv.Close()
+			report, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, f := range report.Findings {
+				if f.Rule.ID == "PRC102" {
+					t.Errorf("PRC102 on %s: %+v", f.Operation, f.Evidence)
+				}
+			}
+		})
 	}
 }

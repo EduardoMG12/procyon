@@ -9,6 +9,10 @@ paths:
   /users:
     get:
       responses: {"200": {description: "Every user, to anyone"}}
+  /me:
+    get:
+      security: [{bearer: []}]
+      responses: {"200": {description: The caller}}
   /reset:
     get:
       responses: {"200": {description: Resets the database}}

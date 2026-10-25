@@ -115,17 +115,22 @@ func wrongValue(types []string) (any, string) {
 // PRC103 finding if a mutation crashed the server (5xx) and a PRC104
 // finding if one was accepted (2xx). When the example itself fails with a
 // 5xx, a crash proves nothing about validation: it says so in a note.
-func (r *runner) malformed(ctx context.Context, op lint.Operation, path string, a caller) ([]lint.Finding, string, error) {
+//
+// hung is true when a request got no answer at all: the server may stay
+// busy, so the caller stops sending.
+func (r *runner) malformed(ctx context.Context, op lint.Operation, path string, a caller) (findings []lint.Finding, note string, hung bool, err error) {
 	muts := mutations(op.Body, op.Fields)
 	if len(muts) == 0 {
-		return nil, "", nil
+		return nil, "", false, nil
 	}
 	control, err := r.send(ctx, op, path, a)
 	if err != nil {
-		return nil, "", err
+		return nil, "", false, err
 	}
-	if control.Status >= 500 {
-		return nil, fmt.Sprintf("malformed input not tested: the spec's own example already gets %d", control.Status), nil
+	// Only a 2xx says the example reaches validation: a 404 or a 403 would
+	// refuse every mutation for another reason.
+	if !success(control) {
+		return nil, fmt.Sprintf("malformed input not tested: the spec's own example, sent as A, already gets %d", control.Status), false, nil
 	}
 	var crashed, accepted []string
 	var crashEvidence, acceptEvidence []lint.Exchange
@@ -142,10 +147,11 @@ func (r *runner) malformed(ctx context.Context, op lint.Operation, path string, 
 			sent := mask(string(m.body), r.tokens...)
 			crashEvidence = append(crashEvidence, lint.Exchange{Caller: a.name, Method: op.Method, URL: path,
 				Sent: sent[:min(len(sent), maxBody)], Body: "(no answer)"})
-			continue
+			hung = true
+			break // the next mutation would only wait out the timeout too
 		}
 		if err != nil {
-			return nil, "", err
+			return nil, "", false, err
 		}
 		switch {
 		case exchange.Status >= 500:
@@ -154,7 +160,6 @@ func (r *runner) malformed(ctx context.Context, op lint.Operation, path string, 
 			accepted, acceptEvidence = append(accepted, m.what), append(acceptEvidence, exchange)
 		}
 	}
-	var findings []lint.Finding
 	name := op.Method + " " + op.Path
 	if len(crashed) > 0 {
 		findings = append(findings, lint.Finding{
@@ -174,5 +179,5 @@ func (r *runner) malformed(ctx context.Context, op lint.Operation, path string, 
 			Evidence: acceptEvidence,
 		})
 	}
-	return findings, "", nil
+	return findings, "", hung, nil
 }
