@@ -1,0 +1,8 @@
+openapi: 3.0.3
+info:
+  title: Ignores PRC105 at the root
+  version: "1"
+x-procyon-ignore:
+  - rule: PRC105
+    reason: "The staging copy uses an internal CA"
+paths: {}

@@ -10,7 +10,7 @@ import (
 // linting the spec. Their catalog lives here, next to the lint rules, so an
 // x-procyon-ignore can name either kind and a typo in either is caught.
 // They have no check: internal/test produces their findings.
-var runtimeRules = []Rule{prc101, prc102, prc103, prc104}
+var runtimeRules = []Rule{prc101, prc102, prc103, prc104, prc105}
 
 var prc101 = Rule{
 	ID:       "PRC101",
@@ -37,6 +37,13 @@ var prc104 = Rule{
 	ID:       "PRC104",
 	Title:    "Server accepted a request the spec forbids",
 	Severity: Low,
+	OWASP:    "API8:2023 Security Misconfiguration",
+}
+
+var prc105 = Rule{
+	ID:       "PRC105",
+	Title:    "The API's TLS is weak",
+	Severity: High,
 	OWASP:    "API8:2023 Security Misconfiguration",
 }
 
@@ -95,6 +102,13 @@ const (
 // report, the way Run does for a lint: sorted, with the spec's ignores of
 // runtime rules applied and the fail threshold checked.
 func (s *Spec) Finish(findings []Finding, notes []Note, opts Options) Report {
+	// A finding about no operation (PRC105, the target's TLS) is about the
+	// spec as a whole: an ignore at the spec's root covers it.
+	for i := range findings {
+		if findings[i].Operation == "" && findings[i].about == nil {
+			findings[i].about = s.doc
+		}
+	}
 	report := Report{FailOn: cmp.Or(opts.FailOn, High), Sources: s.files.lines, Findings: findings}
 	sortFindings(report.Findings)
 	today := opts.Today
