@@ -112,19 +112,47 @@ func sortedKeys[V any](m map[string]V) []string {
 var pathParam = regexp.MustCompile(`\{([^}]+)\}`)
 
 // fill replaces every parameter of path with a value, or reports the first
-// one it has none for.
-func (h *harvest) fill(path string) (string, error) {
+// one it has none for. It also returns the values used, unescaped.
+func (h *harvest) fill(path string) (string, []string, error) {
 	var missing string
+	var values []string
 	filled := pathParam.ReplaceAllStringFunc(path, func(m string) string {
 		name := m[1 : len(m)-1]
 		v, ok := h.value(path, name)
 		if !ok && missing == "" {
 			missing = name
 		}
+		values = append(values, v)
 		return url.PathEscape(v)
 	})
 	if missing != "" {
-		return "", fmt.Errorf("no value for {%s}", missing)
+		return "", nil, fmt.Errorf("no value for {%s}", missing)
 	}
-	return filled, nil
+	return filled, values, nil
+}
+
+// saw reports whether any response recorded in h showed value.
+func (h *harvest) saw(value string) bool {
+	for _, fields := range h.byPath {
+		for _, values := range fields {
+			if slices.Contains(values, value) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// shows reports whether a JSON body holds one of values in any field: the
+// response is about the object those values name.
+func shows(body []byte, values []string) bool {
+	var v any
+	if json.Unmarshal(body, &v) != nil {
+		return false
+	}
+	found := false
+	walk(v, func(_, value string) {
+		found = found || slices.Contains(values, value)
+	})
+	return found
 }

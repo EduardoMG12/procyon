@@ -66,25 +66,42 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 	if err != nil {
 		return lint.Report{}, err
 	}
+	// What B's own reads show is B's, or shared with B: finding such a value
+	// in a response to B proves nothing.
+	b := caller{name: "B", token: opts.TokenB}
+	ofB, err := r.discover(ctx, ops, b, newHarvest(nil))
+	if err != nil {
+		return lint.Report{}, err
+	}
 
 	var findings []lint.Finding
 	var notes []lint.Note
 	for _, op := range ops {
-		path, err := ofA.fill(op.Path)
+		path, values, err := ofA.fill(op.Path)
 		if err != nil {
 			notes = append(notes, lint.Note{Location: op.Location, Message: fmt.Sprintf(
 				"%s %s not tested: %v in A's responses; declare one under test.ids in .procyon.yaml", op.Method, op.Path, err)})
 			continue
 		}
-		if op.Public {
+		if !op.Public {
+			exchange, err := r.send(ctx, op, path, anonymous)
+			if err != nil {
+				return lint.Report{}, err
+			}
+			if success(exchange) {
+				findings = append(findings, anonymousAccess(op, exchange))
+			}
+		}
+		// B reads A's object: only reads for now, writes and deletes are #77.
+		if op.Method != http.MethodGet || len(values) == 0 {
 			continue
 		}
-		exchange, err := r.send(ctx, op, path, anonymous)
+		exchange, body, err := r.sendFull(ctx, op, path, b)
 		if err != nil {
 			return lint.Report{}, err
 		}
-		if exchange.Status >= 200 && exchange.Status < 300 {
-			findings = append(findings, anonymousAccess(op, exchange))
+		if ofAs := unseen(values, ofB); success(exchange) && len(ofAs) > 0 && shows(body, ofAs) {
+			findings = append(findings, otherAccount(op, exchange))
 		}
 	}
 	return spec.Finish(findings, notes, lint.Options{FailOn: opts.FailOn}), nil
@@ -102,6 +119,35 @@ func anonymousAccess(op lint.Operation, exchange lint.Exchange) lint.Finding {
 			"If it is meant to be open, mark it x-procyon-public with the reason.",
 		Evidence: []lint.Exchange{exchange},
 	}
+}
+
+// otherAccount is a PRC102 finding.
+func otherAccount(op lint.Operation, exchange lint.Exchange) lint.Finding {
+	return lint.Finding{
+		Rule:      lint.RuntimeRule("PRC102"),
+		Location:  op.Location,
+		Operation: op.Method + " " + op.Path,
+		Why: fmt.Sprintf("Test account B asked for an object of test account A and got %d with A's object: "+
+			"any user can read other users' objects by changing the ID in the path.", exchange.Status),
+		Fix: "On the server, check that the object belongs to the caller (or that the caller may see it) " +
+			"before returning it, and answer 404 otherwise.",
+		Evidence: []lint.Exchange{exchange},
+	}
+}
+
+func success(exchange lint.Exchange) bool {
+	return exchange.Status >= 200 && exchange.Status < 300
+}
+
+// unseen keeps the values B's own responses never showed.
+func unseen(values []string, ofB *harvest) []string {
+	var kept []string
+	for _, v := range values {
+		if !ofB.saw(v) {
+			kept = append(kept, v)
+		}
+	}
+	return kept
 }
 
 // inTestOrder orders operations as runtime tests run them: reads, then
@@ -181,7 +227,7 @@ func (r *runner) discover(ctx context.Context, ops []lint.Operation, who caller,
 			if done[i] || op.Method != http.MethodGet {
 				continue
 			}
-			path, err := h.fill(op.Path)
+			path, _, err := h.fill(op.Path)
 			if err != nil {
 				continue // not yet
 			}

@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
@@ -32,12 +33,17 @@ func runAgainst(t *testing.T, fixed bool) (lint.Report, []string) {
 
 func TestRunFindsThePlantedVulnerabilities(t *testing.T) {
 	report, got := runAgainst(t, false)
-	want := []string{"PRC101 GET /notes"}
+	want := []string{"PRC101 GET /notes", "PRC102 GET /notes/{id}"}
 	if !slices.Equal(got, want) {
 		t.Errorf("vulnerable API: findings %q, want %q", got, want)
 	}
 	if !report.Failed {
 		t.Error("a critical finding did not fail the run")
+	}
+	bola := report.Findings[1].Evidence
+	if len(bola) != 1 || bola[0].Caller != "B" || !strings.HasSuffix(bola[0].URL, "/notes/1") ||
+		strings.Contains(bola[0].URL+bola[0].Body, vulnapi.TokenB) {
+		t.Errorf("PRC102 evidence = %+v, want B's GET /notes/1, with no token", bola)
 	}
 	evidence := report.Findings[0].Evidence
 	if len(evidence) != 1 || evidence[0].Caller != "anonymous" || evidence[0].Status != 200 ||
@@ -84,5 +90,39 @@ func TestRunNeedsBothAccounts(t *testing.T) {
 	_, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: "http://127.0.0.1:1", TokenA: "a"})
 	if err == nil || !strings.Contains(err.Error(), "PROCYON_USER_B_TOKEN") {
 		t.Errorf("err = %v, want it to name PROCYON_USER_B_TOKEN", err)
+	}
+}
+
+// A 2xx to B is a pass when it does not hold A's object: B's own data, or
+// nothing.
+func TestPRC102NeedsAsObjectInTheResponse(t *testing.T) {
+	for name, answer := range map[string]string{
+		"B's own note": `{"id": "3", "owner": "bob"}`,
+		"empty list":   `[]`,
+		"not JSON":     `ok`,
+	} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			token := r.Header.Get("Authorization")
+			switch {
+			case token == "":
+				w.WriteHeader(http.StatusUnauthorized)
+			case r.URL.Path == "/notes" && token == "Bearer "+vulnapi.TokenA:
+				w.Write([]byte(`[{"id": "1", "owner": "alice"}]`))
+			case r.URL.Path == "/notes":
+				w.Write([]byte(`[{"id": "3", "owner": "bob"}]`))
+			case token == "Bearer "+vulnapi.TokenB:
+				w.Write([]byte(answer))
+			}
+		}))
+		report, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB})
+		srv.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range report.Findings {
+			if f.Rule.ID == "PRC102" {
+				t.Errorf("%s: PRC102 on %s, want none", name, f.Operation)
+			}
+		}
 	}
 }

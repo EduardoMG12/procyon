@@ -118,6 +118,7 @@ Runtime rules, found by `procyon test` against a running copy of the API
 | ID | Severity | Catches |
 |---|---|---|
 | [PRC101](docs/rules/PRC101.md) | critical | Anonymous caller reached an operation that requires authentication |
+| [PRC102](docs/rules/PRC102.md) | critical | Another account reached A's object (BOLA) |
 
 ## What it can and cannot see
 
