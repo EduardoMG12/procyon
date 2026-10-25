@@ -10,8 +10,8 @@ exposed to anonymous callers, clients that can make themselves admin. It runs
 in CI and fails the build before the problem ships, without you writing a
 single test.
 
-> **Status: v0.1 in development.** Everything below works from source; no
-> release is published yet.
+> **Status: v0.1.0 released.** Linting the spec works today; runtime tests
+> against a running copy of your API are being built for v0.2.
 
 ## Why
 
@@ -29,11 +29,12 @@ your source code.
 
 ## Usage
 
-Once a release is published, download the binary for your system from the
-releases page. Until then, install it with Go:
+Download the binary for your system from the
+[releases page](https://github.com/EduardoMG12/procyon/releases) (check it
+against `SHA256SUMS`), or install it with Go:
 
 ```sh
-go install github.com/EduardoMG12/procyon/cmd/procyon@main
+go install github.com/EduardoMG12/procyon/cmd/procyon@v0.1.0
 procyon lint openapi.yaml
 ```
 
@@ -66,24 +67,30 @@ or not, and Swagger 2.0 in one file; YAML or JSON.
 | `--output <format>=<path>` | also write a format to a file; repeatable |
 | `--ref-root <dir>` | let `$refs` read anywhere under `dir` (monorepos) |
 
-`fail-on` and `ref-root` can also live in a `.procyon.yaml`. See
+`fail-on`, `ref-root`, `format` and `output` can also live in a
+`.procyon.yaml`. See
 [configuration](docs/configuration.md), [ignoring a finding](docs/ignoring.md),
 [how `$refs` are read](docs/refs.md) and the [JSON format](docs/json-format.md).
 
 ### In GitHub Actions
 
-Until binaries are published, install it with Go:
+The job needs `security-events: write` to upload SARIF to code scanning:
 
 ```yaml
-- uses: actions/setup-go@v6
-  with:
-    go-version: stable
-- run: go install github.com/EduardoMG12/procyon/cmd/procyon@main
-- run: procyon lint openapi.yaml --output sarif=procyon.sarif --output markdown=$GITHUB_STEP_SUMMARY
-- uses: github/codeql-action/upload-sarif@v3
-  if: always()
-  with:
-    sarif_file: procyon.sarif
+permissions:
+  contents: read
+  security-events: write
+steps:
+  - uses: actions/checkout@v5
+  - uses: actions/setup-go@v6
+    with:
+      go-version: stable
+  - run: go install github.com/EduardoMG12/procyon/cmd/procyon@v0.1.0
+  - run: procyon lint openapi.yaml --output sarif=procyon.sarif --output markdown=$GITHUB_STEP_SUMMARY
+  - uses: github/codeql-action/upload-sarif@v4
+    if: always()
+    with:
+      sarif_file: procyon.sarif
 ```
 
 Run Procyon before any step that writes credentials into the workspace

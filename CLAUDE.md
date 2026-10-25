@@ -97,12 +97,11 @@ lazily. See `docs/agents/domain.md`.
 
 ## Current state
 
-Updated 2026-10-24. v0.1's PRs (#1, #22–#63) are merged into `main`,
-locally on the owner's machine, one commit per PR, including Swagger 2.0
-(#13, landed as #47–#49) and fixes found by benchmarking against vulnerable
-and large real specs (docs/benchmark.md; a sweep of 379 APIs.guru specs
-lints all but really invalid ones, with no crash). Left for v0.1: #21 (publishing
-the v0.1.0 release, after the owner's review; the release machinery is in).
+Updated 2026-10-24. v0.1 is done and released as v0.1.0 (#21): PRs #1,
+#22–#67 and #87–#90, merged locally on the owner's machine, one commit per
+PR. v0.2 (runtime tests, `procyon test`) is planned in
+[docs/prds/0002-v0.2-runtime-tests.md](docs/prds/0002-v0.2-runtime-tests.md);
+its spec is #69 and its slices are #70–#86, in order.
 Before every push, run the tests on a clean `git archive` of the commit:
 new files left out of a commit pass locally and fail everywhere else. The
 repository is public since 2026-10-24 and CI runs on every PR, but still
