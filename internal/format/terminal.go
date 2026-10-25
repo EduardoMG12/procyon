@@ -82,7 +82,9 @@ func (t *terminal) paint(color, s string) string {
 }
 
 func (t *terminal) finding(f lint.Finding, source []string) {
-	label := fmt.Sprintf("%-8s", strings.ToUpper(f.Rule.Severity.String()))
+	// Padded to the indent, plus a space for CRITICAL, the one label as
+	// long as the indent.
+	label := fmt.Sprintf("%-7s ", strings.ToUpper(f.Rule.Severity.String()))
 	t.line(t.paint(severityColor[f.Rule.Severity], label) + f.Rule.ID + "  " + f.Rule.Title)
 
 	loc := location(f.Location)

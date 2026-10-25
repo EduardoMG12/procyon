@@ -24,7 +24,7 @@ var formats = map[string]render{
 		// GitHub resolves paths against the repository root, which is where
 		// CI runs Procyon.
 		wd, _ := os.Getwd()
-		return format.SARIF(w, r, wd, lint.Rules())
+		return format.SARIF(w, r, wd, slices.Concat(lint.Rules(), lint.RuntimeRules()))
 	},
 }
 

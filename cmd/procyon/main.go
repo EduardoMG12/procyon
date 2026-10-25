@@ -2,12 +2,15 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 
 	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/test"
 )
 
 // Exit codes. Scripts tell "Procyon found problems" (1) apart from "Procyon
@@ -35,21 +38,54 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, versionString())
 		return exitPass
 	case "lint":
-		return runLint(args[1:], stdout, stderr)
+		return runCommand(lintCommand, args[1:], stdout, stderr)
+	case "test":
+		return runCommand(testCommand(), args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "procyon: unknown command %q\n\n%s", args[0], usage)
 		return exitUsage
 	}
 }
 
-func runLint(args []string, stdout, stderr io.Writer) int {
+// command is what differs between lint and test: their extra flags and
+// how they produce a report. Flags shared by both (--fail-on, --format,
+// --output, --ref-root), .procyon.yaml, formats and exit codes are handled
+// once, in runCommand.
+type command struct {
+	name  string
+	flags func(*flag.FlagSet) // registers the command's own flags, or nil
+	run   func(spec string, failOn lint.Severity, refRoot string) (lint.Report, error)
+}
+
+var lintCommand = command{
+	name: "lint",
+	run: func(spec string, failOn lint.Severity, refRoot string) (lint.Report, error) {
+		return lint.Run(spec, lint.Options{FailOn: failOn, RefRoot: refRoot})
+	},
+}
+
+func testCommand() command {
+	var baseURL string
+	return command{
+		name:  "test",
+		flags: func(f *flag.FlagSet) { f.StringVar(&baseURL, "base-url", "", "") },
+		run: func(spec string, failOn lint.Severity, refRoot string) (lint.Report, error) {
+			if baseURL == "" {
+				return lint.Report{}, errors.New("--base-url is required: where the copy of your API under test runs")
+			}
+			return test.Run(context.Background(), spec, test.Options{BaseURL: baseURL, FailOn: failOn, RefRoot: refRoot})
+		},
+	}
+}
+
+func runCommand(cmd command, args []string, stdout, stderr io.Writer) int {
 	cfg, err := loadConfig()
 	if err != nil {
 		fmt.Fprintf(stderr, "procyon: %v\n", err)
 		return exitUsage
 	}
 
-	flags := flag.NewFlagSet("lint", flag.ContinueOnError)
+	flags := flag.NewFlagSet(cmd.name, flag.ContinueOnError)
 	flags.SetOutput(io.Discard) // errors are printed below, once
 	failOn := flags.String("fail-on", cfg.FailOn, "")
 	defaultFormat := "terminal"
@@ -60,13 +96,16 @@ func runLint(args []string, stdout, stderr io.Writer) int {
 	refRoot := flags.String("ref-root", cfg.RefRoot, "")
 	var extra outputs
 	flags.Var(&extra, "output", "")
+	if cmd.flags != nil {
+		cmd.flags(flags)
+	}
 	specs, err := parseInterspersed(flags, args)
 	if err != nil {
-		fmt.Fprintf(stderr, "procyon lint: %v\n\n%s", err, usage)
+		fmt.Fprintf(stderr, "procyon %s: %v\n\n%s", cmd.name, err, usage)
 		return exitUsage
 	}
 	if len(specs) != 1 {
-		fmt.Fprintf(stderr, "procyon lint: expected exactly one spec file\n\n%s", usage)
+		fmt.Fprintf(stderr, "procyon %s: expected exactly one spec file\n\n%s", cmd.name, usage)
 		return exitUsage
 	}
 	// --output flags replace the file's outputs instead of adding to them,
@@ -80,9 +119,9 @@ func runLint(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 
-	opts := lint.Options{RefRoot: *refRoot}
+	var threshold lint.Severity
 	if *failOn != "" {
-		if opts.FailOn, err = lint.ParseSeverity(*failOn); err != nil {
+		if threshold, err = lint.ParseSeverity(*failOn); err != nil {
 			fmt.Fprintf(stderr, "procyon: --fail-on: %v\n", err)
 			return exitUsage
 		}
@@ -95,7 +134,7 @@ func runLint(args []string, stdout, stderr io.Writer) int {
 	}
 	defer closeAll(files)
 
-	report, err := lint.Run(specs[0], opts)
+	report, err := cmd.run(specs[0], threshold, *refRoot)
 	if err != nil {
 		fmt.Fprintf(stderr, "procyon: %v\n", err)
 		return exitUsage
@@ -174,6 +213,13 @@ const usage = `Usage:
     --ref-root <dir>          Let $refs read files anywhere under dir, not only
                               in the spec's directory (for monorepos). Can also
                               be set as ref-root in .procyon.yaml.
+  procyon test [flags] --base-url <url> <spec>
+                        Call a running, disposable copy of the API and report
+                        what it let an anonymous caller do. Takes the same
+                        flags as lint.
+
+    --base-url <url>          Where the API runs. Must be a loopback or private
+                              address: never a system on the internet.
   procyon --version     Print the version
 
 Exit codes: 0 passed, 1 findings at or above the fail threshold, 2 usage or input error.
