@@ -73,7 +73,10 @@ func testCommand() command {
 			if baseURL == "" {
 				return lint.Report{}, errors.New("--base-url is required: where the copy of your API under test runs")
 			}
-			return test.Run(context.Background(), spec, test.Options{BaseURL: baseURL, FailOn: failOn, RefRoot: refRoot})
+			return test.Run(context.Background(), spec, test.Options{
+				BaseURL: baseURL, FailOn: failOn, RefRoot: refRoot,
+				TokenA: os.Getenv("PROCYON_USER_A_TOKEN"), TokenB: os.Getenv("PROCYON_USER_B_TOKEN"),
+			})
 		},
 	}
 }
@@ -220,6 +223,8 @@ const usage = `Usage:
 
     --base-url <url>          Where the API runs. Must be a loopback or private
                               address: never a system on the internet.
+    PROCYON_USER_A_TOKEN, PROCYON_USER_B_TOKEN
+                              Tokens of two test accounts seeded in the API.
   procyon --version     Print the version
 
 Exit codes: 0 passed, 1 findings at or above the fail threshold, 2 usage or input error.

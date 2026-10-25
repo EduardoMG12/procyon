@@ -12,6 +12,8 @@ import (
 var notesSpec = filepath.Join("..", "..", "internal", "vulnapi", "openapi.yaml")
 
 func TestTestCommandExitCodes(t *testing.T) {
+	t.Setenv("PROCYON_USER_A_TOKEN", vulnapi.TokenA)
+	t.Setenv("PROCYON_USER_B_TOKEN", vulnapi.TokenB)
 	vulnerable := httptest.NewServer(vulnapi.New(false))
 	defer vulnerable.Close()
 	fixed := httptest.NewServer(vulnapi.New(true))
@@ -40,5 +42,14 @@ func TestTestCommandExitCodes(t *testing.T) {
 				t.Errorf("output does not contain %q:\n%s%s", tt.output, r.stdout, r.stderr)
 			}
 		})
+	}
+}
+
+func TestTestCommandNeedsTheAccounts(t *testing.T) {
+	t.Setenv("PROCYON_USER_A_TOKEN", "")
+	t.Setenv("PROCYON_USER_B_TOKEN", "")
+	r := run(t, "test", "--base-url", "http://127.0.0.1:1", notesSpec)
+	if r.code != 2 || !strings.Contains(r.stderr, "PROCYON_USER_A_TOKEN") {
+		t.Errorf("exit %d, stderr %q; want 2 naming PROCYON_USER_A_TOKEN", r.code, r.stderr)
 	}
 }

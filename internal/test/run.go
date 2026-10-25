@@ -28,6 +28,9 @@ type Options struct {
 	Timeout time.Duration
 	// Budget is the most requests a run sends. Zero means 1000.
 	Budget int
+	// TokenA and TokenB are the test accounts' tokens (PROCYON_USER_A_TOKEN,
+	// PROCYON_USER_B_TOKEN). B must not be allowed to touch A's objects.
+	TokenA, TokenB string
 }
 
 // maxBody is how much of a response body evidence keeps.
@@ -35,6 +38,10 @@ const maxBody = 200
 
 // Run tests the API at opts.BaseURL against the spec at specPath.
 func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error) {
+	if opts.TokenA == "" || opts.TokenB == "" {
+		return lint.Report{}, fmt.Errorf("set %s and %s to the tokens of two test accounts seeded in the API "+
+			"(the bare token: Procyon adds \"Bearer \" when the spec asks for it)", envTokenA, envTokenB)
+	}
 	spec, err := lint.Load(specPath, lint.Options{RefRoot: opts.RefRoot})
 	if err != nil {
 		return lint.Report{}, err
@@ -44,6 +51,7 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 		return lint.Report{}, err
 	}
 	c := newClient(target, cmp.Or(opts.Timeout, 10*time.Second), cmp.Or(opts.Budget, 1000))
+	r := &runner{client: c, target: target, tokens: []string{opts.TokenA, opts.TokenB}}
 
 	var findings []lint.Finding
 	var notes []lint.Note
@@ -56,7 +64,7 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 		if op.Public {
 			continue
 		}
-		exchange, err := send(ctx, c, target, op, "anonymous")
+		exchange, err := r.send(ctx, op, anonymous)
 		if err != nil {
 			return lint.Report{}, err
 		}
@@ -100,26 +108,41 @@ func inTestOrder(ops []lint.Operation) []lint.Operation {
 	return ops
 }
 
-// send calls one operation as caller and records the exchange. A request
-// that cannot be sent at all (the API is down, the budget is used up) stops
-// the run: its findings would be incomplete.
-func send(ctx context.Context, c *client, target *url.URL, op lint.Operation, caller string) (lint.Exchange, error) {
-	u := *target
-	u.Path = strings.TrimSuffix(target.Path, "/") + op.Path
+// runner holds what every request of a run shares.
+type runner struct {
+	client *client
+	target *url.URL
+	tokens []string // every token, to mask in evidence
+}
+
+// send calls one operation as who and records the exchange, with every
+// token masked. A request that cannot be sent at all (the API is down, the
+// budget is used up) stops the run: its findings would be incomplete.
+func (r *runner) send(ctx context.Context, op lint.Operation, who caller) (lint.Exchange, error) {
+	u := *r.target
+	u.Path = strings.TrimSuffix(r.target.Path, "/") + op.Path
 	req, err := http.NewRequestWithContext(ctx, op.Method, u.String(), nil)
 	if err != nil {
 		return lint.Exchange{}, fmt.Errorf("%s %s: %w", op.Method, op.Path, err)
 	}
-	resp, err := c.do(req)
+	authorize(req, op.Credential, who.token)
+	resp, err := r.client.do(req)
 	if err != nil {
-		return lint.Exchange{}, fmt.Errorf("%s %s: %w", op.Method, op.Path, err)
+		// The error may quote the URL, and a query-string token with it.
+		return lint.Exchange{}, fmt.Errorf("%s %s: %s", op.Method, op.Path, mask(err.Error(), r.tokens...))
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
 	if err != nil {
 		return lint.Exchange{}, fmt.Errorf("%s %s: reading the response: %w", op.Method, op.Path, err)
 	}
-	return lint.Exchange{Caller: caller, Method: op.Method, URL: u.String(), Status: resp.StatusCode, Body: string(body)}, nil
+	return lint.Exchange{
+		Caller: who.name,
+		Method: op.Method,
+		URL:    mask(req.URL.String(), r.tokens...),
+		Status: resp.StatusCode,
+		Body:   mask(string(body), r.tokens...),
+	}, nil
 }
 
 func lookupHost(ctx context.Context, host string) ([]netip.Addr, error) {
