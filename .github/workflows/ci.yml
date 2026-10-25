@@ -30,19 +30,26 @@ jobs:
       - name: go test
         run: go test -race ./...
 
-  # Runs the README's GitHub Actions example (checkout, install from the
-  # checkout, lint with SARIF and Markdown outputs) so it cannot rot. The
-  # SARIF upload step is left out: it needs code scanning, which a private
-  # repository on a free plan does not have.
+  # Runs the README's GitHub Actions example so it cannot rot. Two lines
+  # differ on purpose: Procyon is installed from the checkout (a PR tests its
+  # own code, not the last release), and the spec is a fixture.
   readme-example:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v5
         with:
           path: procyon
       - uses: actions/setup-go@v6
         with:
-          go-version-file: procyon/go.mod
+          go-version: stable
       - run: cd procyon && go install ./cmd/procyon
       - run: procyon lint procyon/testdata/specs/prc001-global-security.yaml --output sarif=procyon.sarif --output markdown=$GITHUB_STEP_SUMMARY
       - run: test -s procyon.sarif
+      - uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: procyon.sarif
+          checkout_path: procyon
