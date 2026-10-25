@@ -28,7 +28,9 @@ func TestTestCommandExitCodes(t *testing.T) {
 		{"finding fails the run", []string{"--base-url", vulnerable.URL, notesSpec}, 1, "PRC101"},
 		{"fixed API passes", []string{"--base-url", fixed.URL, notesSpec}, 0, "PASSED"},
 		{"lower threshold than the finding", []string{"--fail-on", "critical", "--base-url", fixed.URL, notesSpec}, 0, "PASSED"},
-		{"base URL is required", []string{notesSpec}, 2, "--base-url is required"},
+		{"a target is required", []string{notesSpec}, 2, "--compose or --base-url is required"},
+		{"compose needs service and port", []string{"--compose", "c.yml", notesSpec}, 2, "--compose needs --service"},
+		{"compose or base URL, not both", []string{"--compose", "c.yml", "--base-url", fixed.URL, notesSpec}, 2, "give one, not both"},
 		{"public target is refused", []string{"--base-url", "http://8.8.8.8", notesSpec}, 2, "not a loopback or private address"},
 		{"lint flags work", []string{"--format", "json", "--base-url", vulnerable.URL, notesSpec}, 1, `"version": 1`},
 	}

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/EduardoMG12/procyon/internal/lint"
 	"github.com/EduardoMG12/procyon/internal/test"
@@ -65,15 +67,41 @@ var lintCommand = command{
 }
 
 func testCommand() command {
-	var baseURL string
+	var baseURL, composeFile, service string
+	var port int
 	return command{
-		name:  "test",
-		flags: func(f *flag.FlagSet) { f.StringVar(&baseURL, "base-url", "", "") },
-		run: func(spec string, failOn lint.Severity, refRoot string, cfg config) (lint.Report, error) {
-			if baseURL == "" {
-				return lint.Report{}, errors.New("--base-url is required: where the copy of your API under test runs")
+		name: "test",
+		flags: func(f *flag.FlagSet) {
+			f.StringVar(&baseURL, "base-url", "", "")
+			f.StringVar(&composeFile, "compose", "", "")
+			f.StringVar(&service, "service", "", "")
+			f.IntVar(&port, "port", 0, "")
+		},
+		run: func(spec string, failOn lint.Severity, refRoot string, cfg config) (report lint.Report, err error) {
+			switch {
+			case composeFile != "" && baseURL != "":
+				return lint.Report{}, errors.New("--compose and --base-url: give one, not both")
+			case composeFile != "" && (service == "" || port == 0):
+				return lint.Report{}, errors.New("--compose needs --service (the service that serves the API) and --port (its port in the container)")
+			case composeFile == "" && baseURL == "":
+				return lint.Report{}, errors.New("--compose or --base-url is required: where the copy of your API under test runs")
 			}
-			return test.Run(context.Background(), spec, test.Options{
+			// Ctrl-C cancels the run; the environment is still torn down.
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			if composeFile != "" {
+				var down func() error
+				baseURL, down, err = test.Up(ctx, test.Compose{File: composeFile, Service: service, Port: port})
+				defer func() {
+					if downErr := down(); downErr != nil && err == nil {
+						err = fmt.Errorf("the tests ran, but the environment was left running: %w", downErr)
+					}
+				}()
+				if err != nil {
+					return lint.Report{}, err
+				}
+			}
+			return test.Run(ctx, spec, test.Options{
 				BaseURL: baseURL, FailOn: failOn, RefRoot: refRoot,
 				TokenA: os.Getenv("PROCYON_USER_A_TOKEN"), TokenB: os.Getenv("PROCYON_USER_B_TOKEN"),
 				IDs: cfg.Test.IDs,
@@ -217,13 +245,17 @@ const usage = `Usage:
     --ref-root <dir>          Let $refs read files anywhere under dir, not only
                               in the spec's directory (for monorepos). Can also
                               be set as ref-root in .procyon.yaml.
-  procyon test [flags] --base-url <url> <spec>
+  procyon test [flags] (--compose <file> --service <name> --port <port> | --base-url <url>) <spec>
                         Call a running, disposable copy of the API and report
                         what it let an anonymous caller do. Takes the same
                         flags as lint.
 
-    --base-url <url>          Where the API runs. Must be a loopback or private
-                              address: never a system on the internet.
+    --compose <file>          Start a disposable copy of the API with docker
+                              compose, test it, and always tear it down.
+    --service <name>          The compose service that serves the API.
+    --port <port>             The API's port inside that container.
+    --base-url <url>          Or test a copy you started. Must be a loopback or
+                              private address: never a system on the internet.
     PROCYON_USER_A_TOKEN, PROCYON_USER_B_TOKEN
                               Tokens of two test accounts seeded in the API.
   procyon --version     Print the version
