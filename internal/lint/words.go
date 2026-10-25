@@ -94,6 +94,37 @@ var (
 	}
 )
 
+// piiWords name personal data. Words are compared after splitWords, which
+// lowercases and drops accents.
+var piiWords = [][]string{
+	{"email"}, {"e", "mail"}, {"phone"}, {"telephone"}, {"cellphone"},
+	{"mobile", "number"}, {"telefone"}, {"celular"},
+	{"cpf"}, {"rg"}, {"ssn"}, {"social", "security", "number"},
+	{"passport"}, {"passaporte"}, {"national", "id"}, {"national", "identifier"}, {"tax", "id"},
+	{"address"}, {"endereco"},
+	{"birth", "date"}, {"birthdate"}, {"birthday"}, {"date", "of", "birth"}, {"dob"},
+	{"data", "nascimento"}, {"nascimento"},
+	{"first", "name"}, {"last", "name"}, {"full", "name"}, {"surname"},
+	{"nome", "completo"}, {"sobrenome"},
+}
+
+// piiDescribingWords, right after a personal-data word, mean the field is
+// about the data, not the data: emailTemplate, emailSettings,
+// emailVerifiedAt, addressFormat. On top of the general describingWords.
+var piiDescribingWords = append(slices.Clone(describingWords),
+	"template", "templates", "settings", "config", "configuration", "verified",
+	"verification", "enabled", "notifications", "preferences", "provider",
+	"server", "host", "port", "domain",
+)
+
+// piiReferenceWords, right before a personal-data word, make it something
+// other than a person's data: supportEmail (the company's), walletAddress,
+// listenAddress, ipAddress.
+var piiReferenceWords = append(slices.Clone(referenceWords),
+	"support", "sender", "noreply", "reply", "from", "wallet", "contract",
+	"listen", "ip", "mac", "server", "host", "bind", "remote", "local", "web",
+)
+
 // matches reports whether the field name holds one of the words in list:
 // the word appears whole (or as a plural), the word before it does not make
 // it a reference, and the word after it does not make it a description.
