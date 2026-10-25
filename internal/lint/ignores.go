@@ -181,7 +181,8 @@ func parseIgnoreList(value any, operation string, loc Location) ([]*ignore, erro
 }
 
 func knownRule(id string) bool {
-	return slices.ContainsFunc(rules, func(r Rule) bool { return r.ID == id })
+	isID := func(r Rule) bool { return r.ID == id }
+	return slices.ContainsFunc(rules, isID) || slices.ContainsFunc(runtimeRules, isID)
 }
 
 // applyIgnores moves the findings an ignore matches out of report.Findings

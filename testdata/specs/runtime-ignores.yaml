@@ -1,0 +1,15 @@
+openapi: 3.0.3
+info:
+  title: An ignore of a lint rule and one of a runtime rule
+  version: "1"
+paths:
+  /reports:
+    get:
+      x-procyon-ignore:
+        - rule: PRC001
+          reason: "Public until the auth migration"
+        - rule: PRC101
+          reason: "Public until the auth migration"
+      responses:
+        "200":
+          description: ok

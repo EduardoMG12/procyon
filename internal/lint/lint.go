@@ -2,7 +2,6 @@
 package lint
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -10,7 +9,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -66,24 +64,13 @@ func Run(path string, opts Options) (Report, error) {
 		}
 	}
 	// Same spec, same report, same order: sort by where findings point.
-	slices.SortStableFunc(report.Findings, func(a, b Finding) int {
-		return cmp.Or(
-			cmp.Compare(a.Location.File, b.Location.File),
-			cmp.Compare(a.Location.Line, b.Location.Line),
-			cmp.Compare(a.Location.Column, b.Location.Column),
-			cmp.Compare(a.Rule.ID, b.Rule.ID),
-		)
-	})
+	sortFindings(report.Findings)
 	today := opts.Today
 	if today.IsZero() {
 		today = time.Now()
 	}
-	applyIgnores(&report, ignores, today)
-	for _, f := range report.Findings {
-		if f.Rule.Severity >= report.FailOn {
-			report.Failed = true
-		}
-	}
+	applyIgnores(&report, ignoresOf(ignores, rules), today)
+	report.Failed = failed(report)
 	return report, nil
 }
 
