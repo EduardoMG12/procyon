@@ -77,3 +77,30 @@ func TestIgnoresOfLintAndRuntimeRulesStayApart(t *testing.T) {
 		t.Errorf("an unignored critical finding: findings %v, failed %v; want it kept and the run failed", report.Findings, report.Failed)
 	}
 }
+
+func TestOperationCredentials(t *testing.T) {
+	spec, err := Load("../../testdata/specs/runtime-credentials.yaml", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"/default":       "header Authorization Bearer ",
+		"/basic":         "header Authorization Basic ",
+		"/key":           "header X-API-Key ",
+		"/cookie":        "cookie session ",
+		"/oauth":         "header Authorization Bearer ",
+		"/both-then-key": "header X-API-Key ", // two schemes at once cannot be filled with one token
+		"/mtls":          "none",
+		"/none":          "none",
+		"/param":         "header x-access-token ",
+	}
+	for _, op := range spec.Operations() {
+		got := "none"
+		if c := op.Credential; c != nil {
+			got = c.In + " " + c.Name + " " + c.Prefix
+		}
+		if got != want[op.Path] {
+			t.Errorf("%s credential = %q, want %q", op.Path, got, want[op.Path])
+		}
+	}
+}

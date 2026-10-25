@@ -19,7 +19,7 @@ func runAgainst(t *testing.T, fixed bool) (lint.Report, []string) {
 	t.Helper()
 	srv := httptest.NewServer(vulnapi.New(fixed))
 	defer srv.Close()
-	report, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL})
+	report, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestRunFindsNothingInTheFixedTwin(t *testing.T) {
 }
 
 func TestRunRefusesAPublicTarget(t *testing.T) {
-	_, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: "http://8.8.8.8"})
+	_, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: "http://8.8.8.8", TokenA: "a", TokenB: "b"})
 	if err == nil || !strings.Contains(err.Error(), "not a loopback or private address") {
 		t.Errorf("err = %v, want the target refused", err)
 	}
@@ -76,5 +76,12 @@ func TestInTestOrder(t *testing.T) {
 	want := []string{"GET /a", "GET /b", "POST /a", "PUT /b", "DELETE /a"}
 	if !slices.Equal(got, want) {
 		t.Errorf("order = %q, want %q", got, want)
+	}
+}
+
+func TestRunNeedsBothAccounts(t *testing.T) {
+	_, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: "http://127.0.0.1:1", TokenA: "a"})
+	if err == nil || !strings.Contains(err.Error(), "PROCYON_USER_B_TOKEN") {
+		t.Errorf("err = %v, want it to name PROCYON_USER_B_TOKEN", err)
 	}
 }
