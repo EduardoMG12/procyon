@@ -1,6 +1,9 @@
 package lint
 
 import (
+	"encoding/json"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -26,6 +29,11 @@ type Operation struct {
 	// the spec allows. Nil when the operation needs none, or only ways
 	// Procyon cannot send (mutual TLS, several schemes at once).
 	Credential *Credential
+	// Body is a JSON request body built from the spec's example, or nil when
+	// the operation takes none or its JSON body has no example.
+	Body []byte
+	// NeedsBody is true when the spec marks the request body required.
+	NeedsBody bool
 }
 
 // Credential is where a token goes in a request.
@@ -60,6 +68,8 @@ func (s *Spec) Operations() []Operation {
 			Location:   s.files.asGiven(locate(op.Origin)),
 			Public:     publicReason(op) != "",
 			Credential: credentialOf(s.doc, path, op),
+			Body:       exampleBody(op),
+			NeedsBody:  op.RequestBody != nil && op.RequestBody.Value != nil && op.RequestBody.Value.Required,
 		})
 	})
 	return ops
@@ -113,4 +123,35 @@ func schemeCredential(scheme *openapi3.SecurityScheme) *Credential {
 		return &Credential{In: scheme.In, Name: scheme.Name}
 	}
 	return nil
+}
+
+// exampleBody returns the JSON example of an operation's request body: the
+// media type's example, else its first named example (by name), else the
+// schema's example.
+func exampleBody(op *openapi3.Operation) []byte {
+	if op.RequestBody == nil || op.RequestBody.Value == nil {
+		return nil
+	}
+	media := op.RequestBody.Value.Content.Get("application/json")
+	if media == nil {
+		return nil
+	}
+	example := media.Example
+	if example == nil && len(media.Examples) > 0 {
+		names := slices.Sorted(maps.Keys(media.Examples))
+		if ref := media.Examples[names[0]]; ref != nil && ref.Value != nil {
+			example = ref.Value.Value
+		}
+	}
+	if example == nil && media.Schema != nil && media.Schema.Value != nil {
+		example = media.Schema.Value.Example
+	}
+	if example == nil {
+		return nil
+	}
+	body, err := json.Marshal(example)
+	if err != nil {
+		return nil
+	}
+	return body
 }

@@ -33,7 +33,7 @@ func runAgainst(t *testing.T, fixed bool) (lint.Report, []string) {
 
 func TestRunFindsThePlantedVulnerabilities(t *testing.T) {
 	report, got := runAgainst(t, false)
-	want := []string{"PRC101 GET /notes", "PRC102 GET /notes/{id}"}
+	want := []string{"PRC101 GET /notes", "PRC102 GET /notes/{id}", "PRC102 PUT /notes/{id}", "PRC102 DELETE /notes/{id}"}
 	if !slices.Equal(got, want) {
 		t.Errorf("vulnerable API: findings %q, want %q", got, want)
 	}
@@ -123,6 +123,38 @@ func TestPRC102NeedsAsObjectInTheResponse(t *testing.T) {
 			if f.Rule.ID == "PRC102" {
 				t.Errorf("%s: PRC102 on %s, want none", name, f.Operation)
 			}
+		}
+	}
+}
+
+// A write that answers 2xx to B but leaves A's object as it was is a pass:
+// A reads it before and after.
+func TestPRC102WritesAreConfirmedByA(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := r.Header.Get("Authorization")
+		switch {
+		case token == "":
+			w.WriteHeader(http.StatusUnauthorized)
+		case r.Method == "GET" && r.URL.Path == "/notes" && token == "Bearer "+vulnapi.TokenB:
+			w.Write([]byte(`[{"id": "3", "owner": "bob"}]`))
+		case r.Method == "GET" && r.URL.Path == "/notes/3":
+			w.Write([]byte(`{"id": "3", "owner": "bob"}`))
+		case r.Method == "GET" && token == "Bearer "+vulnapi.TokenB:
+			w.WriteHeader(http.StatusNotFound)
+		case r.Method == "GET": // A's own notes, never changed
+			w.Write([]byte(`[{"id": "1", "owner": "alice"}]`))
+		default: // B's PUT and DELETE say yes and do nothing
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer srv.Close()
+	report, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range report.Findings {
+		if f.Rule.ID == "PRC102" {
+			t.Errorf("PRC102 on %s, want none: A's note never changed", f.Operation)
 		}
 	}
 }

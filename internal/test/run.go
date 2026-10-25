@@ -1,6 +1,7 @@
 package test
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"fmt"
@@ -74,6 +75,15 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 		return lint.Report{}, err
 	}
 
+	// readers are the GETs by path: how A checks whether B changed or
+	// deleted A's object.
+	readers := map[string]lint.Operation{}
+	for _, op := range ops {
+		if op.Method == http.MethodGet {
+			readers[op.Path] = op
+		}
+	}
+
 	var findings []lint.Finding
 	var notes []lint.Note
 	for _, op := range ops {
@@ -92,16 +102,18 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 				findings = append(findings, anonymousAccess(op, exchange))
 			}
 		}
-		// B reads A's object: only reads for now, writes and deletes are #77.
-		if op.Method != http.MethodGet || len(values) == 0 {
-			continue
+		if len(values) == 0 {
+			continue // no object in the path: nothing of A's to reach
 		}
-		exchange, body, err := r.sendFull(ctx, op, path, b)
+		finding, note, err := r.otherAccount(ctx, op, path, values, ofB, readers, a, b)
 		if err != nil {
 			return lint.Report{}, err
 		}
-		if ofAs := unseen(values, ofB); success(exchange) && len(ofAs) > 0 && shows(body, ofAs) {
-			findings = append(findings, otherAccount(op, exchange))
+		if finding != nil {
+			findings = append(findings, *finding)
+		}
+		if note != "" {
+			notes = append(notes, lint.Note{Location: op.Location, Message: op.Method + " " + op.Path + ": " + note})
 		}
 	}
 	return spec.Finish(findings, notes, lint.Options{FailOn: opts.FailOn}), nil
@@ -121,18 +133,70 @@ func anonymousAccess(op lint.Operation, exchange lint.Exchange) lint.Finding {
 	}
 }
 
-// otherAccount is a PRC102 finding.
-func otherAccount(op lint.Operation, exchange lint.Exchange) lint.Finding {
-	return lint.Finding{
+// otherAccount calls op as B with A's object in the path and returns a
+// PRC102 finding if B reached it, or a note when it cannot tell.
+//
+// A read is reached when B gets a 2xx holding A's values (see shows). A
+// write or delete is reached when A, reading the object before and after,
+// sees it changed or gone; without a GET on the same path, a write counts
+// when its 2xx answer holds A's values, and a delete cannot be told.
+func (r *runner) otherAccount(ctx context.Context, op lint.Operation, path string, values []string,
+	ofB *harvest, readers map[string]lint.Operation, a, b caller) (*lint.Finding, string, error) {
+	ofAs := unseen(values, ofB)
+	if len(ofAs) == 0 {
+		return nil, "", nil // every value in the path is one B sees too
+	}
+	if op.Method != http.MethodGet && op.NeedsBody && op.Body == nil {
+		return nil, "not tested as B: it needs a request body and the spec gives no example", nil
+	}
+	reader, canRead := readers[op.Path]
+	if op.Method == http.MethodDelete && !canRead {
+		return nil, "not tested as B: without a GET on the same path, Procyon cannot tell whether a delete worked", nil
+	}
+
+	var before []byte
+	if op.Method != http.MethodGet && canRead {
+		exchange, body, err := r.sendFull(ctx, reader, path, a)
+		if err != nil || !success(exchange) {
+			return nil, "not tested as B: A could not read the object first", err
+		}
+		before = body
+	}
+	exchange, body, err := r.sendFull(ctx, op, path, b)
+	if err != nil || !success(exchange) {
+		return nil, "", err
+	}
+	evidence := []lint.Exchange{exchange}
+	reached := shows(body, ofAs)
+	if before != nil {
+		after, afterBody, err := r.sendFull(ctx, reader, path, a)
+		if err != nil {
+			return nil, "", err
+		}
+		evidence = append(evidence, after)
+		if op.Method == http.MethodDelete {
+			reached = !success(after)
+		} else {
+			reached = success(after) && !bytes.Equal(before, afterBody)
+		}
+	}
+	if !reached {
+		return nil, "", nil
+	}
+	what := map[string]string{http.MethodGet: "read", http.MethodDelete: "delete"}[op.Method]
+	if what == "" {
+		what = "change"
+	}
+	return &lint.Finding{
 		Rule:      lint.RuntimeRule("PRC102"),
 		Location:  op.Location,
 		Operation: op.Method + " " + op.Path,
-		Why: fmt.Sprintf("Test account B asked for an object of test account A and got %d with A's object: "+
-			"any user can read other users' objects by changing the ID in the path.", exchange.Status),
-		Fix: "On the server, check that the object belongs to the caller (or that the caller may see it) " +
-			"before returning it, and answer 404 otherwise.",
-		Evidence: []lint.Exchange{exchange},
-	}
+		Why: fmt.Sprintf("Test account B called this operation on an object of test account A and got %d: "+
+			"any user can %s other users' objects by changing the ID in the path.", exchange.Status, what),
+		Fix: "On the server, check that the object belongs to the caller (or that the caller may " + what +
+			" it) before acting, and answer 404 otherwise.",
+		Evidence: evidence,
+	}, "", nil
 }
 
 func success(exchange lint.Exchange) bool {
@@ -188,9 +252,16 @@ func (r *runner) send(ctx context.Context, op lint.Operation, path string, who c
 func (r *runner) sendFull(ctx context.Context, op lint.Operation, path string, who caller) (lint.Exchange, []byte, error) {
 	u := *r.target
 	u.Path = strings.TrimSuffix(r.target.Path, "/") + path
-	req, err := http.NewRequestWithContext(ctx, op.Method, u.String(), nil)
+	var body io.Reader
+	if op.Method != http.MethodGet && op.Body != nil {
+		body = bytes.NewReader(op.Body)
+	}
+	req, err := http.NewRequestWithContext(ctx, op.Method, u.String(), body)
 	if err != nil {
 		return lint.Exchange{}, nil, fmt.Errorf("%s %s: %w", op.Method, op.Path, err)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
 	}
 	authorize(req, op.Credential, who.token)
 	resp, err := r.client.do(req)
@@ -199,18 +270,18 @@ func (r *runner) sendFull(ctx context.Context, op lint.Operation, path string, w
 		return lint.Exchange{}, nil, fmt.Errorf("%s %s: %s", op.Method, op.Path, mask(err.Error(), r.tokens...))
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse))
+	got, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse))
 	if err != nil {
 		return lint.Exchange{}, nil, fmt.Errorf("%s %s: reading the response: %w", op.Method, op.Path, err)
 	}
-	excerpt := body[:min(len(body), maxBody)]
+	excerpt := got[:min(len(got), maxBody)]
 	return lint.Exchange{
 		Caller: who.name,
 		Method: op.Method,
 		URL:    mask(req.URL.String(), r.tokens...),
 		Status: resp.StatusCode,
 		Body:   mask(string(excerpt), r.tokens...),
-	}, body, nil
+	}, got, nil
 }
 
 // discover calls who's reads (GET operations) and records what their
