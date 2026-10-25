@@ -74,7 +74,8 @@ func loadConfig() (config, error) {
 	if cfg.Format != "" && formats[cfg.Format] == nil {
 		return cfg, fmt.Errorf("%s: format: unknown format %q (use %s)", configFile, cfg.Format, formatNames())
 	}
-	for name, l := range map[string]*test.Login{"a": cfg.Test.Accounts.A.Login, "b": cfg.Test.Accounts.B.Login} {
+	for i, l := range []*test.Login{cfg.Test.Accounts.A.Login, cfg.Test.Accounts.B.Login} {
+		name := []string{"a", "b"}[i]
 		if l != nil && (l.Operation == "" || l.Token == "") {
 			return cfg, fmt.Errorf("%s: test.accounts.%s.login needs operation (\"POST /login\") and token (a JSON pointer such as /token)", configFile, name)
 		}

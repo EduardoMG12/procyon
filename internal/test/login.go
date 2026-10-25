@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -33,17 +35,30 @@ func (r *runner) login(ctx context.Context, spec *lint.Spec, who string, l *Logi
 	fail := func(format string, args ...any) (string, error) {
 		return "", fmt.Errorf("login of test account %s: %s", who, fmt.Sprintf(format, args...))
 	}
+	method, path, _ := strings.Cut(strings.TrimSpace(l.Operation), " ")
+	method = strings.ToUpper(method)
 	var op *lint.Operation
 	for _, o := range spec.Operations() {
-		if o.Method+" "+o.Path == l.Operation {
+		if o.Method == method && o.Path == strings.TrimSpace(path) {
 			op = &o
 			break
 		}
 	}
-	if op == nil {
+	switch {
+	case op == nil:
 		return fail("the spec has no operation %q", l.Operation)
+	case strings.Contains(op.Path, "{"):
+		return fail("%s needs a value in its path; use a login operation without one", l.Operation)
+	case op.Method == http.MethodGet && l.Body != nil:
+		return fail("%s is a GET, which sends no body", l.Operation)
 	}
-	body, err := json.Marshal(expand(l.Body))
+	expanded, secrets, err := expand(l.Body)
+	if err != nil {
+		return fail("%v", err)
+	}
+	// The password is masked like a token, in case the API echoes it.
+	r.tokens = append(r.tokens, secrets...)
+	body, err := json.Marshal(expanded)
 	if err != nil {
 		return fail("body: %v", err)
 	}
@@ -51,7 +66,7 @@ func (r *runner) login(ctx context.Context, spec *lint.Spec, who string, l *Logi
 	signIn.Body, signIn.Credential = body, nil
 	exchange, got, err := r.sendFull(ctx, signIn, op.Path, anonymous)
 	if err != nil {
-		return "", err
+		return fail("%v", err)
 	}
 	if !success(exchange) {
 		return fail("%s answered %d", l.Operation, exchange.Status)
@@ -67,26 +82,52 @@ func (r *runner) login(ctx context.Context, spec *lint.Spec, who string, l *Logi
 	return token, nil
 }
 
-// expand replaces ${VAR} in every string of a decoded YAML value with the
-// environment variable, so the config never needs a literal password.
-func expand(v any) any {
-	switch v := v.(type) {
-	case string:
-		return os.Expand(v, os.Getenv)
-	case map[string]any:
-		out := map[string]any{}
-		for k, field := range v {
-			out[k] = expand(field)
+// envVar is ${NAME}, the only form expand replaces: a bare $ in a literal
+// password stays as written.
+var envVar = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+
+// expand replaces ${NAME} in every string of a decoded YAML value with the
+// environment variable, so the config never needs a literal password. It
+// returns the values it read, to mask them, and fails on an unset one
+// (naming it, never a value).
+func expand(v any) (any, []string, error) {
+	var secrets []string
+	var missing string
+	var walk func(any) any
+	walk = func(v any) any {
+		switch v := v.(type) {
+		case string:
+			return envVar.ReplaceAllStringFunc(v, func(m string) string {
+				name := envVar.FindStringSubmatch(m)[1]
+				value, ok := os.LookupEnv(name)
+				if !ok && missing == "" {
+					missing = name
+				}
+				if value != "" {
+					secrets = append(secrets, value)
+				}
+				return value
+			})
+		case map[string]any:
+			out := map[string]any{}
+			for k, field := range v {
+				out[k] = walk(field)
+			}
+			return out
+		case []any:
+			out := make([]any, len(v))
+			for i, item := range v {
+				out[i] = walk(item)
+			}
+			return out
 		}
-		return out
-	case []any:
-		out := make([]any, len(v))
-		for i, item := range v {
-			out[i] = expand(item)
-		}
-		return out
+		return v
 	}
-	return v
+	out := walk(v)
+	if missing != "" {
+		return nil, nil, fmt.Errorf("${%s} is not set", missing)
+	}
+	return out, secrets, nil
 }
 
 // pointer resolves a JSON pointer (RFC 6901: /session/token, /items/0/id)

@@ -70,3 +70,38 @@ func TestPointer(t *testing.T) {
 		t.Error("pointer(/a/m~0n) = nil, want the number")
 	}
 }
+
+func TestExpand(t *testing.T) {
+	t.Setenv("PROCYON_TEST_PW", "s3cret")
+	got, secrets, err := expand(map[string]any{"password": "${PROCYON_TEST_PW}", "literal": "pa$$w$rd", "n": uint64(3)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := got.(map[string]any)
+	if m["password"] != "s3cret" || m["literal"] != "pa$$w$rd" || m["n"] != uint64(3) || !slices.Equal(secrets, []string{"s3cret"}) {
+		t.Errorf("expand = %v, secrets %q", got, secrets)
+	}
+	if _, _, err := expand("${PROCYON_TEST_UNSET_VAR}"); err == nil || err.Error() != "${PROCYON_TEST_UNSET_VAR} is not set" {
+		t.Errorf("unset variable: err = %v", err)
+	}
+}
+
+// A token in the environment wins: the wrong password is never tried.
+func TestEnvTokenWinsOverALogin(t *testing.T) {
+	t.Setenv("VULNAPI_BOB_PASSWORD", "bob-password")
+	srv := httptest.NewServer(vulnapi.New(true))
+	defer srv.Close()
+	a, b := logins("wrong")
+	if _, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, LoginA: a, LoginB: b}); err != nil {
+		t.Errorf("A from the environment, B from a login: %v", err)
+	}
+}
+
+func TestLoginToAnAPIThatIsDownNamesTheAccount(t *testing.T) {
+	t.Setenv("VULNAPI_BOB_PASSWORD", "bob-password")
+	a, b := logins("alice-password")
+	_, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: "http://127.0.0.1:1", LoginA: a, LoginB: b})
+	if err == nil || !strings.Contains(err.Error(), "login of test account A") {
+		t.Errorf("err = %v, want it to name account A", err)
+	}
+}
