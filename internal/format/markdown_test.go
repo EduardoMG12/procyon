@@ -42,3 +42,30 @@ func TestMarkdown(t *testing.T) {
 
 // Ensure the import of lint is used even if the helper above changes.
 var _ = lint.High
+
+func TestMarkdownAuthorizationMatrix(t *testing.T) {
+	report := lint.Report{FailOn: lint.High, Failed: true, Findings: []lint.Finding{bola}, Matrix: []lint.MatrixRow{
+		{Operation: "GET /health", Anonymous: lint.Cell{Outcome: lint.Public}},
+		{Operation: "GET /orders", A: lint.Cell{Outcome: lint.Allowed, Status: 200}, Anonymous: lint.Cell{Outcome: lint.Denied, Status: 401}},
+		{Operation: "GET /orders/{id}", A: lint.Cell{Outcome: lint.Allowed, Status: 200}, B: lint.Cell{Outcome: lint.Denied, Status: 404}, Anonymous: lint.Cell{Outcome: lint.Denied, Status: 401}},
+		{Operation: "DELETE /orders/{id}", B: lint.Cell{Outcome: lint.Reached, Status: 204}, Anonymous: lint.Cell{Outcome: lint.Denied, Status: 401}},
+		{Operation: "GET /reports/{id}", A: lint.Cell{Outcome: lint.Skipped}, B: lint.Cell{Outcome: lint.Skipped}, Anonymous: lint.Cell{Outcome: lint.Skipped}},
+	}}
+	var got bytes.Buffer
+	if err := format.Markdown(&got, report); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join("testdata", "matrix.md.golden")
+	if *update {
+		if err := os.WriteFile(path, got.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got.Bytes(), want) {
+		t.Errorf("output differs from %s\n--- got ---\n%s\n--- want ---\n%s", path, got.Bytes(), want)
+	}
+}

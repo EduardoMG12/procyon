@@ -51,6 +51,31 @@ type Exchange struct {
 	Body   string // the start of the response body
 }
 
+// MatrixRow is one operation of a runtime test's authorization matrix:
+// what each caller got from it.
+type MatrixRow struct {
+	Operation       string // "GET /notes/{id}"
+	A, B, Anonymous Cell
+}
+
+// Cell is what one caller got from one operation.
+type Cell struct {
+	Outcome Outcome
+	Status  int // the HTTP status, when the operation was called
+}
+
+// Outcome is how a call ended, for the authorization matrix.
+type Outcome string
+
+const (
+	NotCalled Outcome = ""        // this caller is not tested on this operation
+	Allowed   Outcome = "allowed" // a 2xx, as expected
+	Denied    Outcome = "denied"  // not a 2xx
+	Reached   Outcome = "finding" // a 2xx that is a finding (PRC101, PRC102)
+	Public    Outcome = "public"  // x-procyon-public, not called anonymously
+	Skipped   Outcome = "skipped" // could not be called; a note says why
+)
+
 // Finish turns the findings and notes of a runtime test of this spec into a
 // report, the way Run does for a lint: sorted, with the spec's ignores of
 // runtime rules applied and the fail threshold checked.

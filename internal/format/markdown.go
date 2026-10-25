@@ -56,6 +56,8 @@ func Markdown(w io.Writer, report lint.Report) error {
 		}
 	}
 
+	matrix(&b, report.Matrix)
+
 	if len(report.Ignored) > 0 {
 		b.WriteString("\n### Ignored\n\n")
 	}
@@ -78,6 +80,33 @@ func Markdown(w io.Writer, report lint.Report) error {
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
+}
+
+// matrix writes a runtime test's authorization matrix: who got what from
+// each operation.
+func matrix(b *strings.Builder, rows []lint.MatrixRow) {
+	if len(rows) == 0 {
+		return
+	}
+	b.WriteString("\n### Authorization matrix\n\n" +
+		"What each caller got: ✅ allowed · 🚫 denied · ❌ finding · 🌐 public · ⏭️ skipped (see notes) · – not tested\n\n" +
+		"| Operation | A | B (A's objects) | Anonymous |\n|---|---|---|---|\n")
+	for _, row := range rows {
+		fmt.Fprintf(b, "| %s | %s | %s | %s |\n", code(row.Operation), cell(row.A), cell(row.B), cell(row.Anonymous))
+	}
+}
+
+func cell(c lint.Cell) string {
+	icon := map[lint.Outcome]string{
+		lint.Allowed: "✅", lint.Denied: "🚫", lint.Reached: "❌", lint.Public: "🌐", lint.Skipped: "⏭️",
+	}[c.Outcome]
+	if icon == "" {
+		return "–"
+	}
+	if c.Status != 0 {
+		return fmt.Sprintf("%s %d", icon, c.Status)
+	}
+	return icon
 }
 
 func markdownLocation(l lint.Location) string {
