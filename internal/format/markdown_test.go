@@ -50,6 +50,7 @@ func TestMarkdownAuthorizationMatrix(t *testing.T) {
 		{Operation: "GET /orders/{id}", A: lint.Cell{Outcome: lint.Allowed, Status: 200}, B: lint.Cell{Outcome: lint.Denied, Status: 404}, Anonymous: lint.Cell{Outcome: lint.Denied, Status: 401}},
 		{Operation: "DELETE /orders/{id}", B: lint.Cell{Outcome: lint.Reached, Status: 204}, Anonymous: lint.Cell{Outcome: lint.Denied, Status: 401}},
 		{Operation: "GET /reports/{id}", A: lint.Cell{Outcome: lint.Skipped}, B: lint.Cell{Outcome: lint.Skipped}, Anonymous: lint.Cell{Outcome: lint.Skipped}},
+		{Operation: "GET /users/{id}", A: lint.Cell{Outcome: lint.Allowed, Status: 200}, B: lint.Cell{Outcome: lint.Unchanged}, Anonymous: lint.Cell{Outcome: lint.Unchanged}},
 	}}
 	var got bytes.Buffer
 	if err := format.Markdown(&got, report); err != nil {

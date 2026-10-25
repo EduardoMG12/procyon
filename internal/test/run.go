@@ -38,6 +38,9 @@ type Options struct {
 	IDs map[string][]string
 	// LoginA and LoginB sign the accounts in when their token is not set.
 	LoginA, LoginB *Login
+	// BaseSpec is the spec before the change under test (--base-spec).
+	// When set, only operations new or changed since it are tested.
+	BaseSpec string
 }
 
 // maxBody is how much of a response body evidence keeps; maxResponse is
@@ -57,6 +60,17 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 	spec, err := lint.Load(specPath, lint.Options{RefRoot: opts.RefRoot})
 	if err != nil {
 		return lint.Report{}, err
+	}
+	var changed map[string]bool // nil: test everything
+	var baseNote string
+	if opts.BaseSpec != "" {
+		// A base that does not load (it was broken on main, and this change
+		// may be the fix) means testing everything, not failing the run.
+		if base, err := lint.Load(opts.BaseSpec, lint.Options{RefRoot: opts.RefRoot}); err != nil {
+			baseNote = fmt.Sprintf("--base-spec not used, every operation is tested: %v", err)
+		} else {
+			changed, baseNote = spec.Changed(base)
+		}
 	}
 	target, err := checkTarget(ctx, opts.BaseURL, lookupHost)
 	if err != nil {
@@ -143,6 +157,7 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 		}
 		return nil
 	}
+	unchanged := 0
 	for _, op := range ops {
 		if op.Method == http.MethodDelete {
 			if err := breakAll(); err != nil {
@@ -150,6 +165,14 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 			}
 		}
 		row := lint.MatrixRow{Operation: op.Method + " " + op.Path, A: asReads[op.Method+" "+op.Path]}
+		// Unchanged operations are still read as A above, to find IDs for
+		// the changed ones; they are just not tested.
+		if changed != nil && !changed[row.Operation] {
+			unchanged++
+			row.B, row.Anonymous = lint.Cell{Outcome: lint.Unchanged}, lint.Cell{Outcome: lint.Unchanged}
+			matrix = append(matrix, row)
+			continue
+		}
 		path, values, err := ofA.fill(op.Path)
 		if err != nil {
 			notes = append(notes, lint.Note{Location: op.Location, Message: fmt.Sprintf(
@@ -191,6 +214,13 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 	}
 	if err := breakAll(); err != nil { // when no operation is a delete
 		return lint.Report{}, err
+	}
+	if baseNote != "" {
+		notes = append(notes, lint.Note{Location: root, Message: baseNote})
+	}
+	if unchanged > 0 {
+		notes = append(notes, lint.Note{Location: root, Message: fmt.Sprintf(
+			"%d of %d operations unchanged since %s, not tested", unchanged, len(ops), opts.BaseSpec)})
 	}
 	report := spec.Finish(findings, notes, lint.Options{FailOn: opts.FailOn})
 	report.Matrix = matrix

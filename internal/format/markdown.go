@@ -92,7 +92,7 @@ func matrix(b *strings.Builder, rows []lint.MatrixRow) {
 		return
 	}
 	b.WriteString("\n### Authorization matrix\n\n" +
-		"What each caller got: ✅ allowed · 🚫 denied · ❌ finding · 🌐 public · ⏭️ skipped (see notes) · – not tested\n\n" +
+		"What each caller got: ✅ allowed · 🚫 denied · ❌ finding · 🌐 public · ⏭️ skipped (see notes) · 💤 unchanged since the base spec · – not tested\n\n" +
 		"| Operation | A | B (A's objects) | Anonymous |\n|---|---|---|---|\n")
 	for _, row := range rows {
 		fmt.Fprintf(b, "| %s | %s | %s | %s |\n", code(row.Operation), cell(row.A), cell(row.B), cell(row.Anonymous))
@@ -101,7 +101,7 @@ func matrix(b *strings.Builder, rows []lint.MatrixRow) {
 
 func cell(c lint.Cell) string {
 	icon := map[lint.Outcome]string{
-		lint.Allowed: "✅", lint.Denied: "🚫", lint.Reached: "❌", lint.Public: "🌐", lint.Skipped: "⏭️",
+		lint.Allowed: "✅", lint.Denied: "🚫", lint.Reached: "❌", lint.Public: "🌐", lint.Skipped: "⏭️", lint.Unchanged: "💤",
 	}[c.Outcome]
 	if icon == "" {
 		return "–"

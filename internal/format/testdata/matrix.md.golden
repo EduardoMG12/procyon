@@ -27,7 +27,7 @@ The run fails at **high** or above.
 
 ### Authorization matrix
 
-What each caller got: ✅ allowed · 🚫 denied · ❌ finding · 🌐 public · ⏭️ skipped (see notes) · – not tested
+What each caller got: ✅ allowed · 🚫 denied · ❌ finding · 🌐 public · ⏭️ skipped (see notes) · 💤 unchanged since the base spec · – not tested
 
 | Operation | A | B (A's objects) | Anonymous |
 |---|---|---|---|
@@ -36,3 +36,4 @@ What each caller got: ✅ allowed · 🚫 denied · ❌ finding · 🌐 public �
 | `GET /orders/{id}` | ✅ 200 | 🚫 404 | 🚫 401 |
 | `DELETE /orders/{id}` | – | ❌ 204 | 🚫 401 |
 | `GET /reports/{id}` | ⏭️ | ⏭️ | ⏭️ |
+| `GET /users/{id}` | ✅ 200 | 💤 | 💤 |

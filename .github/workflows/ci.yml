@@ -55,7 +55,10 @@ jobs:
           checkout_path: procyon
 
   # procyon test --compose against the vulnerable notes API and its fixed
-  # twin: startup, port discovery and teardown with a real Docker.
+  # twin: startup, port discovery and teardown with a real Docker. The last
+  # steps run the README's PR comment example, with two lines changed on
+  # purpose: Procyon is built from the checkout, and the Markdown goes to
+  # the job summary instead of a PR comment.
   compose:
     runs-on: ubuntu-latest
     env:
@@ -63,6 +66,8 @@ jobs:
       PROCYON_USER_B_TOKEN: token-bob
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -77,5 +82,17 @@ jobs:
           test "$(jq '.summary.critical' vulnerable.json)" = 4
       - name: The fixed twin passes
         run: FIXED=true ./procyon test internal/vulnapi/openapi.yaml --compose internal/vulnapi/docker-compose.yml --service api --port 8080
+      - name: README example, the operations this change touches
+        env:
+          FIXED: "true"
+        run: |
+          base=()
+          # On a push there is no base branch: everything is tested.
+          if [ -n "$GITHUB_BASE_REF" ] && git show "origin/$GITHUB_BASE_REF:internal/vulnapi/openapi.yaml" > base.yaml 2>/dev/null; then
+            base=(--base-spec base.yaml)
+          fi
+          ./procyon test internal/vulnapi/openapi.yaml --compose internal/vulnapi/docker-compose.yml --service api --port 8080 \
+            "${base[@]}" --output markdown=procyon.md
+          cat procyon.md >> "$GITHUB_STEP_SUMMARY"
       - name: Nothing is left running
         run: test -z "$(docker ps -aq --filter name=procyon-test)"
