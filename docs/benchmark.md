@@ -1,8 +1,9 @@
 # Benchmark: APIs vulnerable on purpose
 
-What Procyon v0.1 finds in the specs of APIs built to be insecure, against
-the vulnerabilities their authors document. It shows what a spec linter can
-and cannot see, and what is left for runtime tests (v0.2).
+What Procyon finds in APIs built to be insecure, against the
+vulnerabilities their authors document: `procyon lint` (v0.1) from their
+specs, and, for VAmPI so far, `procyon test` (v0.2) against the running API.
+It shows what a spec linter can and cannot see, and what runtime tests add.
 
 The specs are in [`testdata/corpus/`](../testdata/corpus/). Every hit below is
 pinned in [`expected.txt`](../testdata/corpus/expected.txt), so a change that
@@ -33,17 +34,26 @@ Also found: PRC010 on `GET /workshop/api/management/users/all`, and paging
 
 ## VAmPI
 
-| Vulnerability | Result | Finding |
-|---|---|---|
-| SQL injection | ✗ v0.2 | |
-| Unauthorized password change | ✗ v0.2 | Authenticated; the missing owner check is in the code |
-| BOLA on books | ~ | PRC005: the book's `secret` is in the response |
-| Mass assignment (`admin` at sign-up) | ✗ spec | The field is not in the spec |
-| Excessive data exposure through the debug endpoint | ✓ | PRC005 (`password`), PRC006 (`email`), PRC001 |
-| User and password enumeration | ~ | PRC007, PRC006 on `GET /users/v1/{username}` (usernames); different login error messages are runtime |
-| RegexDOS | ✗ v0.2 | |
-| Lack of rate limiting | ✗ | Out of scope (no spec field for it) |
-| JWT with a weak signing key | ✗ v0.2 | |
+`procyon test` runs against VAmPI's public image (`vulnerable=1`) every
+week ([benchmark.yml](../.github/workflows/benchmark.yml), with
+[this config](../testdata/benchmark/vampi/)), and fails if a vulnerability
+found below is lost.
+
+| Vulnerability | `lint` | `test` | Finding |
+|---|---|---|---|
+| SQL injection | ✗ | ✗ | Injection is out of scope for v0.2 |
+| Unauthorized password change | ✗ | ~ | `test`: a note, not a finding. B's change returns 204, but no read shows a password, so Procyon cannot confirm it |
+| BOLA on books | ~ | ✓ | `lint`: PRC005, the book's `secret` is in the response. `test`: PRC102, B reads A's book secret |
+| Mass assignment (`admin` at sign-up) | ✗ | ✗ | The field is not in the spec, so nothing sends it |
+| Excessive data exposure through the debug endpoint | ✓ | – | PRC005 (`password`), PRC006 (`email`), PRC001 |
+| User and password enumeration | ~ | ✗ | `lint`: PRC007, PRC006 on `GET /users/v1/{username}`; different login error messages are not compared |
+| RegexDOS | ✗ | ✓ | `test`: PRC103, a 100 000-character email gets no answer within the timeout |
+| Lack of rate limiting | ✗ | ✗ | Out of scope |
+| JWT with a weak signing key | ✗ | ✗ | Out of scope for v0.2 |
+
+`test` also reports PRC104 on `POST /users/v1/register`, `POST
+/users/v1/login` and `POST /books/v1`: VAmPI accepts bodies its spec
+forbids. Running it changed four oracles (PRD 0002, *Discoveries*).
 
 ## Pixi (OWASP DevSlop)
 

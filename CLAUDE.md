@@ -97,11 +97,14 @@ lazily. See `docs/agents/domain.md`.
 
 ## Current state
 
-Updated 2026-10-24. v0.1 is done and released as v0.1.0 (#21): PRs #1,
-#22–#67 and #87–#90, merged locally on the owner's machine, one commit per
-PR. v0.2 (runtime tests, `procyon test`) is planned in
-[docs/prds/0002-v0.2-runtime-tests.md](docs/prds/0002-v0.2-runtime-tests.md);
-its spec is #69 and its slices are #70–#86, in order.
+Updated 2026-10-25. v0.1 is done and released as v0.1.0 (#21). v0.2
+(runtime tests, `procyon test`, [PRD 0002](docs/prds/0002-v0.2-runtime-tests.md))
+is built: spec #69, slices #70–#86, PRs #91–#109, merged locally on the
+owner's machine, one commit per PR. It runs against vulnapi (ours, every PR)
+and VAmPI (weekly, `.github/workflows/benchmark.yml`). Not yet released.
+The automatic `/code-review` skips paths containing "test" or "spec", so
+`internal/test/` and `internal/lint/spec.go` are reviewed by a separate
+agent given the file list.
 Before every push, run the tests on a clean `git archive` of the commit:
 new files left out of a commit pass locally and fail everywhere else. The
 repository is public since 2026-10-24 and CI runs on every PR, but still
