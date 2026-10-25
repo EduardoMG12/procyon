@@ -10,8 +10,9 @@ exposed to anonymous callers, clients that can make themselves admin. It runs
 in CI and fails the build before the problem ships, without you writing a
 single test.
 
-> **Status: v0.1.0 released.** Linting the spec works today; runtime tests
-> against a running copy of your API are being built for v0.2.
+> **Status: v0.1.0 released.** Linting the spec works today. Runtime tests
+> against a running copy of your API (`procyon test`, v0.2) work from `main`
+> and are being finished.
 
 ## Why
 
@@ -95,6 +96,75 @@ steps:
 
 Run Procyon before any step that writes credentials into the workspace
 (see [docs/refs.md](docs/refs.md)).
+
+## Testing a running copy: `procyon test` (v0.2, in progress)
+
+`procyon lint` reads the spec. `procyon test` asks the API itself: it starts
+a disposable copy from your compose file, calls every operation as two test
+accounts (A and B) and anonymously, and reports what the API let each one
+do. Then it tears everything down.
+
+```sh
+export PROCYON_USER_A_TOKEN=token-of-alice PROCYON_USER_B_TOKEN=token-of-bob
+procyon test openapi.yaml --compose docker-compose.yml --service api --port 8080
+```
+
+- **A and B** are two users your environment seeds. Procyon collects A's
+  object IDs from A's responses and checks that B cannot read, change or
+  delete them (PRC102), that anonymous callers cannot use operations that
+  require authentication (PRC101), that malformed bodies are refused
+  (PRC103, PRC104) and, on `https`, that TLS is sound (PRC105).
+- Give the tokens in the environment (bare: Procyon adds `Bearer ` when the
+  spec asks for it), or declare a login in
+  [`.procyon.yaml`](docs/configuration.md) for APIs that issue tokens.
+- `--base-url http://127.0.0.1:8080` tests a copy you started yourself.
+  Procyon only ever calls loopback and private addresses: never a system on
+  the internet, and there is no flag to change that.
+- `--base-spec base.yaml` tests only the operations new or changed since
+  that spec, a shared schema included.
+- The `markdown` format adds an **authorization matrix**: each operation,
+  and what A, B and an anonymous caller got.
+
+It runs only against a copy you own, and changes and deletes data there on
+purpose: never point it at a system whose data matters.
+
+### In GitHub Actions, as a PR comment
+
+```yaml
+name: Procyon runtime tests
+on: pull_request
+permissions:
+  contents: read
+  pull-requests: write # the comment
+jobs:
+  procyon-test:
+    runs-on: ubuntu-latest
+    env:
+      # Accounts your compose file seeds in the disposable copy.
+      PROCYON_USER_A_TOKEN: token-alice
+      PROCYON_USER_B_TOKEN: token-bob
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - run: go install github.com/EduardoMG12/procyon/cmd/procyon@main
+      - name: Test the operations this PR changes
+        run: |
+          base=()
+          if git show "origin/$GITHUB_BASE_REF:openapi.yaml" > base.yaml 2>/dev/null; then
+            base=(--base-spec base.yaml)
+          fi
+          procyon test openapi.yaml --compose docker-compose.yml --service api --port 8080 \
+            "${base[@]}" --output markdown=procyon.md
+      - name: Comment, updating the last comment on later runs
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment "${{ github.event.pull_request.number }}" --body-file procyon.md --edit-last --create-if-none
+```
 
 ## Rules
 
