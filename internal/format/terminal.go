@@ -146,6 +146,9 @@ func (t *terminal) evidence(exchanges []lint.Exchange) {
 	t.line(indent + "Proof:")
 	for _, e := range exchanges {
 		t.line(indent + "  " + exchangeLine(e))
+		if sent := flatten(e.Sent); sent != "" {
+			t.line(indent + "    sent " + window(sent, 0))
+		}
 		if body := flatten(e.Body); body != "" {
 			t.line(indent + "    " + window(body, 0))
 		}

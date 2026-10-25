@@ -34,6 +34,21 @@ type Operation struct {
 	Body []byte
 	// NeedsBody is true when the spec marks the request body required.
 	NeedsBody bool
+	// Fields are the top-level properties of the JSON request body's
+	// schema, by name, for building malformed requests.
+	Fields []Field
+}
+
+// Field is one top-level property of a request body's schema.
+type Field struct {
+	Name     string
+	Required bool
+	// Types are the JSON types the schema allows ("string", "integer",
+	// "null", ...). Empty when it does not say, or says it through allOf,
+	// oneOf, anyOf or not: then any value may be valid.
+	Types     []string
+	Enum      bool    // the schema lists the allowed values
+	MaxLength *uint64 // when "string" is one of the types
 }
 
 // Credential is where a token goes in a request.
@@ -70,6 +85,7 @@ func (s *Spec) Operations() []Operation {
 			Credential: credentialOf(s.doc, path, op),
 			Body:       exampleBody(op),
 			NeedsBody:  op.RequestBody != nil && op.RequestBody.Value != nil && op.RequestBody.Value.Required,
+			Fields:     bodyFields(op),
 		})
 	})
 	return ops
@@ -154,4 +170,38 @@ func exampleBody(op *openapi3.Operation) []byte {
 		return nil
 	}
 	return body
+}
+
+// bodyFields lists the top-level properties of an operation's JSON request
+// body, sorted by name.
+func bodyFields(op *openapi3.Operation) []Field {
+	if op.RequestBody == nil || op.RequestBody.Value == nil {
+		return nil
+	}
+	media := op.RequestBody.Value.Content.Get("application/json")
+	if media == nil || media.Schema == nil || media.Schema.Value == nil {
+		return nil
+	}
+	schema := media.Schema.Value
+	var fields []Field
+	for _, name := range slices.Sorted(maps.Keys(schema.Properties)) {
+		prop := schema.Properties[name]
+		if prop == nil || prop.Value == nil || prop.Value.ReadOnly {
+			continue // the client does not send read-only fields
+		}
+		p := prop.Value
+		f := Field{Name: name, Required: slices.Contains(schema.Required, name), Enum: len(p.Enum) > 0}
+		composed := len(p.AllOf) > 0 || len(p.OneOf) > 0 || len(p.AnyOf) > 0 || p.Not != nil
+		if p.Type != nil && !composed {
+			f.Types = slices.Clone(*p.Type)
+			if p.Nullable { // OpenAPI 3.0's way of adding "null"
+				f.Types = append(f.Types, "null")
+			}
+		}
+		if slices.Contains(f.Types, "string") {
+			f.MaxLength = p.MaxLength
+		}
+		fields = append(fields, f)
+	}
+	return fields
 }

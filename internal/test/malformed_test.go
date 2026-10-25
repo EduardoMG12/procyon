@@ -1,0 +1,61 @@
+package test
+
+import (
+	"testing"
+
+	"github.com/EduardoMG12/procyon/internal/lint"
+)
+
+func TestMutations(t *testing.T) {
+	ten := uint64(10)
+	str := []string{"string"}
+	tests := []struct {
+		name    string
+		example string
+		fields  []lint.Field
+		want    []string // what, then body, for each mutation
+	}{
+		{"every kind", `{"count": 1, "kind": "a", "name": "x"}`, []lint.Field{
+			{Name: "count", Types: []string{"integer"}},
+			{Name: "kind", Types: str, Enum: true},
+			{Name: "name", Types: str, Required: true, MaxLength: &ten},
+		}, []string{
+			"name as a number", `{"count":1,"kind":"a","name":42}`,
+			"without the required name", `{"count":1,"kind":"a"}`,
+			"kind outside its enum", `{"count":1,"kind":"procyon-not-in-enum","name":"x"}`,
+			"name of 11 characters (maxLength 10)", `{"count":1,"kind":"a","name":"aaaaaaaaaaa"}`,
+		}},
+		{"a number field gets text", `{"count": 1}`, []lint.Field{{Name: "count", Types: []string{"integer", "null"}}},
+			[]string{"count as text", `{"count":"not-a-number"}`}},
+		{"string or integer gets a boolean", `{"id": 1}`, []lint.Field{{Name: "id", Types: []string{"string", "integer"}}},
+			[]string{"id as a boolean", `{"id":true}`}},
+		{"unknown types are never given a wrong type", `{"any": 1}`, []lint.Field{{Name: "any"}}, nil},
+		{"a required field the example lacks is not removed", `{"name": "x"}`, []lint.Field{
+			{Name: "id", Required: true}, {Name: "name"},
+		}, nil},
+		{"an integer enum is not given a string", `{"level": 1}`, []lint.Field{{Name: "level", Types: []string{"integer"}, Enum: true}},
+			[]string{"level as text", `{"level":"not-a-number"}`}},
+		{"not an object", `[1, 2]`, []lint.Field{{Name: "x", Types: str}}, nil},
+	}
+	for _, tt := range tests {
+		var got []string
+		for _, m := range mutations([]byte(tt.example), tt.fields) {
+			got = append(got, m.what, string(m.body))
+		}
+		if len(got) != len(tt.want) {
+			t.Errorf("%s: got %q, want %q", tt.name, got, tt.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tt.want[i] {
+				t.Errorf("%s: got %q, want %q", tt.name, got, tt.want)
+				break
+			}
+		}
+	}
+	// No maxLength: one very long string instead.
+	got := mutations([]byte(`{"note": "x"}`), []lint.Field{{Name: "note", Types: str}})
+	if len(got) != 2 || got[1].what != "note of 100000 characters" || len(got[1].body) < 100000 {
+		t.Errorf("very long string: %d mutations, last %q", len(got), got[len(got)-1].what)
+	}
+}

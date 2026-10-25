@@ -20,8 +20,11 @@ const (
 	TokenB = "token-bob"
 )
 
-// maxTitle is the spec's maxLength for a note's title.
-const maxTitle = 100
+// maxTitle and maxBody are the spec's maxLength for a note's fields.
+const (
+	maxTitle = 100
+	maxBody  = 10000
+)
 
 type note struct {
 	ID    string `json:"id"`
@@ -229,8 +232,8 @@ func (s *server) readNote(w http.ResponseWriter, r *http.Request) (note, bool) {
 	case err != nil:
 		writeJSON(w, http.StatusBadRequest, errorBody("the body is not a note: "+err.Error()))
 		return note{}, false
-	case s.fixed && (in.Title == nil || len(*in.Title) > maxTitle):
-		writeJSON(w, http.StatusBadRequest, errorBody("title is required, at most 100 characters"))
+	case s.fixed && (in.Title == nil || len(*in.Title) > maxTitle || len(in.Body) > maxBody):
+		writeJSON(w, http.StatusBadRequest, errorBody("title is required, at most 100 characters; body at most 10000"))
 		return note{}, false
 	}
 	var title string

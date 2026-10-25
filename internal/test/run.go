@@ -105,7 +105,34 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 	var findings []lint.Finding
 	var notes []lint.Note
 	var matrix []lint.MatrixRow
+	// Malformed requests (PRC103, PRC104) run as A in their own pass, after
+	// every write's B check and before the deletes: an accepted mutation
+	// changes A's object, which must not hide what B can do to it.
+	var toBreak []filledOp
+	broken := false
+	breakAll := func() error {
+		if broken {
+			return nil
+		}
+		broken = true
+		for _, f := range toBreak {
+			bad, note, err := r.malformed(ctx, f.op, f.path, a)
+			if err != nil {
+				return err
+			}
+			findings = append(findings, bad...)
+			if note != "" {
+				notes = append(notes, lint.Note{Location: f.op.Location, Message: f.op.Method + " " + f.op.Path + ": " + note})
+			}
+		}
+		return nil
+	}
 	for _, op := range ops {
+		if op.Method == http.MethodDelete {
+			if err := breakAll(); err != nil {
+				return lint.Report{}, err
+			}
+		}
 		row := lint.MatrixRow{Operation: op.Method + " " + op.Path, A: asReads[op.Method+" "+op.Path]}
 		path, values, err := ofA.fill(op.Path)
 		if err != nil {
@@ -126,6 +153,9 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 				findings = append(findings, anonymousAccess(op, exchange))
 			}
 		}
+		if op.Method != http.MethodGet && op.Method != http.MethodDelete && !op.Public && op.Body != nil {
+			toBreak = append(toBreak, filledOp{op, path}) // after every write's B check, below
+		}
 		if len(values) == 0 {
 			matrix = append(matrix, row)
 			continue // no object in the path: nothing of A's to reach
@@ -143,6 +173,9 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 			notes = append(notes, lint.Note{Location: op.Location, Message: op.Method + " " + op.Path + ": " + note})
 		}
 	}
+	if err := breakAll(); err != nil { // when no operation is a delete
+		return lint.Report{}, err
+	}
 	report := spec.Finish(findings, notes, lint.Options{FailOn: opts.FailOn})
 	report.Matrix = matrix
 	return report, nil
@@ -158,6 +191,12 @@ func cellOf(exchange lint.Exchange, reached bool) lint.Cell {
 		return lint.Cell{Outcome: lint.Allowed, Status: exchange.Status}
 	}
 	return lint.Cell{Outcome: lint.Denied, Status: exchange.Status}
+}
+
+// filledOp is an operation with its path filled with A's values.
+type filledOp struct {
+	op   lint.Operation
+	path string
 }
 
 // anonymousAccess is a PRC101 finding.
@@ -358,13 +397,18 @@ func (r *runner) sendFull(ctx context.Context, op lint.Operation, path string, w
 	// leave its first characters unmasked.
 	excerpt := mask(string(got), r.tokens...)
 	excerpt = excerpt[:min(len(excerpt), maxBody)]
-	return lint.Exchange{
+	exchange := lint.Exchange{
 		Caller: who.name,
 		Method: op.Method,
 		URL:    mask(req.URL.RequestURI(), r.tokens...),
 		Status: resp.StatusCode,
 		Body:   excerpt,
-	}, got, nil
+	}
+	if body != nil {
+		sent := mask(string(op.Body), r.tokens...)
+		exchange.Sent = sent[:min(len(sent), maxBody)]
+	}
+	return exchange, got, nil
 }
 
 // discover calls who's reads (GET operations) and records what their
