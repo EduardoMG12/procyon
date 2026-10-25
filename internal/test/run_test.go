@@ -296,3 +296,31 @@ func TestRunOverHTTPS(t *testing.T) {
 		t.Errorf("findings %v, notes %v; want none", report.Findings, report.Notes)
 	}
 }
+
+func TestRunWithABaseSpecTestsOnlyChangedOperations(t *testing.T) {
+	srv := httptest.NewServer(vulnapi.New(false))
+	defer srv.Close()
+	report, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB,
+		BaseSpec: "../../testdata/specs/runtime-notes-base.yaml"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, f := range report.Findings {
+		got = append(got, f.Rule.ID+" "+f.Operation)
+	}
+	// GET /notes (PRC101), GET and DELETE /notes/{id} did not change.
+	want := []string{"PRC103 POST /notes", "PRC104 POST /notes", "PRC102 PUT /notes/{id}", "PRC103 PUT /notes/{id}", "PRC104 PUT /notes/{id}"}
+	if !slices.Equal(got, want) {
+		t.Errorf("findings %q, want %q", got, want)
+	}
+	skipped := 0
+	for _, row := range report.Matrix {
+		if row.Anonymous.Outcome == lint.Skipped {
+			skipped++
+		}
+	}
+	if skipped != 5 || !slices.ContainsFunc(report.Notes, func(n lint.Note) bool { return strings.Contains(n.Message, "5 of 8 operations unchanged") }) {
+		t.Errorf("skipped rows %d, notes %v; want 5 and the unchanged note", skipped, report.Notes)
+	}
+}

@@ -67,7 +67,7 @@ var lintCommand = command{
 }
 
 func testCommand() command {
-	var baseURL, composeFile, service string
+	var baseURL, composeFile, service, baseSpec string
 	var port int
 	return command{
 		name: "test",
@@ -76,6 +76,7 @@ func testCommand() command {
 			f.StringVar(&composeFile, "compose", "", "")
 			f.StringVar(&service, "service", "", "")
 			f.IntVar(&port, "port", 0, "")
+			f.StringVar(&baseSpec, "base-spec", "", "")
 		},
 		run: func(spec string, failOn lint.Severity, refRoot string, cfg config) (report lint.Report, err error) {
 			switch {
@@ -106,6 +107,7 @@ func testCommand() command {
 				TokenA: os.Getenv("PROCYON_USER_A_TOKEN"), TokenB: os.Getenv("PROCYON_USER_B_TOKEN"),
 				IDs:    cfg.Test.IDs,
 				LoginA: cfg.Test.Accounts.A.Login, LoginB: cfg.Test.Accounts.B.Login,
+				BaseSpec: baseSpec,
 			})
 		},
 	}
@@ -257,6 +259,9 @@ const usage = `Usage:
     --port <port>             The API's port inside that container.
     --base-url <url>          Or test a copy you started. Must be a loopback or
                               private address: never a system on the internet.
+    --base-spec <file>        The spec before the change (git show
+                              origin/main:openapi.yaml > base.yaml): test only
+                              operations new or changed since it.
     PROCYON_USER_A_TOKEN, PROCYON_USER_B_TOKEN
                               Tokens of two test accounts seeded in the API.
   procyon --version     Print the version
