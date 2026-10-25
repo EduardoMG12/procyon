@@ -104,3 +104,19 @@ func TestOperationCredentials(t *testing.T) {
 		}
 	}
 }
+
+func TestOperationExampleBodies(t *testing.T) {
+	spec, err := Load("../vulnapi/openapi.yaml", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, op := range spec.Operations() {
+		want, needs := "", false
+		if op.Method == "POST" || op.Method == "PUT" {
+			want, needs = `{"body":"bread, coffee","title":"Shopping list"}`, true
+		}
+		if string(op.Body) != want || op.NeedsBody != needs {
+			t.Errorf("%s %s: body %s, needs %v; want %s, %v", op.Method, op.Path, op.Body, op.NeedsBody, want, needs)
+		}
+	}
+}
