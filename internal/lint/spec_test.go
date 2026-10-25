@@ -1,0 +1,49 @@
+package lint
+
+import (
+	"slices"
+	"strings"
+	"testing"
+)
+
+func TestLoadListsOperationsInOrder(t *testing.T) {
+	spec, err := Load("../vulnapi/openapi.yaml", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, op := range spec.Operations() {
+		public := ""
+		if op.Public {
+			public = " public"
+		}
+		got = append(got, op.Method+" "+op.Path+public)
+	}
+	want := []string{
+		"GET /health public",
+		"GET /me",
+		"GET /notes",
+		"POST /notes",
+		"DELETE /notes/{id}",
+		"GET /notes/{id}",
+		"PUT /notes/{id}",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("operations = %q, want %q", got, want)
+	}
+	health := spec.Operations()[0]
+	if health.Location.Line != 63 || !strings.HasSuffix(health.Location.File, "openapi.yaml") {
+		t.Errorf("GET /health location = %+v, want openapi.yaml line 63", health.Location)
+	}
+	if len(spec.Sources()[health.Location.File]) == 0 {
+		t.Error("Sources has no lines for the spec")
+	}
+}
+
+func TestLoadRefusesWhatRunRefuses(t *testing.T) {
+	for _, name := range []string{"invalid-yaml.yaml", "ignore-no-reason.yaml", "ref-remote.yaml"} {
+		if _, err := Load("../../testdata/specs/"+name, Options{}); err == nil {
+			t.Errorf("Load(%s) succeeded, want the error Run gives", name)
+		}
+	}
+}
