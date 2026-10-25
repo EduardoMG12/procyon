@@ -25,7 +25,7 @@ func TestHarvestFillsPathParameters(t *testing.T) {
 		{"/invoices/{invoiceId}", "", "no value for {invoiceId}"},
 	}
 	for _, tt := range tests {
-		got, err := h.fill(tt.path)
+		got, _, err := h.fill(tt.path)
 		if tt.err != "" {
 			if err == nil || err.Error() != tt.err {
 				t.Errorf("fill(%s) error = %v, want %q", tt.path, err, tt.err)
