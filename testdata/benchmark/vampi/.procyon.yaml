@@ -1,0 +1,14 @@
+test:
+  accounts:
+    a:
+      login:
+        operation: POST /users/v1/login
+        body: {username: name1, password: pass1}
+        token: /auth_token
+    b:
+      login:
+        operation: POST /users/v1/login
+        body: {username: name2, password: pass2}
+        token: /auth_token
+  skip:
+    - GET /createdb

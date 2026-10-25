@@ -1,0 +1,45 @@
+name: Benchmark
+
+# procyon test against APIs vulnerable on purpose. Heavy, so not on every PR:
+# weekly, and by hand. The public images are run as they are, never copied
+# into this repository.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vampi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go build -o procyon ./cmd/procyon
+      - name: Start VAmPI
+        run: |
+          docker run -d --name vampi -e vulnerable=1 -p 127.0.0.1:5000:5000 erev0s/vampi:latest
+          until curl -sf http://127.0.0.1:5000/ > /dev/null; do sleep 1; done
+          curl -sf http://127.0.0.1:5000/createdb
+      - name: procyon test
+        working-directory: testdata/benchmark/vampi
+        run: |
+          set +e
+          ../../../procyon test ../../corpus/vampi/spec.yml --base-url http://127.0.0.1:5000 \
+            --format json --output markdown=procyon.md > report.json
+          code=$?
+          set -e
+          cat procyon.md >> "$GITHUB_STEP_SUMMARY"
+          test "$code" = 1
+      - name: The known vulnerabilities are found
+        working-directory: testdata/benchmark/vampi
+        run: |
+          found() { jq -e --arg r "$1" --arg o "$2" '.findings | any(.rule.id == $r and .operation == $o)' report.json > /dev/null; }
+          found PRC102 "GET /books/v1/{book_title}"      # BOLA on books
+          found PRC103 "PUT /users/v1/{username}/email"  # RegexDOS
+      - if: always()
+        run: docker rm -f vampi
