@@ -46,11 +46,21 @@ type jsonLocation struct {
 }
 
 type jsonFinding struct {
-	Rule      jsonRule     `json:"rule"`
-	Location  jsonLocation `json:"location"`
-	Operation string       `json:"operation,omitempty"`
-	Why       string       `json:"why"`
-	Fix       string       `json:"fix"`
+	Rule      jsonRule       `json:"rule"`
+	Location  jsonLocation   `json:"location"`
+	Operation string         `json:"operation,omitempty"`
+	Why       string         `json:"why"`
+	Fix       string         `json:"fix"`
+	Evidence  []jsonExchange `json:"evidence,omitempty"`
+}
+
+// jsonExchange is one request behind a runtime finding.
+type jsonExchange struct {
+	Caller string `json:"caller"`
+	Method string `json:"method"`
+	URL    string `json:"url"`
+	Status int    `json:"status"`
+	Body   string `json:"body"`
 }
 
 type jsonIgnored struct {
@@ -110,7 +120,16 @@ func toJSON(f lint.Finding) jsonFinding {
 		Operation: f.Operation,
 		Why:       f.Why,
 		Fix:       f.Fix,
+		Evidence:  evidenceJSON(f.Evidence),
 	}
+}
+
+func evidenceJSON(exchanges []lint.Exchange) []jsonExchange {
+	var out []jsonExchange
+	for _, e := range exchanges {
+		out = append(out, jsonExchange{e.Caller, e.Method, e.URL, e.Status, e.Body})
+	}
+	return out
 }
 
 func jsonLoc(l lint.Location) jsonLocation {

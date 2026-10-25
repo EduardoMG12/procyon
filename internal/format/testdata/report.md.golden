@@ -2,7 +2,7 @@
 
 | Severity | Findings |
 |---|---|
-| critical | 0 |
+| critical | 1 |
 | high | 1 |
 | medium | 0 |
 | low | 0 |
@@ -11,6 +11,20 @@
 The run fails at **high** or above.
 
 ### Findings
+
+#### CRITICAL · PRC102 · Another account reached A's object
+
+`specs/shop.yaml:9:5` · `DELETE /orders/{id}`
+
+**Why:** B deleted A's order.
+
+**Fix:** Check the owner. [More about PRC102](https://github.com/EduardoMG12/procyon/blob/main/docs/rules/PRC102.md)
+
+**Proof:**
+
+- `B: GET /orders/1 → 200` ``{"note": "`[x](https://evil.example)` <img src=x>"}``
+- `B: DELETE /orders/1 → 204`
+- `A: GET /orders/1 → 404` `{ "error": "no such order" }`
 
 #### HIGH · PRC001 · Operation has no authentication
 

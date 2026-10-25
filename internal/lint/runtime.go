@@ -46,7 +46,7 @@ func RuntimeRule(id string) Rule {
 type Exchange struct {
 	Caller string // "anonymous", "A" or "B"
 	Method string
-	URL    string
+	URL    string // the path and query, as sent: "/notes/1"
 	Status int
 	Body   string // the start of the response body
 }

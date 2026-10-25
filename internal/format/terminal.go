@@ -99,6 +99,7 @@ func (t *terminal) finding(f lint.Finding, source []string) {
 	}
 	t.labelled("Why:", f.Why)
 	t.labelled("Fix:", f.Fix)
+	t.evidence(f.Evidence)
 	t.line(indent + "More: " + f.Rule.DocsURL())
 	t.line("")
 }
@@ -134,6 +135,32 @@ func (t *terminal) labelled(label, text string) {
 		t.line(prefix + l)
 		prefix = strings.Repeat(" ", len(prefix))
 	}
+}
+
+// evidence prints the requests that prove a runtime finding: who sent
+// what, the status, and the start of the body on one line.
+func (t *terminal) evidence(exchanges []lint.Exchange) {
+	if len(exchanges) == 0 {
+		return
+	}
+	t.line(indent + "Proof:")
+	for _, e := range exchanges {
+		t.line(indent + "  " + exchangeLine(e))
+		if body := flatten(e.Body); body != "" {
+			t.line(indent + "    " + window(body, 0))
+		}
+	}
+}
+
+// exchangeLine is "B: GET /notes/1 → 200".
+func exchangeLine(e lint.Exchange) string {
+	return fmt.Sprintf("%s: %s %s → %d", e.Caller, e.Method, e.URL, e.Status)
+}
+
+// flatten joins a body's lines and spaces, so an excerpt never breaks the
+// layout.
+func flatten(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // ignored lists the findings an x-procyon-ignore matched, each with its

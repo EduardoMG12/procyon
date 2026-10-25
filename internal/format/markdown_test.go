@@ -16,6 +16,11 @@ func TestMarkdown(t *testing.T) {
 	// break a code span in the job summary.
 	report.Ignored[0].Reason = "Internal mirror <img src=x> [click](https://evil.example)\n# Owned www.evil.example me@evil.example"
 	report.Findings[0].Operation = "`GET /orders/\n# [x](https://evil.example)"
+	// So is what the API answered.
+	evil := bola
+	evil.Evidence = append([]lint.Exchange{{Caller: "B", Method: "GET", URL: "/orders/1", Status: 200,
+		Body: "{\"note\": \"`[x](https://evil.example)` <img src=x>\"}"}}, bola.Evidence...)
+	report.Findings = append(report.Findings, evil)
 	var got bytes.Buffer
 	if err := format.Markdown(&got, report); err != nil {
 		t.Fatal(err)

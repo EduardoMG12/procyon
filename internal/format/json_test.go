@@ -20,7 +20,7 @@ func TestJSON(t *testing.T) {
 			Operation: "GET /orders",
 			Why:       "Anyone can call it.",
 			Fix:       "Add security.",
-		}},
+		}, bola},
 		Ignored: []lint.IgnoredFinding{{
 			Finding: lint.Finding{
 				Rule:     lint.Rule{ID: "PRC004", Title: "Server URL does not use TLS", Severity: lint.High, OWASP: "API8:2023 Security Misconfiguration"},

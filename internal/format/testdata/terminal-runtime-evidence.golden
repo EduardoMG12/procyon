@@ -1,0 +1,18 @@
+CRITICAL PRC102  Another account reached A's object
+        specs/shop.yaml:9:5  DELETE /orders/{id}
+
+           7 | paths:
+           8 |   /orders:
+        >  9 |     get:
+          10 |       responses:
+          11 |         "200":
+
+        Why:  B deleted A's order.
+        Fix:  Check the owner.
+        Proof:
+          B: DELETE /orders/1 → 204
+          A: GET /orders/1 → 404
+            { "error": "no such order" }
+        More: https://github.com/EduardoMG12/procyon/blob/main/docs/rules/PRC102.md
+
+FAILED  1 critical · 0 high · 0 medium · 0 low · 0 ignored  (fails at: high)

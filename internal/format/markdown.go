@@ -44,6 +44,16 @@ func Markdown(w io.Writer, report lint.Report) error {
 			b.WriteString(" · " + code(f.Operation))
 		}
 		fmt.Fprintf(&b, "\n\n**Why:** %s\n\n**Fix:** %s [More about %s](%s)\n", escape(f.Why), escape(f.Fix), f.Rule.ID, f.Rule.DocsURL())
+		if len(f.Evidence) > 0 {
+			b.WriteString("\n**Proof:**\n\n")
+		}
+		for _, e := range f.Evidence {
+			fmt.Fprintf(&b, "- %s", code(exchangeLine(e)))
+			if body := flatten(e.Body); body != "" {
+				b.WriteString(" " + code(body))
+			}
+			b.WriteString("\n")
+		}
 	}
 
 	if len(report.Ignored) > 0 {

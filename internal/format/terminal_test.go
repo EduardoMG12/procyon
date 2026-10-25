@@ -39,6 +39,19 @@ var (
 	prc008 = lint.Rule{ID: "PRC008", Title: "Unbounded input or output", Severity: lint.Low}
 )
 
+// bola is a runtime finding: it carries evidence.
+var bola = lint.Finding{
+	Rule:      lint.Rule{ID: "PRC102", Title: "Another account reached A's object", Severity: lint.Critical, OWASP: "API1:2023 Broken Object Level Authorization"},
+	Location:  lint.Location{File: shop, Line: 9, Column: 5},
+	Operation: "DELETE /orders/{id}",
+	Why:       "B deleted A's order.",
+	Fix:       "Check the owner.",
+	Evidence: []lint.Exchange{
+		{Caller: "B", Method: "DELETE", URL: "/orders/1", Status: 204},
+		{Caller: "A", Method: "GET", URL: "/orders/1", Status: 404, Body: "{\n  \"error\": \"no such order\"\n}"},
+	},
+}
+
 func TestTerminal(t *testing.T) {
 	sources := map[string][]string{shop: shopLines}
 	noAuth := lint.Finding{
@@ -82,6 +95,13 @@ func TestTerminal(t *testing.T) {
 		Findings: []lint.Finding{{Rule: prc001, Location: lint.Location{File: minified, Line: 1, Column: 150},
 			Operation: "POST /orders", Why: "Anyone can call it.", Fix: "Add security."}},
 	}, false})
+
+	// A runtime finding shows the requests that prove it.
+	tests = append(tests, struct {
+		golden string
+		report lint.Report
+		color  bool
+	}{"runtime-evidence", lint.Report{FailOn: lint.High, Failed: true, Sources: sources, Findings: []lint.Finding{bola}}, false})
 
 	// Ignored findings and notes stay visible, in their own sections.
 	tests = append(tests, struct {
