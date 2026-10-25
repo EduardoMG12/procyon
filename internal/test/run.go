@@ -62,12 +62,15 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 		return lint.Report{}, err
 	}
 	var changed map[string]bool // nil: test everything
+	var baseNote string
 	if opts.BaseSpec != "" {
-		base, err := lint.Load(opts.BaseSpec, lint.Options{RefRoot: opts.RefRoot})
-		if err != nil {
-			return lint.Report{}, fmt.Errorf("--base-spec: %w", err)
+		// A base that does not load (it was broken on main, and this change
+		// may be the fix) means testing everything, not failing the run.
+		if base, err := lint.Load(opts.BaseSpec, lint.Options{RefRoot: opts.RefRoot}); err != nil {
+			baseNote = fmt.Sprintf("--base-spec not used, every operation is tested: %v", err)
+		} else {
+			changed, baseNote = spec.Changed(base)
 		}
-		changed = spec.Changed(base)
 	}
 	target, err := checkTarget(ctx, opts.BaseURL, lookupHost)
 	if err != nil {
@@ -166,8 +169,8 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 		// the changed ones; they are just not tested.
 		if changed != nil && !changed[row.Operation] {
 			unchanged++
-			skipped := lint.Cell{Outcome: lint.Skipped}
-			matrix = append(matrix, lint.MatrixRow{Operation: row.Operation, A: skipped, B: skipped, Anonymous: skipped})
+			row.B, row.Anonymous = lint.Cell{Outcome: lint.Unchanged}, lint.Cell{Outcome: lint.Unchanged}
+			matrix = append(matrix, row)
 			continue
 		}
 		path, values, err := ofA.fill(op.Path)
@@ -211,6 +214,9 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 	}
 	if err := breakAll(); err != nil { // when no operation is a delete
 		return lint.Report{}, err
+	}
+	if baseNote != "" {
+		notes = append(notes, lint.Note{Location: root, Message: baseNote})
 	}
 	if unchanged > 0 {
 		notes = append(notes, lint.Note{Location: root, Message: fmt.Sprintf(

@@ -121,7 +121,8 @@ procyon test openapi.yaml --compose docker-compose.yml --service api --port 8080
   Procyon only ever calls loopback and private addresses: never a system on
   the internet, and there is no flag to change that.
 - `--base-spec base.yaml` tests only the operations new or changed since
-  that spec, a shared schema included.
+  that spec, a shared schema included. A spec split across files is not
+  compared yet: everything is tested, and a note says so.
 - The `markdown` format adds an **authorization matrix**: each operation,
   and what A, B and an anonymous caller got.
 
@@ -159,8 +160,9 @@ jobs:
           fi
           procyon test openapi.yaml --compose docker-compose.yml --service api --port 8080 \
             "${base[@]}" --output markdown=procyon.md
+      # A PR from a fork gets a read-only token: the comment fails there.
       - name: Comment, updating the last comment on later runs
-        if: always()
+        if: always() && hashFiles('procyon.md') != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh pr comment "${{ github.event.pull_request.number }}" --body-file procyon.md --edit-last --create-if-none

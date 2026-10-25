@@ -316,7 +316,7 @@ func TestRunWithABaseSpecTestsOnlyChangedOperations(t *testing.T) {
 	}
 	skipped := 0
 	for _, row := range report.Matrix {
-		if row.Anonymous.Outcome == lint.Skipped {
+		if row.Anonymous.Outcome == lint.Unchanged {
 			skipped++
 		}
 	}

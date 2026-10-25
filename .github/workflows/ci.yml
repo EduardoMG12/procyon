@@ -87,7 +87,8 @@ jobs:
           FIXED: "true"
         run: |
           base=()
-          if git show "origin/${GITHUB_BASE_REF:-main}:internal/vulnapi/openapi.yaml" > base.yaml 2>/dev/null; then
+          # On a push there is no base branch: everything is tested.
+          if [ -n "$GITHUB_BASE_REF" ] && git show "origin/$GITHUB_BASE_REF:internal/vulnapi/openapi.yaml" > base.yaml 2>/dev/null; then
             base=(--base-spec base.yaml)
           fi
           ./procyon test internal/vulnapi/openapi.yaml --compose internal/vulnapi/docker-compose.yml --service api --port 8080 \

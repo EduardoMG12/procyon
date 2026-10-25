@@ -90,12 +90,13 @@ type Cell struct {
 type Outcome string
 
 const (
-	NotCalled Outcome = ""        // this caller is not tested on this operation
-	Allowed   Outcome = "allowed" // a 2xx, as expected
-	Denied    Outcome = "denied"  // not a 2xx
-	Reached   Outcome = "finding" // a 2xx that is a finding (PRC101, PRC102)
-	Public    Outcome = "public"  // x-procyon-public, not called anonymously
-	Skipped   Outcome = "skipped" // could not be called; a note says why
+	NotCalled Outcome = ""          // this caller is not tested on this operation
+	Allowed   Outcome = "allowed"   // a 2xx, as expected
+	Denied    Outcome = "denied"    // not a 2xx
+	Reached   Outcome = "finding"   // a 2xx that is a finding (PRC101, PRC102)
+	Public    Outcome = "public"    // x-procyon-public, not called anonymously
+	Skipped   Outcome = "skipped"   // could not be called; a note says why
+	Unchanged Outcome = "unchanged" // not tested: unchanged since --base-spec
 )
 
 // Finish turns the findings and notes of a runtime test of this spec into a
