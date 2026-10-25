@@ -1,0 +1,53 @@
+openapi: 3.0.3
+info:
+  title: What the VAmPI benchmark taught, in one small spec
+  version: "1"
+components:
+  securitySchemes:
+    bearer: {type: http, scheme: bearer}
+paths:
+  /users:
+    get:
+      responses: {"200": {description: "Every user, to anyone"}}
+  /me:
+    get:
+      security: [{bearer: []}]
+      responses: {"200": {description: The caller}}
+  /reset:
+    get:
+      responses: {"200": {description: Resets the database}}
+  /books:
+    get:
+      security: [{bearer: []}]
+      responses: {"200": {description: "Every title, to any user"}}
+  /books/{title}:
+    get:
+      security: [{bearer: []}]
+      parameters: [{name: title, in: path, required: true, schema: {type: string}}]
+      responses: {"200": {description: A book and its secret}}
+  /users/{username}/password:
+    put:
+      security: [{bearer: []}]
+      parameters: [{name: username, in: path, required: true, schema: {type: string}}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: {type: string, maxLength: 50, example: new-password}
+      responses: {"204": {description: Changed}}
+  /comments:
+    post:
+      security: [{bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text: {type: string, example: hello}
+      responses: {"201": {description: Created}}

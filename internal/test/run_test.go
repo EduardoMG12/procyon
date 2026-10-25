@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -322,5 +323,129 @@ func TestRunWithABaseSpecTestsOnlyChangedOperations(t *testing.T) {
 	}
 	if skipped != 5 || !slices.ContainsFunc(report.Notes, func(n lint.Note) bool { return strings.Contains(n.Message, "5 of 8 operations unchanged") }) {
 		t.Errorf("skipped rows %d, notes %v; want 5 and the unchanged note", skipped, report.Notes)
+	}
+}
+
+// What the VAmPI benchmark taught: an operation the spec leaves open is not
+// PRC101; IDs every user can list still lead to a PRC102 when B gets A's
+// secret; a write Procyon cannot check is a note; a body that hangs the
+// server is PRC103 and the run goes on; test.skip is never called.
+func TestLessonsFromVAmPI(t *testing.T) {
+	reset := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := map[string]string{"Bearer " + vulnapi.TokenA: "alice", "Bearer " + vulnapi.TokenB: "bob"}[r.Header.Get("Authorization")]
+		switch {
+		case r.URL.Path == "/reset":
+			reset = true
+		case r.URL.Path == "/users":
+			w.Write([]byte(`[{"username": "alice"}, {"username": "bob"}]`))
+		case user == "":
+			w.WriteHeader(http.StatusUnauthorized)
+		case r.URL.Path == "/me":
+			fmt.Fprintf(w, `{"username": %q}`, user)
+		case r.URL.Path == "/books": // bob's first: A's book is found by A's username, not by order
+			w.Write([]byte(`[{"title": "bobs-book", "user": "bob"}, {"title": "alices-book", "user": "alice"}]`))
+		case strings.HasPrefix(r.URL.Path, "/books/"):
+			title := strings.TrimPrefix(r.URL.Path, "/books/")
+			fmt.Fprintf(w, `{"title": %q, "secret": "secret of %s"}`, title, title)
+		case strings.HasSuffix(r.URL.Path, "/password"):
+			var in struct{ Password string }
+			if json.NewDecoder(r.Body).Decode(&in) != nil || len(in.Password) > 50 {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		case r.URL.Path == "/comments":
+			var in struct{ Text string }
+			if r.ContentLength <= 1000 && json.NewDecoder(r.Body).Decode(&in) != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if r.ContentLength > 1000 {
+				time.Sleep(time.Second) // a regular expression that backtracks
+			}
+			w.WriteHeader(http.StatusCreated)
+		}
+	}))
+	defer srv.Close()
+	report, err := Run(context.Background(), "../../testdata/specs/runtime-vampi-like.yaml", Options{
+		BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB,
+		Timeout: 300 * time.Millisecond, Skip: []string{"GET /reset"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, f := range report.Findings {
+		got = append(got, f.Rule.ID+" "+f.Operation)
+	}
+	if want := []string{"PRC102 GET /books/{title}", "PRC103 POST /comments"}; !slices.Equal(got, want) {
+		t.Errorf("findings %q, want %q", got, want)
+	}
+	if reset {
+		t.Error("GET /reset was called, though listed in Skip")
+	}
+	for _, want := range []string{"PUT /users/{username}/password: not confirmed", "GET /reset not called"} {
+		if !slices.ContainsFunc(report.Notes, func(n lint.Note) bool { return strings.Contains(n.Message, want) }) {
+			t.Errorf("no note %q in %v", want, report.Notes)
+		}
+	}
+}
+
+// A secure API that answers B with B's own note whatever ID it asks for,
+// or echoes the ID with an error: no PRC102, even with generic words in
+// both notes and a view counter that changes on every read.
+func TestNoPRC102OnObjectsEveryoneMayRead(t *testing.T) {
+	for name, answer := range map[string]string{
+		"B's own note, generic values in both": `{"id": "3", "owner": "bob", "status": "active", "kind": "draft"}`,
+		"the asked ID echoed back":             `{"id": "%s", "error": "not yours"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			views := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				user := map[string]string{"Bearer " + vulnapi.TokenA: "alice", "Bearer " + vulnapi.TokenB: "bob"}[r.Header.Get("Authorization")]
+				id := strings.TrimPrefix(r.URL.Path, "/notes/")
+				switch {
+				case r.URL.Path == "/health":
+					w.Write([]byte(`{}`))
+				case user == "":
+					w.WriteHeader(http.StatusUnauthorized)
+				case r.URL.Path == "/me":
+					fmt.Fprintf(w, `{"name": %q}`, user)
+				case r.URL.Path == "/notes" && strings.Contains(answer, "%s") && user == "bob":
+					w.Write([]byte(`[{"id": "3", "owner": "bob"}]`)) // A's IDs unseen by B: only the echo filter stops it
+				case r.URL.Path == "/notes": // a shared list, with a counter in every item
+					views++
+					fmt.Fprintf(w, `[{"id": "3", "owner": "bob", "views": %d}, {"id": "1", "owner": "alice", "views": %d}]`, views*1000, views*1000+1)
+				case r.Method == "GET" && user == "alice":
+					fmt.Fprintf(w, `{"id": %q, "owner": "alice", "status": "active", "kind": "draft"}`, id)
+				case r.Method == "GET":
+					if strings.Contains(answer, "%s") {
+						fmt.Fprintf(w, answer, id)
+					} else {
+						w.Write([]byte(answer))
+					}
+				default: // only the owner may change or delete
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer srv.Close()
+			report, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, f := range report.Findings {
+				if f.Rule.ID == "PRC102" {
+					t.Errorf("PRC102 on %s: %+v", f.Operation, f.Evidence)
+				}
+			}
+			// A's note was found by A's name in GET /me, not by order: B's
+			// test ran on note 1.
+			if !slices.ContainsFunc(report.Matrix, func(row lint.MatrixRow) bool {
+				return row.Operation == "GET /notes/{id}" && row.B.Outcome == lint.Allowed
+			}) {
+				t.Errorf("B was not tested on A's note: %+v", report.Matrix)
+			}
+		})
 	}
 }

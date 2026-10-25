@@ -27,7 +27,8 @@ func TestHarvestFillsPathParameters(t *testing.T) {
 		{"/payments/{paymentId}", "", "no value for {paymentId}"},
 	}
 	for _, tt := range tests {
-		got, _, err := h.fill(tt.path)
+		f, err := h.fill(tt.path)
+		got := f.path
 		if tt.err != "" {
 			if err == nil || err.Error() != tt.err {
 				t.Errorf("fill(%s) error = %v, want %q", tt.path, err, tt.err)
@@ -65,7 +66,7 @@ func TestDiscoverFollowsDependencies(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := &runner{client: newClient(target, 0, 10), target: target}
-	if _, _, err := r.discover(context.Background(), ops, caller{name: "A"}, newHarvest(nil)); err != nil {
+	if _, err := r.discover(context.Background(), ops, caller{name: "A"}, newHarvest(nil), false); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{"/projects", "/projects/p1", "/owners/u7"}
@@ -79,8 +80,23 @@ func TestDiscoverFollowsDependencies(t *testing.T) {
 func TestDeclaredIDsAreDeterministic(t *testing.T) {
 	for range 20 {
 		h := newHarvest(map[string][]string{"order_id": {"a"}, "orderId": {"b"}})
-		if got, _, _ := h.fill("/o/{orderId}"); got != "/o/b" {
-			t.Fatalf("fill = %q, want /o/b (orderId sorts before order_id)", got)
+		if f, _ := h.fill("/o/{orderId}"); f.path != "/o/b" {
+			t.Fatalf("fill = %q, want /o/b (orderId sorts before order_id)", f.path)
 		}
+	}
+}
+
+// An object that holds one of A's identity values is A's own, wherever it
+// is in the list.
+func TestPickPrefersAsOwnObject(t *testing.T) {
+	h := newHarvest(nil)
+	h.add("/books", []byte(`[{"title": "bobs-book", "user": "bob"}, {"title": "alices-book", "user": "alice"}]`))
+	f, err := h.fill("/books/{title}")
+	if err != nil || f.path != "/books/bobs-book" || f.own {
+		t.Errorf("without an identity: %+v, %v; want the first book, not known to be own", f, err)
+	}
+	h.identity = map[string]string{"alice": "/me"}
+	if f, _ := h.fill("/books/{title}"); f.path != "/books/alices-book" || !f.own {
+		t.Errorf("with A's identity: %+v; want alice's book, own", f)
 	}
 }
