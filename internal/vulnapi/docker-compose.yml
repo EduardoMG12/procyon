@@ -1,0 +1,10 @@
+# The vulnerable notes API, for `procyon test --compose`. Set FIXED=true to
+# run the fixed twin instead.
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: internal/vulnapi/Dockerfile
+    command: ["-fixed=${FIXED:-false}"]
+    ports:
+      - "127.0.0.1::8080"
