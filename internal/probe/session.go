@@ -22,6 +22,7 @@ type session struct {
 	// toBreak are the writes the malformed pass will send bad bodies to,
 	// with their path filled with A's object.
 	toBreak   []filledOp
+	broken    bool // the malformed pass has run
 	unchanged int
 }
 
@@ -112,6 +113,10 @@ func (s *session) queueMalformed(op loader.Operation, path string) {
 		return
 	}
 	switch {
+	case op.Body != nil && s.broken:
+		// The malformed pass runs once, before the deletes; inTestOrder
+		// keeps every write ahead of it.
+		s.res.note(op.Location, op.Key()+": malformed input not tested: it came after the malformed pass")
 	case op.Body != nil:
 		s.toBreak = append(s.toBreak, filledOp{op, path})
 	case op.NeedsBody:
@@ -124,6 +129,7 @@ func (s *session) queueMalformed(op loader.Operation, path string) {
 // that hangs the server (a regular expression that backtracks) may keep it
 // busy for minutes, so nothing more is sent.
 func (s *session) malformedPass(ctx context.Context) (noAnswer bool, err error) {
+	s.broken = true
 	for i, f := range s.toBreak {
 		bad, note, noAnswer, err := s.malformed(ctx, f.op, f.path, s.a)
 		if err != nil {

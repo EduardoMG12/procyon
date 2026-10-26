@@ -54,7 +54,7 @@ var prc001 = lintRule{
 // onePerPlace collects a rule's findings about schema properties. A schema
 // shared by several operations is one problem, fixed where it is written:
 // one finding at that place, listing every operation that reaches it, so an
-// ignore on one of them covers only that one (see applyIgnores).
+// ignore on one of them covers only that one (see report.New).
 type onePerPlace struct {
 	findings []report.Finding
 	at       map[report.Location]int // place -> index in findings
