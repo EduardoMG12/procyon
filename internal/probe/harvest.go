@@ -54,8 +54,13 @@ func (h *harvest) add(path string, body []byte) {
 	if !ok {
 		return
 	}
-	_, isObject := v.(map[string]any)
-	h.single[path] = isObject
+	// Whether a path answers one object (GET /me) is what its first answer
+	// said: a created object recorded later under a list's path must not
+	// make the list look like one.
+	if _, known := h.single[path]; !known {
+		_, isObject := v.(map[string]any)
+		h.single[path] = isObject
+	}
 	objects(v, func(o object) {
 		h.byPath[path] = append(h.byPath[path], o)
 		for _, value := range o {
