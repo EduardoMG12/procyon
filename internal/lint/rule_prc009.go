@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/words"
+
 	"github.com/EduardoMG12/procyon/internal/report"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -95,8 +97,8 @@ func grantPath(path string) bool {
 		if !strings.HasPrefix(segments[i+1], "{") {
 			continue
 		}
-		words := splitWords(segments[i])
-		if len(words) == 1 && slices.ContainsFunc(grantPathWords, func(g string) bool { return sameWord(words[0], g) }) {
+		parts := words.Split(segments[i])
+		if len(parts) == 1 && slices.ContainsFunc(grantPathWords, func(g string) bool { return words.Same(parts[0], g) }) {
 			return true
 		}
 	}
@@ -126,8 +128,8 @@ func lowEnum(s *openapi3.Schema) bool {
 		if !ok || text == "" {
 			return false
 		}
-		for _, w := range splitWords(text) {
-			if !slices.ContainsFunc(lowValues, func(low string) bool { return sameWord(w, low) }) {
+		for _, w := range words.Split(text) {
+			if !slices.ContainsFunc(lowValues, func(low string) bool { return words.Same(w, low) }) {
 				return false
 			}
 		}
@@ -158,7 +160,7 @@ func tokenRequest(roots []*openapi3.SchemaRef) bool {
 			continue
 		}
 		for name := range root.Value.Properties {
-			if slices.Equal(splitWords(name), []string{"grant", "type"}) {
+			if slices.Equal(words.Split(name), []string{"grant", "type"}) {
 				return true
 			}
 		}
@@ -167,7 +169,7 @@ func tokenRequest(roots []*openapi3.SchemaRef) bool {
 }
 
 // privilegedWords name fields that decide what a user may do. Words are
-// compared after splitWords, which lowercases and drops accents.
+// compared after words.Split, which lowercases and drops accents.
 var privilegedWords = [][]string{
 	{"role"}, {"admin"}, {"administrator"}, {"superuser"}, {"super", "user"},
 	{"permission"}, {"privilege"}, {"scope"}, {"tenant"},
@@ -187,14 +189,14 @@ var privilegeSuffixes = []string{
 // by nothing or by an identifier suffix. userRole, isAdmin, roleIDs and
 // tenantUuid are privileges; adminNotes is not.
 func privilegeWord(name string) string {
-	words := splitWords(name)
-	for i := range words {
+	parts := words.Split(name)
+	for i := range parts {
 		for _, entry := range privilegedWords {
 			end := i + len(entry)
-			if end > len(words) || !slices.EqualFunc(words[i:end], entry, sameWord) {
+			if end > len(parts) || !slices.EqualFunc(parts[i:end], entry, words.Same) {
 				continue
 			}
-			if !slices.ContainsFunc(words[end:], func(w string) bool { return !slices.Contains(privilegeSuffixes, w) }) {
+			if !slices.ContainsFunc(parts[end:], func(w string) bool { return !slices.Contains(privilegeSuffixes, w) }) {
 				return strings.Join(entry, " ")
 			}
 		}

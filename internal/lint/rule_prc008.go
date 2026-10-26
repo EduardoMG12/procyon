@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/words"
+
 	"github.com/EduardoMG12/procyon/internal/report"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -115,11 +117,11 @@ func unboundedCount(name string, s *openapi3.Schema, query bool) bool {
 	if s.Max != nil || s.ExclusiveMax.Value != nil || len(s.Enum) > 0 {
 		return false
 	}
-	words := countWords
+	list := countWords
 	if query {
-		words = append(slices.Clone(countWords), countQueryWords...)
+		list = append(slices.Clone(countWords), countQueryWords...)
 	}
-	return matchesWith(name, words, countDescribingWords, countReferenceWords)
+	return words.Match(name, list, countDescribingWords, countReferenceWords)
 }
 
 func unboundedString(s *openapi3.Schema) bool {
