@@ -90,6 +90,16 @@ func TestLintBadInputExitsTwoWithOneLine(t *testing.T) {
 	}
 }
 
+// Valid JSON skips the YAML syntax check for speed; a JSON spec the YAML
+// parser refuses (a duplicate key) must still get its exact error.
+func TestJSONWithADuplicateKeyGetsTheYAMLError(t *testing.T) {
+	r := run(t, "lint", spec("invalid-json-duplicate-key.json"))
+	want := `invalid-json-duplicate-key.json:3:3: mapping key "openapi" already defined at [2:3]`
+	if r.code != 2 || !strings.Contains(r.stderr, want) {
+		t.Errorf("exit %d, stderr %q; want 2 and %q", r.code, r.stderr, want)
+	}
+}
+
 func TestUsageErrorsExitTwoAndShowUsage(t *testing.T) {
 	tests := []struct {
 		name string
