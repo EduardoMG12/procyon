@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/report"
 	"github.com/EduardoMG12/procyon/internal/test"
 )
 
@@ -56,12 +57,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 type command struct {
 	name  string
 	flags func(*flag.FlagSet) // registers the command's own flags, or nil
-	run   func(spec string, failOn lint.Severity, refRoot string, cfg config) (lint.Report, error)
+	run   func(spec string, failOn report.Severity, refRoot string, cfg config) (report.Report, error)
 }
 
 var lintCommand = command{
 	name: "lint",
-	run: func(spec string, failOn lint.Severity, refRoot string, _ config) (lint.Report, error) {
+	run: func(spec string, failOn report.Severity, refRoot string, _ config) (report.Report, error) {
 		return lint.Run(spec, lint.Options{FailOn: failOn, RefRoot: refRoot})
 	},
 }
@@ -78,14 +79,14 @@ func testCommand() command {
 			f.IntVar(&port, "port", 0, "")
 			f.StringVar(&baseSpec, "base-spec", "", "")
 		},
-		run: func(spec string, failOn lint.Severity, refRoot string, cfg config) (report lint.Report, err error) {
+		run: func(spec string, failOn report.Severity, refRoot string, cfg config) (rep report.Report, err error) {
 			switch {
 			case composeFile != "" && baseURL != "":
-				return lint.Report{}, errors.New("--compose and --base-url: give one, not both")
+				return report.Report{}, errors.New("--compose and --base-url: give one, not both")
 			case composeFile != "" && (service == "" || port == 0):
-				return lint.Report{}, errors.New("--compose needs --service (the service that serves the API) and --port (its port in the container)")
+				return report.Report{}, errors.New("--compose needs --service (the service that serves the API) and --port (its port in the container)")
 			case composeFile == "" && baseURL == "":
-				return lint.Report{}, errors.New("--compose or --base-url is required: where the copy of your API under test runs")
+				return report.Report{}, errors.New("--compose or --base-url is required: where the copy of your API under test runs")
 			}
 			// Ctrl-C cancels the run; the environment is still torn down.
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -104,7 +105,7 @@ func testCommand() command {
 					}
 				}()
 				if err != nil {
-					return lint.Report{}, err
+					return report.Report{}, err
 				}
 			}
 			return test.Run(ctx, spec, test.Options{
@@ -160,9 +161,9 @@ func runCommand(cmd command, args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 
-	var threshold lint.Severity
+	var threshold report.Severity
 	if *failOn != "" {
-		if threshold, err = lint.ParseSeverity(*failOn); err != nil {
+		if threshold, err = report.ParseSeverity(*failOn); err != nil {
 			fmt.Fprintf(stderr, "procyon: --fail-on: %v\n", err)
 			return exitUsage
 		}
@@ -175,18 +176,18 @@ func runCommand(cmd command, args []string, stdout, stderr io.Writer) int {
 	}
 	defer closeAll(files)
 
-	report, err := cmd.run(specs[0], threshold, *refRoot, cfg)
+	rep, err := cmd.run(specs[0], threshold, *refRoot, cfg)
 	if err != nil {
 		fmt.Fprintf(stderr, "procyon: %v\n", err)
 		return exitUsage
 	}
 	color := *stdoutFormat == "terminal" && useColor(stdout)
-	if err := formats[*stdoutFormat](stdout, report, color); err != nil {
+	if err := formats[*stdoutFormat](stdout, rep, color); err != nil {
 		fmt.Fprintf(stderr, "procyon: writing report: %v\n", err)
 		return exitUsage
 	}
 	for i, o := range extra {
-		err := formats[o.format](files[i], report, false) // files never get colours
+		err := formats[o.format](files[i], rep, false) // files never get colours
 		if err == nil {
 			err = files[i].Close()
 		}
@@ -195,7 +196,7 @@ func runCommand(cmd command, args []string, stdout, stderr io.Writer) int {
 			return exitUsage
 		}
 	}
-	if report.Failed {
+	if rep.Failed {
 		return exitFail
 	}
 	return exitPass
@@ -256,7 +257,7 @@ const usage = `Usage:
                               be set as ref-root in .procyon.yaml.
   procyon test [flags] (--compose <file> --service <name> --port <port> | --base-url <url>) <spec>
                         Call a running, disposable copy of the API as two test
-                        accounts and anonymously, and report what each could
+                        accounts and anonymously, and rep what each could
                         do, how it handles malformed input, and its TLS.
                         Takes the same flags as lint. Accounts, IDs and
                         operations to skip can be set under test: in

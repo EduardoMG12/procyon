@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/report"
 )
 
 // TerminalOptions control the terminal format.
@@ -33,21 +33,21 @@ const (
 	green = "\x1b[1;32m"
 )
 
-var severityColor = map[lint.Severity]string{
-	lint.Critical: "\x1b[1;35m",
-	lint.High:     red,
-	lint.Medium:   "\x1b[1;33m",
-	lint.Low:      "\x1b[1;36m",
+var severityColor = map[report.Severity]string{
+	report.Critical: "\x1b[1;35m",
+	report.High:     red,
+	report.Medium:   "\x1b[1;33m",
+	report.Low:      "\x1b[1;36m",
 }
 
 // Terminal writes the report for a person reading a terminal or a CI log:
 // most serious findings first, each with the spec lines around it, then a
 // one-line summary.
-func Terminal(w io.Writer, report lint.Report, opts TerminalOptions) error {
+func Terminal(w io.Writer, rep report.Report, opts TerminalOptions) error {
 	t := terminal{opts: opts}
-	findings := slices.Clone(report.Findings)
+	findings := slices.Clone(rep.Findings)
 	// Stable: within a severity, findings keep the engine's location order.
-	slices.SortStableFunc(findings, func(a, b lint.Finding) int {
+	slices.SortStableFunc(findings, func(a, b report.Finding) int {
 		return int(b.Rule.Severity) - int(a.Rule.Severity)
 	})
 	if len(findings) == 0 {
@@ -55,11 +55,11 @@ func Terminal(w io.Writer, report lint.Report, opts TerminalOptions) error {
 		t.line("")
 	}
 	for _, f := range findings {
-		t.finding(f, report.Sources[f.Location.File])
+		t.finding(f, rep.Sources[f.Location.File])
 	}
-	t.ignored(report.Ignored)
-	t.notes(report.Notes)
-	t.summary(report)
+	t.ignored(rep.Ignored)
+	t.notes(rep.Notes)
+	t.summary(rep)
 	_, err := io.WriteString(w, t.b.String())
 	return err
 }
@@ -81,7 +81,7 @@ func (t *terminal) paint(color, s string) string {
 	return color + s + reset
 }
 
-func (t *terminal) finding(f lint.Finding, source []string) {
+func (t *terminal) finding(f report.Finding, source []string) {
 	// Padded to the indent, plus a space for CRITICAL, the one label as
 	// long as the indent.
 	label := fmt.Sprintf("%-7s ", strings.ToUpper(f.Rule.Severity.String()))
@@ -139,7 +139,7 @@ func (t *terminal) labelled(label, text string) {
 
 // evidence prints the requests that prove a runtime finding: who sent
 // what, the status, and the start of the body on one line.
-func (t *terminal) evidence(exchanges []lint.Exchange) {
+func (t *terminal) evidence(exchanges []report.Exchange) {
 	if len(exchanges) == 0 {
 		return
 	}
@@ -157,7 +157,7 @@ func (t *terminal) evidence(exchanges []lint.Exchange) {
 
 // ignored lists the findings an x-procyon-ignore matched, each with its
 // reason: exceptions stay visible on every run.
-func (t *terminal) ignored(ignored []lint.IgnoredFinding) {
+func (t *terminal) ignored(ignored []report.IgnoredFinding) {
 	if len(ignored) == 0 {
 		return
 	}
@@ -177,7 +177,7 @@ func (t *terminal) ignored(ignored []lint.IgnoredFinding) {
 }
 
 // notes lists what the reader should know that is not a finding.
-func (t *terminal) notes(notes []lint.Note) {
+func (t *terminal) notes(notes []report.Note) {
 	if len(notes) == 0 {
 		return
 	}
@@ -188,25 +188,25 @@ func (t *terminal) notes(notes []lint.Note) {
 	t.line("")
 }
 
-func location(loc lint.Location) string {
+func location(loc report.Location) string {
 	return fmt.Sprintf("%s:%d:%d", filepath.ToSlash(loc.File), loc.Line, loc.Column)
 }
 
-func (t *terminal) summary(report lint.Report) {
-	count := map[lint.Severity]int{}
-	for _, f := range report.Findings {
+func (t *terminal) summary(rep report.Report) {
+	count := map[report.Severity]int{}
+	for _, f := range rep.Findings {
 		count[f.Rule.Severity]++
 	}
 	verdict := t.paint(green, "PASSED")
-	if report.Failed {
+	if rep.Failed {
 		verdict = t.paint(red, "FAILED")
 	}
 	counts := fmt.Sprintf("%d high · %d medium · %d low · %d ignored",
-		count[lint.High], count[lint.Medium], count[lint.Low], len(report.Ignored))
-	if count[lint.Critical] > 0 {
-		counts = fmt.Sprintf("%d critical · %s", count[lint.Critical], counts)
+		count[report.High], count[report.Medium], count[report.Low], len(rep.Ignored))
+	if count[report.Critical] > 0 {
+		counts = fmt.Sprintf("%d critical · %s", count[report.Critical], counts)
 	}
-	t.line(fmt.Sprintf("%s  %s  (fails at: %s)", verdict, counts, report.FailOn))
+	t.line(fmt.Sprintf("%s  %s  (fails at: %s)", verdict, counts, rep.FailOn))
 }
 
 // wrap splits text into lines of at most width characters, breaking between

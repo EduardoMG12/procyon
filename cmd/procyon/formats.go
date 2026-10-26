@@ -9,18 +9,19 @@ import (
 
 	"github.com/EduardoMG12/procyon/internal/format"
 	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/report"
 )
 
 // render writes a report in one format. color is true only for a terminal.
-type render func(w io.Writer, report lint.Report, color bool) error
+type render func(w io.Writer, rep report.Report, color bool) error
 
 var formats = map[string]render{
-	"terminal": func(w io.Writer, r lint.Report, color bool) error {
+	"terminal": func(w io.Writer, r report.Report, color bool) error {
 		return format.Terminal(w, r, format.TerminalOptions{Color: color})
 	},
-	"json":     func(w io.Writer, r lint.Report, _ bool) error { return format.JSON(w, r) },
-	"markdown": func(w io.Writer, r lint.Report, _ bool) error { return format.Markdown(w, r) },
-	"sarif": func(w io.Writer, r lint.Report, _ bool) error {
+	"json":     func(w io.Writer, r report.Report, _ bool) error { return format.JSON(w, r) },
+	"markdown": func(w io.Writer, r report.Report, _ bool) error { return format.Markdown(w, r) },
+	"sarif": func(w io.Writer, r report.Report, _ bool) error {
 		// GitHub resolves paths against the repository root, which is where
 		// CI runs Procyon.
 		wd, _ := os.Getwd()

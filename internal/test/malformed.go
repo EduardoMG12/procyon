@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/report"
 )
 
 // mutation is a request body the spec says the API must refuse.
@@ -140,7 +141,7 @@ func wrongValue(types []string) (any, string) {
 //
 // hung is true when a request got no answer at all: the server may stay
 // busy, so the caller stops sending.
-func (r *runner) malformed(ctx context.Context, op lint.Operation, path string, a caller) (findings []lint.Finding, note string, hung bool, err error) {
+func (r *runner) malformed(ctx context.Context, op lint.Operation, path string, a caller) (findings []report.Finding, note string, hung bool, err error) {
 	muts := mutations(op.Body, op.Fields)
 	if len(muts) == 0 {
 		return nil, "", false, nil
@@ -155,7 +156,7 @@ func (r *runner) malformed(ctx context.Context, op lint.Operation, path string, 
 		return nil, fmt.Sprintf("malformed input not tested: the spec's own example, sent as A, already gets %d", control.Status), false, nil
 	}
 	var crashed, accepted []string
-	var crashEvidence, acceptEvidence []lint.Exchange
+	var crashEvidence, acceptEvidence []report.Exchange
 	for _, m := range muts {
 		bad := op
 		bad.Body = m.body
@@ -166,7 +167,7 @@ func (r *runner) malformed(ctx context.Context, op lint.Operation, path string, 
 			// the server busy (a regular expression that backtracks, a
 			// loop) takes it down for everyone.
 			crashed = append(crashed, m.what+": no answer within the timeout")
-			crashEvidence = append(crashEvidence, lint.Exchange{Caller: a.name, Method: op.Method, URL: r.requestURI(path),
+			crashEvidence = append(crashEvidence, report.Exchange{Caller: a.name, Method: op.Method, URL: r.requestURI(path),
 				Sent: r.excerpt(string(m.body))}) // Status 0: no answer
 			hung = true
 			break // the next mutation would only wait out the timeout too
@@ -183,7 +184,7 @@ func (r *runner) malformed(ctx context.Context, op lint.Operation, path string, 
 	}
 	name := op.Key()
 	if len(crashed) > 0 {
-		findings = append(findings, lint.Finding{
+		findings = append(findings, report.Finding{
 			Rule: lint.RuntimeRule("PRC103"), Location: op.Location, Operation: name,
 			Why: "A request body the spec forbids (" + strings.Join(crashed, "; ") + ") made the server fail with a 5xx: " +
 				"it reached code that did not expect it, which can leak errors or be used to take the server down.",
@@ -192,7 +193,7 @@ func (r *runner) malformed(ctx context.Context, op lint.Operation, path string, 
 		})
 	}
 	if len(accepted) > 0 {
-		findings = append(findings, lint.Finding{
+		findings = append(findings, report.Finding{
 			Rule: lint.RuntimeRule("PRC104"), Location: op.Location, Operation: name,
 			Why: "The server accepted a request body the spec forbids (" + strings.Join(accepted, "; ") + "): " +
 				"what it stores is not what the spec promises, and the gap is where injection and mass assignment start.",

@@ -87,15 +87,15 @@ func TestRunAgainstAnOldTLSServer(t *testing.T) {
 	srv.TLS = &tls.Config{MinVersion: tls.VersionTLS11, MaxVersion: tls.VersionTLS11}
 	srv.StartTLS()
 	defer srv.Close()
-	report, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB})
+	rep, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(report.Findings) != 1 || report.Findings[0].Rule.ID != "PRC105" || !strings.Contains(report.Findings[0].Why, "accepts TLS 1.1") {
-		t.Errorf("findings = %v, want PRC105 for TLS 1.1", report.Findings)
+	if len(rep.Findings) != 1 || rep.Findings[0].Rule.ID != "PRC105" || !strings.Contains(rep.Findings[0].Why, "accepts TLS 1.1") {
+		t.Errorf("findings = %v, want PRC105 for TLS 1.1", rep.Findings)
 	}
-	if len(report.Matrix) == 0 || report.Matrix[1].A.Outcome != "allowed" {
-		t.Errorf("the run did not go on: matrix %v", report.Matrix)
+	if len(rep.Matrix) == 0 || rep.Matrix[1].A.Outcome != "allowed" {
+		t.Errorf("the run did not go on: matrix %v", rep.Matrix)
 	}
 }
 
