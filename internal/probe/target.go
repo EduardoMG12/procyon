@@ -8,8 +8,11 @@
 package probe
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net"
@@ -88,15 +91,25 @@ var errBudget = errors.New("request budget used up")
 
 // client sends a run's requests: one at a time, each with a timeout, at most
 // budget of them, never through a proxy, never to a disallowed address and
-// never following a redirect to another host.
+// never following a redirect.
 type client struct {
 	http   *http.Client
 	budget int // requests left
+	// pin is the SHA-256 of the public key the TLS check saw, once it ran:
+	// every later connection must present the same key, so nobody can step
+	// in between Procyon and the target during the run.
+	pin []byte
 }
 
-func newClient(target *url.URL, timeout time.Duration, budget int) *client {
+// maxHeaderBytes caps the response headers Procyon reads; bodies are capped
+// by maxResponse.
+const maxHeaderBytes = 64 << 10
+
+func newClient(timeout time.Duration, budget int) *client {
+	c := &client{budget: budget}
 	dialer := &net.Dialer{Timeout: timeout, Control: checkDial}
 	transport := &http.Transport{
+		MaxResponseHeaderBytes: maxHeaderBytes,
 		// No Proxy: an HTTP_PROXY in CI would otherwise carry the requests
 		// somewhere else, past checkDial.
 		DialContext:         dialer.DialContext,
@@ -105,23 +118,39 @@ func newClient(target *url.URL, timeout time.Duration, budget int) *client {
 		// certificate a public CA signed. Its TLS is judged by PRC105
 		// instead of refusing every request.
 		// TLS 1.0 is allowed too: PRC105 reports it, and the run goes on.
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS10},
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS10, VerifyConnection: c.checkPin},
 	}
-	return &client{
-		budget: budget,
-		http: &http.Client{
-			Transport: transport,
-			Timeout:   timeout,
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				// The redirect response itself is what the API answered;
-				// following it to another host would test something else.
-				if req.URL.Host != target.Host || len(via) >= 10 {
-					return http.ErrUseLastResponse
-				}
-				return nil
-			},
-		},
+	c.http = &http.Client{
+		Transport: transport,
+		Timeout:   timeout,
+		// A redirect is what the API answered, and is judged as such: a 302
+		// to a login page is not a 2xx. Following it, even on the same host,
+		// would test another operation, or the same one over plain http.
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
+	return c
+}
+
+// errKeyChanged is returned when the target presents another TLS key than
+// the one the TLS check saw.
+var errKeyChanged = errors.New("the target's TLS key changed during the run")
+
+// checkPin refuses a connection whose key is not the pinned one.
+func (c *client) checkPin(cs tls.ConnectionState) error {
+	if c.pin == nil {
+		return nil // the TLS check has not run, or the target is plain http
+	}
+	if len(cs.PeerCertificates) == 0 || !bytes.Equal(keyHash(cs.PeerCertificates[0]), c.pin) {
+		return errKeyChanged
+	}
+	return nil
+}
+
+// keyHash is the SHA-256 of a certificate's public key: what pinning
+// compares, so a renewed certificate with the same key still matches.
+func keyHash(cert *x509.Certificate) []byte {
+	sum := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
+	return sum[:]
 }
 
 // do sends one request, counting it against the budget.

@@ -6,10 +6,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
-	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/EduardoMG12/procyon/internal/report"
 )
 
 // fakeLookup resolves names from a table; literal IPs resolve to themselves,
@@ -91,7 +93,7 @@ func get(t *testing.T, c *client, url string) (*http.Response, error) {
 	return resp, err
 }
 
-func TestClientDoesNotFollowRedirectsToAnotherHost(t *testing.T) {
+func TestClientNeverFollowsRedirects(t *testing.T) {
 	var reached bool
 	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { reached = true }))
 	defer other.Close()
@@ -109,8 +111,7 @@ func TestClientDoesNotFollowRedirectsToAnotherHost(t *testing.T) {
 		http.Redirect(w, r, elsewhere, http.StatusFound)
 	}))
 	defer target.Close()
-	base, _ := url.Parse(target.URL)
-	c := newClient(base, time.Second, 10)
+	c := newClient(time.Second, 10)
 
 	resp, err := get(t, c, target.URL+"/away")
 	if err != nil {
@@ -123,8 +124,39 @@ func TestClientDoesNotFollowRedirectsToAnotherHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("redirect on the same host: status %d, want it followed to 200", resp.StatusCode)
+	// Not even on the same host: the 302 is what the API answered.
+	if resp.StatusCode != http.StatusFound {
+		t.Errorf("redirect on the same host: status %d, want the 302 itself", resp.StatusCode)
+	}
+}
+
+// Response headers past maxHeaderBytes are refused, not read.
+func TestClientCapsResponseHeaders(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Huge", strings.Repeat("a", maxHeaderBytes+1))
+	}))
+	defer srv.Close()
+	if _, err := get(t, newClient(time.Second, 10), srv.URL); err == nil {
+		t.Error("a response with headers past the cap was read")
+	}
+}
+
+// After the TLS check, a connection to a server with another key is
+// refused: nobody can step in between during the run.
+func TestClientRefusesAnotherTLSKey(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer srv.Close()
+	c := newClient(time.Second, 10)
+	c.pin = keyHash(srv.Certificate())
+	if _, err := get(t, c, srv.URL); err != nil {
+		t.Fatalf("the pinned key: %v", err)
+	}
+	other := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer other.Close()
+	c2 := newClient(time.Second, 10)
+	c2.pin = []byte("not this key")
+	if _, err := get(t, c2, other.URL); !errors.Is(err, errKeyChanged) {
+		t.Errorf("another key: err = %v, want errKeyChanged", err)
 	}
 }
 
@@ -135,8 +167,7 @@ func TestClientTimeoutAndBudget(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	base, _ := url.Parse(srv.URL)
-	c := newClient(base, 50*time.Millisecond, 2)
+	c := newClient(50*time.Millisecond, 2)
 
 	if _, err := get(t, c, srv.URL+"/slow"); err == nil {
 		t.Error("a slow answer did not time out")
@@ -146,5 +177,19 @@ func TestClientTimeoutAndBudget(t *testing.T) {
 	}
 	if _, err := get(t, c, srv.URL+"/fast"); !errors.Is(err, errBudget) {
 		t.Errorf("third request with a budget of 2: %v, want errBudget", err)
+	}
+}
+
+// Redirects are not followed, and the report says so: an API that
+// redirects every path (a trailing slash) would otherwise pass silently.
+func TestRunNotesRedirects(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, r.URL.Path+"/", http.StatusTemporaryRedirect)
+	})
+	rep := runOn(t, vulnapiSpec, handler, Options{})
+	if !slices.ContainsFunc(rep.Notes, func(n report.Note) bool {
+		return strings.Contains(n.Message, "answers were redirects (first: GET /health answered 307 to /health/)")
+	}) {
+		t.Errorf("notes = %v, want one about the redirects", rep.Notes)
 	}
 }

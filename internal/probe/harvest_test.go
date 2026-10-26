@@ -65,7 +65,7 @@ func TestDiscoverFollowsDependencies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := &runner{client: newClient(target, 0, 10), target: target}
+	r := &runner{client: newClient(0, 10), target: target}
 	if _, err := r.discover(context.Background(), ops, caller{name: "A"}, newHarvest(nil), false); err != nil {
 		t.Fatal(err)
 	}

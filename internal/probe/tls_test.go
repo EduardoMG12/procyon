@@ -35,7 +35,7 @@ func tlsServer(t *testing.T, cfg *tls.Config, host string) *url.URL {
 
 func problems(t *testing.T, target *url.URL) string {
 	t.Helper()
-	got, _ := checkTLS(context.Background(), target, 2*time.Second)
+	got, _, _ := checkTLS(context.Background(), target, 2*time.Second)
 	var whats []string
 	for _, p := range got {
 		whats = append(whats, p.what)
@@ -76,7 +76,7 @@ func TestCheckTLS(t *testing.T) {
 // A probe checkDial refuses is a note, never a silent pass.
 func TestCheckTLSNotesWhatItCannotCheck(t *testing.T) {
 	public, _ := url.Parse("https://8.8.8.8")
-	if got, note := checkTLS(context.Background(), public, time.Second); len(got) != 0 || !strings.Contains(note, "not a loopback or private address") {
+	if got, note, _ := checkTLS(context.Background(), public, time.Second); len(got) != 0 || !strings.Contains(note, "not a loopback or private address") {
 		t.Errorf("public address: %v, %q; want it refused by checkDial", got, note)
 	}
 }

@@ -27,8 +27,9 @@ type tlsProblem struct {
 // host. A self-signed or private-CA certificate is not judged: anyone can
 // mint one with any name and dates, and a disposable copy rarely has a
 // public one. Every connection goes through checkDial, like the requests.
-// note says what could not be checked, or is "".
-func checkTLS(ctx context.Context, target *url.URL, timeout time.Duration) (problems []tlsProblem, note string) {
+// note says what could not be checked, or is ""; key is the SHA-256 of the
+// certificate's public key, for pinning (nil without a handshake).
+func checkTLS(ctx context.Context, target *url.URL, timeout time.Duration) (problems []tlsProblem, note string, key []byte) {
 	host := target.Hostname()
 	addr := target.Host
 	if target.Port() == "" {
@@ -69,14 +70,15 @@ func checkTLS(ctx context.Context, target *url.URL, timeout time.Duration) (prob
 	}
 	state, err := handshake(&tls.Config{MinVersion: tls.VersionTLS10})
 	if err != nil {
-		return problems, fmt.Sprintf("TLS not fully checked: no handshake with %s (%v)", addr, err)
+		return problems, fmt.Sprintf("TLS not fully checked: no handshake with %s (%v)", addr, err), nil
 	}
 	if len(state.PeerCertificates) == 0 {
-		return problems, fmt.Sprintf("TLS not fully checked: %s presented no certificate", addr)
+		return problems, fmt.Sprintf("TLS not fully checked: %s presented no certificate", addr), nil
 	}
 	leaf := state.PeerCertificates[0]
+	key = keyHash(leaf)
 	if !publiclySigned(state.PeerCertificates) {
-		return problems, ""
+		return problems, "", key
 	}
 	now := time.Now()
 	switch {
@@ -99,7 +101,7 @@ func checkTLS(ctx context.Context, target *url.URL, timeout time.Duration) (prob
 		problems = append(problems, tlsProblem{"presents a certificate for another host",
 			fmt.Sprintf("certificate is for %s, not %s", is, host)})
 	}
-	return problems, ""
+	return problems, "", key
 }
 
 // publiclySigned reports whether a known CA (the system's roots) signed the

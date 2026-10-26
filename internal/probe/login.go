@@ -69,6 +69,9 @@ func (r *runner) login(ctx context.Context, spec *loader.Spec, who string, l *Lo
 		return "", fmt.Errorf("login of test account %s: %w", who, err)
 	}
 	if !success(exchange) {
+		if exchange.Status >= 300 && exchange.Status < 400 {
+			return fail("%s answered %d: redirects are not followed, and the token must be in the JSON answer", l.Operation, exchange.Status)
+		}
 		return fail("%s answered %d", l.Operation, exchange.Status)
 	}
 	v, ok := decode(got)

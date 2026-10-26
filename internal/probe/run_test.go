@@ -204,7 +204,7 @@ func TestEvidenceNeverHoldsPartOfAToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	token := "secret-token-value"
-	r := &runner{client: newClient(target, time.Second, 10), target: target, tokens: []string{token}}
+	r := &runner{client: newClient(time.Second, 10), target: target, tokens: []string{token}}
 	op := loader.Operation{Method: "GET", Path: "/me", Credential: &loader.Credential{In: "header", Name: "Authorization", Prefix: "Bearer "}}
 	exchange, err := r.send(context.Background(), op, "/me", caller{name: "A", token: token})
 	if err != nil {

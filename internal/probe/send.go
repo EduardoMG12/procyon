@@ -29,6 +29,10 @@ type runner struct {
 	target *url.URL
 	tokens []string        // every token, to mask in evidence
 	skip   map[string]bool // operations never called (test.skip)
+	// redirects counts the answers that were redirects, and keeps the
+	// first, for the note that says they were not followed.
+	redirects     int
+	firstRedirect string
 }
 
 // send calls one operation as who and records the exchange, with every
@@ -64,6 +68,13 @@ func (r *runner) sendFull(ctx context.Context, op loader.Operation, path string,
 	got, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse))
 	if err != nil {
 		return report.Exchange{}, nil, fmt.Errorf("%s %s: reading the response: %w", op.Method, op.Path, err)
+	}
+	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		r.redirects++
+		if r.firstRedirect == "" {
+			r.firstRedirect = fmt.Sprintf("%s %s answered %d to %s", op.Method, mask(req.URL.RequestURI(), r.tokens...),
+				resp.StatusCode, mask(resp.Header.Get("Location"), r.tokens...))
+		}
 	}
 	exchange := report.Exchange{
 		Caller: who.name,
