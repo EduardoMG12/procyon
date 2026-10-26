@@ -2,7 +2,6 @@ package lint
 
 import (
 	"fmt"
-	"net/http"
 	"slices"
 	"sort"
 	"strings"
@@ -36,7 +35,7 @@ func checkPRC005(doc *openapi3.T) []report.Finding {
 	var found onePerPlace
 	loader.ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		lists := [][][]string{secretWords}
-		if method == http.MethodGet {
+		if method == "GET" {
 			lists = append(lists, credentialWords)
 		}
 		forEachResponseProperty(op, func(name string, prop *openapi3.SchemaRef) {

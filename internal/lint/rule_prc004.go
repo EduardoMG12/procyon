@@ -1,7 +1,7 @@
 package lint
 
 import (
-	"net"
+	"net/netip"
 	"net/url"
 	"slices"
 	"strings"
@@ -95,8 +95,8 @@ func loopback(host string) bool {
 	if strings.EqualFold(host, "localhost") {
 		return true
 	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
+	addr, err := netip.ParseAddr(host)
+	return err == nil && addr.Zone() == "" && addr.Unmap().IsLoopback()
 }
 
 // maxExpansions caps how many strings one part of a templated URL expands
