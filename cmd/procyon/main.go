@@ -13,7 +13,7 @@ import (
 
 	"github.com/EduardoMG12/procyon/internal/lint"
 	"github.com/EduardoMG12/procyon/internal/report"
-	"github.com/EduardoMG12/procyon/internal/test"
+	"github.com/EduardoMG12/procyon/internal/probe"
 )
 
 // Exit codes. Scripts tell "Procyon found problems" (1) apart from "Procyon
@@ -93,7 +93,7 @@ func testCommand() command {
 			defer stop()
 			if composeFile != "" {
 				var down func() error
-				baseURL, down, err = test.Up(ctx, test.Compose{File: composeFile, Service: service, Port: port})
+				baseURL, down, err = probe.Up(ctx, probe.Compose{File: composeFile, Service: service, Port: port})
 				defer func() {
 					downErr := down()
 					switch {
@@ -108,9 +108,9 @@ func testCommand() command {
 					return report.Report{}, err
 				}
 			}
-			return test.Run(ctx, spec, test.Options{
+			return probe.Run(ctx, spec, probe.Options{
 				BaseURL: baseURL, FailOn: failOn, RefRoot: refRoot,
-				TokenA: os.Getenv(test.EnvTokenA), TokenB: os.Getenv(test.EnvTokenB),
+				TokenA: os.Getenv(probe.EnvTokenA), TokenB: os.Getenv(probe.EnvTokenB),
 				IDs:    cfg.Test.IDs,
 				LoginA: cfg.Test.Accounts.A.Login, LoginB: cfg.Test.Accounts.B.Login,
 				BaseSpec: baseSpec,

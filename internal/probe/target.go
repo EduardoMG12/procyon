@@ -1,11 +1,11 @@
-// Package test runs Procyon's runtime tests: it calls a running, disposable
+// Package probe runs Procyon's runtime tests: it calls a running, disposable
 // copy of an API and reports what the API let each caller do.
 //
 // It only ever calls loopback and private addresses, where a disposable copy
 // lives, never the internet: the check is made once on the --base-url, with
 // a clear error, and again on every connection, so a host that resolves to a
 // private address first and a public one later is still refused.
-package test
+package probe
 
 import (
 	"context"

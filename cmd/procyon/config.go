@@ -8,7 +8,7 @@ import (
 	"os"
 
 	"github.com/EduardoMG12/procyon/internal/report"
-	"github.com/EduardoMG12/procyon/internal/test"
+	"github.com/EduardoMG12/procyon/internal/probe"
 	"github.com/goccy/go-yaml"
 	"github.com/goccy/go-yaml/token"
 )
@@ -32,10 +32,10 @@ type config struct {
 		// Accounts declare how test accounts A and B log in.
 		Accounts struct {
 			A struct {
-				Login *test.Login `yaml:"login"`
+				Login *probe.Login `yaml:"login"`
 			} `yaml:"a"`
 			B struct {
-				Login *test.Login `yaml:"login"`
+				Login *probe.Login `yaml:"login"`
 			} `yaml:"b"`
 		} `yaml:"accounts"`
 	} `yaml:"test"`
@@ -94,7 +94,7 @@ func loadConfig() (config, error) {
 	}
 	for _, account := range []struct {
 		name  string
-		login *test.Login
+		login *probe.Login
 	}{{"a", cfg.Test.Accounts.A.Login}, {"b", cfg.Test.Accounts.B.Login}} {
 		if l := account.login; l != nil && (l.Operation == "" || l.Token == "") {
 			key := "test.accounts." + account.name + ".login"

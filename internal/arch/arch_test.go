@@ -81,9 +81,9 @@ func TestFormatsSeeOnlyTheReport(t *testing.T) {
 // The linter never depends on the runtime tests, and the loader on neither.
 func TestDependenciesPointOneWay(t *testing.T) {
 	for pkg, forbidden := range map[string][]string{
-		"lint":   {module + "test", module + "format"},
-		"loader": {module + "lint", module + "test", module + "format"},
-		"report": {module + "lint", module + "loader", module + "test"},
+		"lint":   {module + "probe", module + "format"},
+		"loader": {module + "lint", module + "probe", module + "format"},
+		"report": {module + "lint", module + "loader", module + "probe"},
 	} {
 		for _, imp := range imports(t, pkg) {
 			if slices.Contains(forbidden, imp) {
