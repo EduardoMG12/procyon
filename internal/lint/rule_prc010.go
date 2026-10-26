@@ -5,14 +5,16 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/EduardoMG12/procyon/internal/report"
+
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
 var prc010 = lintRule{
-	Rule: Rule{
+	Rule: report.Rule{
 		ID:       "PRC010",
 		Title:    "Admin operation uses only the default security",
-		Severity: Medium,
+		Severity: report.Medium,
 		OWASP:    "API5:2023 Broken Function Level Authorization",
 	},
 	check: checkPRC010,
@@ -27,19 +29,19 @@ var adminWords = []string{"admin", "internal", "debug", "management"}
 // regular operations, not with the spec's default, also works for specs
 // that repeat security on every operation. Unauthenticated operations are
 // PRC001's.
-func checkPRC010(doc *openapi3.T) []Finding {
+func checkPRC010(doc *openapi3.T) []report.Finding {
 	regular := map[string]bool{}
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		if !adminPath(path) && !unauthenticated(doc, path, op) {
 			regular[authKey(doc, path, op)] = true
 		}
 	})
-	var findings []Finding
+	var findings []report.Finding
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		if !adminPath(path) || unauthenticated(doc, path, op) || !regular[authKey(doc, path, op)] {
 			return
 		}
-		findings = append(findings, Finding{
+		findings = append(findings, report.Finding{
 			Location:  locate(op.Origin),
 			Operation: method + " " + path,
 			Why:       "This looks like an administrative operation, but it requires the same authentication as regular operations: any user who can call those may be able to call this.",

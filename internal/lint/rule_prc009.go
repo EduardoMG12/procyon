@@ -5,14 +5,16 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/report"
+
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
 var prc009 = lintRule{
-	Rule: Rule{
+	Rule: report.Rule{
 		ID:       "PRC009",
 		Title:    "Client can write a privileged field",
-		Severity: Medium,
+		Severity: report.Medium,
 		OWASP:    "API3:2023 Broken Object Property Level Authorization",
 	},
 	check: checkPRC009,
@@ -30,7 +32,7 @@ var prc009 = lintRule{
 // A role or permission is not reported where assigning it is the
 // operation's purpose (PUT /memberships/{username}, see grantPath), nor when
 // its enum holds only low values (guestRole: viewer | commenter).
-func checkPRC009(doc *openapi3.T) []Finding {
+func checkPRC009(doc *openapi3.T) []report.Finding {
 	var found onePerPlace
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		if op.RequestBody == nil || op.RequestBody.Value == nil {
@@ -45,7 +47,7 @@ func checkPRC009(doc *openapi3.T) []Finding {
 				return false // the client cannot send it, nor anything inside it
 			}
 			if word := privilegeWord(name); word != "" && !assignedOnPurpose(word, path, prop.Value) {
-				found.add(Finding{
+				found.add(report.Finding{
 					Location:  propertyLocation(prop),
 					Operation: method + " " + path,
 					Why: fmt.Sprintf("The request body accepts %q. If the server copies the request into the record, "+

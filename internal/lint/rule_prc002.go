@@ -5,14 +5,16 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/report"
+
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
 var prc002 = lintRule{
-	Rule: Rule{
+	Rule: report.Rule{
 		ID:       "PRC002",
 		Title:    "Security requirement names an undefined scheme",
-		Severity: High,
+		Severity: report.High,
 		OWASP:    "API2:2023 Broken Authentication",
 	},
 	check: checkPRC002,
@@ -22,11 +24,11 @@ var prc002 = lintRule{
 // define. kin-openapi rejects these as invalid; Procyon reports them as a
 // finding instead, because what they mean in practice is an operation whose
 // documented protection does not exist.
-func checkPRC002(doc *openapi3.T) []Finding {
-	var findings []Finding
-	report := func(reqs openapi3.SecurityRequirements, origin *openapi3.Origin, operation string, about any) {
+func checkPRC002(doc *openapi3.T) []report.Finding {
+	var findings []report.Finding
+	flag := func(reqs openapi3.SecurityRequirements, origin *openapi3.Origin, operation string, about any) {
 		for _, name := range undefinedSchemes(doc, reqs) {
-			findings = append(findings, Finding{
+			findings = append(findings, report.Finding{
 				Location:  locateField(origin, "security"),
 				Operation: operation,
 				Element:   about,
@@ -37,10 +39,10 @@ func checkPRC002(doc *openapi3.T) []Finding {
 			})
 		}
 	}
-	report(doc.Security, doc.Origin, "", doc)
+	flag(doc.Security, doc.Origin, "", doc)
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		if op.Security != nil {
-			report(*op.Security, op.Origin, method+" "+path, op)
+			flag(*op.Security, op.Origin, method+" "+path, op)
 		}
 	})
 	return findings

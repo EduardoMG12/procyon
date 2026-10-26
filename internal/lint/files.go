@@ -13,6 +13,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/report"
+
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
@@ -84,7 +86,7 @@ func (f *specFiles) add(location *url.URL, path string, data []byte) {
 // asGiven turns the file URL kin-openapi records in a location back into
 // the path Procyon read and, for a Swagger 2.0 spec, the position in the
 // converted document back into the original file.
-func (f *specFiles) asGiven(loc Location) Location {
+func (f *specFiles) asGiven(loc report.Location) report.Location {
 	if given, ok := f.paths[loc.File]; ok {
 		loc.File = given
 		if given == f.spec && f.back != nil {

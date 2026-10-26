@@ -6,14 +6,16 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/report"
+
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
 var prc004 = lintRule{
-	Rule: Rule{
+	Rule: report.Rule{
 		ID:       "PRC004",
 		Title:    "Server URL does not use TLS",
-		Severity: High,
+		Severity: report.High,
 		OWASP:    "API8:2023 Security Misconfiguration",
 	},
 	check: checkPRC004,
@@ -21,13 +23,13 @@ var prc004 = lintRule{
 
 // checkPRC004 reports http:// server URLs at every level a spec can declare
 // them: the whole spec, a path, an operation.
-func checkPRC004(doc *openapi3.T) []Finding {
-	var findings []Finding
-	report := func(server *openapi3.Server, operation string) {
+func checkPRC004(doc *openapi3.T) []report.Finding {
+	var findings []report.Finding
+	flag := func(server *openapi3.Server, operation string) {
 		if server == nil || !plaintext(server) {
 			return
 		}
-		findings = append(findings, Finding{
+		findings = append(findings, report.Finding{
 			Location:  locateField(server.Origin, "url"),
 			Operation: operation,
 			Element:   server,
@@ -36,19 +38,19 @@ func checkPRC004(doc *openapi3.T) []Finding {
 		})
 	}
 	for _, server := range doc.Servers {
-		report(server, "")
+		flag(server, "")
 	}
 	if doc.Paths != nil {
 		for _, item := range doc.Paths.Map() {
 			for _, server := range item.Servers {
-				report(server, "")
+				flag(server, "")
 			}
 		}
 	}
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		if op.Servers != nil {
 			for _, server := range *op.Servers {
-				report(server, method+" "+path)
+				flag(server, method+" "+path)
 			}
 		}
 	})

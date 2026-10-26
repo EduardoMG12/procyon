@@ -4,14 +4,16 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/EduardoMG12/procyon/internal/report"
+
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
 var prc006 = lintRule{
-	Rule: Rule{
+	Rule: report.Rule{
 		ID:       "PRC006",
 		Title:    "Personal data returned without authentication",
-		Severity: High,
+		Severity: report.High,
 		OWASP:    "API3:2023 Broken Object Property Level Authorization",
 	},
 	check: checkPRC006,
@@ -22,7 +24,7 @@ var prc006 = lintRule{
 // Marking it public says it is meant to be open, which makes exposing
 // personal data through it worse, not acceptable. Other methods are not
 // checked: a login or sign-up returns the caller's own data.
-func checkPRC006(doc *openapi3.T) []Finding {
+func checkPRC006(doc *openapi3.T) []report.Finding {
 	var found onePerPlace
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		if method != http.MethodGet || !reachableAnonymously(doc, path, op) {
@@ -33,7 +35,7 @@ func checkPRC006(doc *openapi3.T) []Finding {
 				return // emailVerified, emailSettings: about the data, not the data
 			}
 			loc := propertyLocation(prop)
-			found.add(Finding{
+			found.add(report.Finding{
 				Location:  loc,
 				Operation: method + " " + path,
 				Why: fmt.Sprintf("This operation needs no authentication and returns %q, personal data. "+

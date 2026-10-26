@@ -5,14 +5,16 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/report"
+
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
 var prc008 = lintRule{
-	Rule: Rule{
+	Rule: report.Rule{
 		ID:       "PRC008",
 		Title:    "Unbounded input or output",
-		Severity: Low,
+		Severity: report.Low,
 		OWASP:    "API4:2023 Unrestricted Resource Consumption",
 	},
 	check: checkPRC008,
@@ -36,11 +38,11 @@ var pagingParameters = []string{
 // maxItems, numbers that set how much work a request makes (a page size, a
 // number of repeats) without maximum, and GET operations returning a whole
 // list with no way to ask for a page.
-func checkPRC008(doc *openapi3.T) []Finding {
+func checkPRC008(doc *openapi3.T) []report.Finding {
 	var found onePerPlace
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-		add := func(loc Location, why, fix string) {
-			found.add(Finding{Location: loc, Operation: method + " " + path, Why: why, Fix: fix})
+		add := func(loc report.Location, why, fix string) {
+			found.add(report.Finding{Location: loc, Operation: method + " " + path, Why: why, Fix: fix})
 		}
 		if method == http.MethodGet && returnsList(op) && !paged(doc, path, op) {
 			add(locate(op.Origin),
@@ -55,7 +57,7 @@ func checkPRC008(doc *openapi3.T) []Finding {
 		if op.RequestBody == nil || op.RequestBody.Value == nil {
 			return
 		}
-		check := func(s *openapi3.Schema, loc Location) {
+		check := func(s *openapi3.Schema, loc report.Location) {
 			if why, fix := unbounded(s); why != "" {
 				add(loc, why, fix)
 			}

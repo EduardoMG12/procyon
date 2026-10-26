@@ -7,14 +7,16 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/report"
+
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
 var prc005 = lintRule{
-	Rule: Rule{
+	Rule: report.Rule{
 		ID:       "PRC005",
 		Title:    "Response returns a secret",
-		Severity: High,
+		Severity: report.High,
 		OWASP:    "API3:2023 Broken Object Property Level Authorization",
 	},
 	check: checkPRC005,
@@ -27,7 +29,7 @@ var prc005 = lintRule{
 //
 // A schema used by several operations is reported once, at the property,
 // for every operation that returns it (see onePerPlace).
-func checkPRC005(doc *openapi3.T) []Finding {
+func checkPRC005(doc *openapi3.T) []report.Finding {
 	var found onePerPlace
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		lists := [][][]string{secretWords}
@@ -39,7 +41,7 @@ func checkPRC005(doc *openapi3.T) []Finding {
 				return // hasPassword (a flag), secretRef (an object): about the secret, not the secret
 			}
 			loc := propertyLocation(prop)
-			found.add(Finding{
+			found.add(report.Finding{
 				Location:  loc,
 				Operation: method + " " + path,
 				Why: fmt.Sprintf("The response includes %q, which holds a secret. Anyone allowed to read this response gets it, "+
@@ -119,7 +121,7 @@ func modifierOnly(s *openapi3.Schema) bool {
 // propertyLocation points where a property is written. For a $ref property
 // that is the property itself, not the shared schema it refers to: two
 // properties referring to one schema are two findings, each in its place.
-func propertyLocation(prop *openapi3.SchemaRef) Location {
+func propertyLocation(prop *openapi3.SchemaRef) report.Location {
 	if prop.Ref != "" {
 		if loc := locate(prop.Origin); loc.Line > 0 {
 			return loc

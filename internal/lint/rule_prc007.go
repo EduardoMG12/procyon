@@ -5,14 +5,16 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/report"
+
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
 var prc007 = lintRule{
-	Rule: Rule{
+	Rule: report.Rule{
 		ID:       "PRC007",
 		Title:    "Object addressed by ID without authentication",
-		Severity: High,
+		Severity: report.High,
 		OWASP:    "API1:2023 Broken Object Level Authorization",
 	},
 	check: checkPRC007,
@@ -31,8 +33,8 @@ var identifierWords = []string{
 // an identifier in the path. Without authentication there is no "whose
 // object is this" check possible, so anyone can walk the identifiers and
 // read every object: the classic broken object level authorization.
-func checkPRC007(doc *openapi3.T) []Finding {
-	var findings []Finding
+func checkPRC007(doc *openapi3.T) []report.Finding {
+	var findings []report.Finding
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		if !reachableAnonymously(doc, path, op) {
 			return
@@ -41,7 +43,7 @@ func checkPRC007(doc *openapi3.T) []Finding {
 		if param == "" {
 			return
 		}
-		findings = append(findings, Finding{
+		findings = append(findings, report.Finding{
 			Location:  locate(op.Origin),
 			Operation: method + " " + path,
 			Why: fmt.Sprintf("This operation needs no authentication and picks an object by {%s}. "+
