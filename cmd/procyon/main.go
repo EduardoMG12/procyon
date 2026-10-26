@@ -2,18 +2,10 @@
 package main
 
 import (
-	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
-	"syscall"
-
-	"github.com/EduardoMG12/procyon/internal/lint"
-	"github.com/EduardoMG12/procyon/internal/report"
-	"github.com/EduardoMG12/procyon/internal/probe"
 )
 
 // Exit codes. Scripts tell "Procyon found problems" (1) apart from "Procyon
@@ -48,158 +40,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "procyon: unknown command %q\n\n%s", args[0], usage)
 		return exitUsage
 	}
-}
-
-// command is what differs between lint and test: their extra flags and
-// how they produce a report. Flags shared by both (--fail-on, --format,
-// --output, --ref-root), .procyon.yaml, formats and exit codes are handled
-// once, in runCommand.
-type command struct {
-	name  string
-	flags func(*flag.FlagSet) // registers the command's own flags, or nil
-	run   func(spec string, failOn report.Severity, refRoot string, cfg config) (report.Report, error)
-}
-
-var lintCommand = command{
-	name: "lint",
-	run: func(spec string, failOn report.Severity, refRoot string, _ config) (report.Report, error) {
-		return lint.Run(spec, lint.Options{FailOn: failOn, RefRoot: refRoot})
-	},
-}
-
-func testCommand() command {
-	var baseURL, composeFile, service, baseSpec string
-	var port int
-	return command{
-		name: "test",
-		flags: func(f *flag.FlagSet) {
-			f.StringVar(&baseURL, "base-url", "", "")
-			f.StringVar(&composeFile, "compose", "", "")
-			f.StringVar(&service, "service", "", "")
-			f.IntVar(&port, "port", 0, "")
-			f.StringVar(&baseSpec, "base-spec", "", "")
-		},
-		run: func(spec string, failOn report.Severity, refRoot string, cfg config) (rep report.Report, err error) {
-			switch {
-			case composeFile != "" && baseURL != "":
-				return report.Report{}, errors.New("--compose and --base-url: give one, not both")
-			case composeFile != "" && (service == "" || port == 0):
-				return report.Report{}, errors.New("--compose needs --service (the service that serves the API) and --port (its port in the container)")
-			case composeFile == "" && baseURL == "":
-				return report.Report{}, errors.New("--compose or --base-url is required: where the copy of your API under test runs")
-			}
-			// Ctrl-C cancels the run; the environment is still torn down.
-			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-			defer stop()
-			if composeFile != "" {
-				var down func() error
-				baseURL, down, err = probe.Up(ctx, probe.Compose{File: composeFile, Service: service, Port: port})
-				defer func() {
-					downErr := down()
-					switch {
-					case downErr == nil:
-					case err == nil:
-						err = fmt.Errorf("the tests ran, but the environment was left running: %w", downErr)
-					default: // both: the user must hear the stack may still be up
-						err = errors.Join(err, fmt.Errorf("and the environment may be left running: %w", downErr))
-					}
-				}()
-				if err != nil {
-					return report.Report{}, err
-				}
-			}
-			return probe.Run(ctx, spec, probe.Options{
-				BaseURL: baseURL, FailOn: failOn, RefRoot: refRoot,
-				TokenA: os.Getenv(probe.EnvTokenA), TokenB: os.Getenv(probe.EnvTokenB),
-				IDs:    cfg.Test.IDs,
-				LoginA: cfg.Test.Accounts.A.Login, LoginB: cfg.Test.Accounts.B.Login,
-				BaseSpec: baseSpec,
-				Skip:     cfg.Test.Skip,
-			})
-		},
-	}
-}
-
-func runCommand(cmd command, args []string, stdout, stderr io.Writer) int {
-	cfg, err := loadConfig()
-	if err != nil {
-		fmt.Fprintf(stderr, "procyon: %v\n", err)
-		return exitUsage
-	}
-
-	flags := flag.NewFlagSet(cmd.name, flag.ContinueOnError)
-	flags.SetOutput(io.Discard) // errors are printed below, once
-	failOn := flags.String("fail-on", cfg.FailOn, "")
-	defaultFormat := "terminal"
-	if cfg.Format != "" {
-		defaultFormat = cfg.Format
-	}
-	stdoutFormat := flags.String("format", defaultFormat, "")
-	refRoot := flags.String("ref-root", cfg.RefRoot, "")
-	var extra outputs
-	flags.Var(&extra, "output", "")
-	if cmd.flags != nil {
-		cmd.flags(flags)
-	}
-	specs, err := parseInterspersed(flags, args)
-	if err != nil {
-		fmt.Fprintf(stderr, "procyon %s: %v\n\n%s", cmd.name, err, usage)
-		return exitUsage
-	}
-	if len(specs) != 1 {
-		fmt.Fprintf(stderr, "procyon %s: expected exactly one spec file\n\n%s", cmd.name, usage)
-		return exitUsage
-	}
-	// --output flags replace the file's outputs instead of adding to them,
-	// like every other flag wins over the file.
-	if len(extra) == 0 {
-		extra = cfg.outputs
-	}
-
-	if formats[*stdoutFormat] == nil {
-		fmt.Fprintf(stderr, "procyon: --format: unknown format %q (use %s)\n", *stdoutFormat, formatNames())
-		return exitUsage
-	}
-
-	var threshold report.Severity
-	if *failOn != "" {
-		if threshold, err = report.ParseSeverity(*failOn); err != nil {
-			fmt.Fprintf(stderr, "procyon: --fail-on: %v\n", err)
-			return exitUsage
-		}
-	}
-
-	files, err := openOutputs(extra)
-	if err != nil {
-		fmt.Fprintf(stderr, "procyon: %v\n", err)
-		return exitUsage
-	}
-	defer closeAll(files)
-
-	rep, err := cmd.run(specs[0], threshold, *refRoot, cfg)
-	if err != nil {
-		fmt.Fprintf(stderr, "procyon: %v\n", err)
-		return exitUsage
-	}
-	color := *stdoutFormat == "terminal" && useColor(stdout)
-	if err := formats[*stdoutFormat](stdout, rep, color); err != nil {
-		fmt.Fprintf(stderr, "procyon: writing report: %v\n", err)
-		return exitUsage
-	}
-	for i, o := range extra {
-		err := formats[o.format](files[i], rep, false) // files never get colours
-		if err == nil {
-			err = files[i].Close()
-		}
-		if err != nil {
-			fmt.Fprintf(stderr, "procyon: --output %s=%s: %v\n", o.format, o.path, err)
-			return exitUsage
-		}
-	}
-	if rep.Failed {
-		return exitFail
-	}
-	return exitPass
 }
 
 // parseInterspersed parses flags wherever they appear, so both

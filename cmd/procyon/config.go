@@ -7,8 +7,8 @@ import (
 	"io/fs"
 	"os"
 
-	"github.com/EduardoMG12/procyon/internal/report"
 	"github.com/EduardoMG12/procyon/internal/probe"
+	"github.com/EduardoMG12/procyon/internal/report"
 	"github.com/goccy/go-yaml"
 	"github.com/goccy/go-yaml/token"
 )
