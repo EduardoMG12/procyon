@@ -1,9 +1,7 @@
 package lint
 
 import (
-	"cmp"
 	"slices"
-	"time"
 
 	"github.com/EduardoMG12/procyon/internal/report"
 )
@@ -75,45 +73,20 @@ func (s *Spec) Finish(findings []report.Finding, notes []report.Note, opts Optio
 			findings[i].Element = s.doc
 		}
 	}
-	rep := report.Report{FailOn: cmp.Or(opts.FailOn, report.High), Sources: s.files.lines, Findings: findings}
-	sortFindings(rep.Findings)
-	today := opts.Today
-	if today.IsZero() {
-		today = time.Now()
-	}
-	applyIgnores(&rep, ignoresOf(s.ignores, runtimeRules), today)
-	rep.Notes = slices.Concat(notes, rep.Notes)
-	rep.Failed = failed(rep)
+	rep := report.New(findings, notes, ignoresOf(s.ignores, runtimeRules), report.Options{FailOn: opts.FailOn, Today: opts.Today})
+	rep.Sources = s.files.lines
 	return rep
 }
 
 // ignoresOf keeps the ignores of the given rules, so a lint never calls an
 // ignore of a runtime rule unused, and a runtime test never calls an ignore
 // of a lint rule unused.
-func ignoresOf(ignores []*ignore, rules []report.Rule) []*ignore {
-	var kept []*ignore
+func ignoresOf(ignores []report.Ignore, rules []report.Rule) []report.Ignore {
+	var kept []report.Ignore
 	for _, ig := range ignores {
-		if slices.ContainsFunc(rules, func(r report.Rule) bool { return r.ID == ig.rule }) {
+		if slices.ContainsFunc(rules, func(r report.Rule) bool { return r.ID == ig.Rule }) {
 			kept = append(kept, ig)
 		}
 	}
 	return kept
-}
-
-// sortFindings orders findings by where they point, so the same input
-// always gives the same report.
-func sortFindings(findings []report.Finding) {
-	slices.SortStableFunc(findings, func(a, b report.Finding) int {
-		return cmp.Or(
-			cmp.Compare(a.Location.File, b.Location.File),
-			cmp.Compare(a.Location.Line, b.Location.Line),
-			cmp.Compare(a.Location.Column, b.Location.Column),
-			cmp.Compare(a.Rule.ID, b.Rule.ID),
-		)
-	})
-}
-
-// failed reports whether a finding is at or above the fail threshold.
-func failed(rep report.Report) bool {
-	return slices.ContainsFunc(rep.Findings, func(f report.Finding) bool { return f.Rule.Severity >= rep.FailOn })
 }

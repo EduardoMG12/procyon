@@ -41,10 +41,6 @@ func Run(path string, opts Options) (report.Report, error) {
 	if err != nil {
 		return report.Report{}, err
 	}
-	rep := report.Report{FailOn: opts.FailOn, Sources: files.lines}
-	if rep.FailOn == 0 {
-		rep.FailOn = report.High
-	}
 	asGiven := files.asGiven
 	ignores, err := parseIgnores(doc, asGiven, files.back != nil)
 	if err != nil {
@@ -55,6 +51,7 @@ func Run(path string, opts Options) (report.Report, error) {
 	// operation or reason stay apart, so an ignore on one operation never
 	// hides another's.
 	seen := map[string]bool{}
+	var findings []report.Finding
 	for _, rule := range rules {
 		for _, f := range rule.check(doc) {
 			f.Rule = rule.Rule
@@ -64,17 +61,11 @@ func Run(path string, opts Options) (report.Report, error) {
 				continue
 			}
 			seen[key] = true
-			rep.Findings = append(rep.Findings, f)
+			findings = append(findings, f)
 		}
 	}
-	// Same spec, same report, same order: sort by where findings point.
-	sortFindings(rep.Findings)
-	today := opts.Today
-	if today.IsZero() {
-		today = time.Now()
-	}
-	applyIgnores(&rep, ignoresOf(ignores, Rules()), today)
-	rep.Failed = failed(rep)
+	rep := report.New(findings, nil, ignoresOf(ignores, Rules()), report.Options{FailOn: opts.FailOn, Today: opts.Today})
+	rep.Sources = files.lines
 	return rep, nil
 }
 

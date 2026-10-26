@@ -2,10 +2,11 @@ package lint
 
 import (
 	"encoding/json"
-	"github.com/EduardoMG12/procyon/internal/report"
 	"maps"
 	"slices"
 	"strings"
+
+	"github.com/EduardoMG12/procyon/internal/report"
 
 	"github.com/getkin/kin-openapi/openapi3"
 )
@@ -16,7 +17,7 @@ import (
 type Spec struct {
 	doc     *openapi3.T
 	files   *specFiles
-	ignores []*ignore
+	ignores []report.Ignore
 }
 
 // Operation is one operation of a spec.
