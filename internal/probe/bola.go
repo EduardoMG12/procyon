@@ -77,8 +77,8 @@ func (s *session) withoutBsOwn(ctx context.Context, op loader.Operation, asked s
 	if err != nil || !success(mine) {
 		return shared, err
 	}
-	inMine := valuesIn(body)
-	return slices.DeleteFunc(shared, func(v string) bool { return slices.Contains(inMine, v) }), nil
+	inMine := setOf(valuesIn(body))
+	return slices.DeleteFunc(shared, func(v string) bool { return inMine[v] }), nil
 }
 
 // writeAsB is reached when A, reading the object before and after B's
@@ -194,11 +194,13 @@ func bolaFinding(op loader.Operation, exchange report.Exchange, evidence []repor
 // out: the path's own values (an API may echo the ID it was asked for), the
 // words true and false, and anything shorter than minTelling ("ok", "1").
 func sharedUnseen(toB, toA []byte, ofB *harvest, pathValues []string) []string {
-	inA := valuesIn(toA)
-	var shared []string
+	inA := setOf(valuesIn(toA))
+	added := map[string]bool{}
+	var shared []string // in the order B's answer shows them
 	for _, value := range valuesIn(toB) {
 		telling := len(value) >= minTelling && value != "true" && value != "false" && !slices.Contains(pathValues, value)
-		if telling && slices.Contains(inA, value) && !ofB.saw(value) && !slices.Contains(shared, value) {
+		if telling && inA[value] && !ofB.saw(value) && !added[value] {
+			added[value] = true
 			shared = append(shared, value)
 		}
 	}
