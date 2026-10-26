@@ -104,11 +104,17 @@ func (s *session) writeAsB(ctx context.Context, op loader.Operation, f filled) (
 		return s.unreadableWrite(ctx, op, f)
 	}
 
-	if note, err := s.readBefore(ctx, op, reader, f.path); note != "" || err != nil {
+	before, note, err := s.readBefore(ctx, op, reader, f.path)
+	if note != "" || err != nil {
 		return cannotTell(note), err
 	}
 	exchange, _, err := s.sendFull(ctx, op, f.path, s.b)
 	if err == nil && !success(exchange) && !bytes.Equal(op.Body, original) {
+		// The example as is can only be seen if A's object does not hold
+		// it already (A may have made the object from it).
+		if hasAllValuesOf(before, original) {
+			return cannotTell("not tested as B: the server refused B's changed body, and A's object already holds the request example's values"), nil
+		}
 		op.Body = original
 		exchange, _, err = s.sendFull(ctx, op, f.path, s.b)
 	}
@@ -143,19 +149,19 @@ func (s *session) writeAsB(ctx context.Context, op loader.Operation, f filled) (
 // readBefore is A's read of its object before B's write or delete. Its note
 // says why the write could not be judged: A cannot read it, the read does
 // not show what the write sets, or the object already holds it.
-func (s *session) readBefore(ctx context.Context, op, reader loader.Operation, path string) (note string, err error) {
+func (s *session) readBefore(ctx context.Context, op, reader loader.Operation, path string) (body []byte, note string, err error) {
 	exchange, body, err := s.sendFull(ctx, reader, path, s.a)
 	switch {
 	case err != nil || !success(exchange):
-		return "not tested as B: A could not read the object first", err
+		return nil, "not tested as B: A could not read the object first", err
 	case op.Method == http.MethodDelete:
-		return "", nil
+		return body, "", nil
 	case !hasAnyFieldOf(body, op.Body):
-		return "not tested as B: the GET on this path does not show the fields this write sets, so a change could not be seen", nil
+		return nil, "not tested as B: the GET on this path does not show the fields this write sets, so a change could not be seen", nil
 	case hasAllValuesOf(body, op.Body):
-		return "not tested as B: A's object already holds the request example's values, so a change could not be seen", nil
+		return nil, "not tested as B: A's object already holds the request example's values, so a change could not be seen", nil
 	}
-	return "", nil
+	return body, "", nil
 }
 
 // unreadableWrite judges a write with no GET on the same path: only B's

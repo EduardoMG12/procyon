@@ -26,7 +26,8 @@ type Options struct {
 	RefRoot string
 	// Timeout is how long one request may take. Zero means defaultTimeout.
 	Timeout time.Duration
-	// Budget is the most requests a run sends. Zero means defaultBudget.
+	// Budget is the most requests a run sends. Zero means budgetPerOperation
+	// for each operation in the spec, and at least minBudget.
 	Budget int
 	// TokenA and TokenB are the test accounts' tokens (PROCYON_USER_A_TOKEN,
 	// PROCYON_USER_B_TOKEN). B must not be allowed to touch A's objects.
@@ -46,7 +47,11 @@ type Options struct {
 
 const (
 	defaultTimeout = 10 * time.Second
-	defaultBudget  = 1000
+	// A run sends each operation a handful of requests (anonymous, A, B,
+	// A's reads around B's write, malformed bodies); the budget only stops
+	// a runaway, never a whole spec.
+	minBudget          = 1000
+	budgetPerOperation = 30
 
 	// maxBody is how much of a body evidence keeps; maxResponse is how much
 	// of a response Procyon reads, to find IDs in.
@@ -86,7 +91,8 @@ func Run(ctx context.Context, specPath string, opts Options) (report.Report, err
 		return report.Report{}, err
 	}
 	timeout := cmp.Or(opts.Timeout, defaultTimeout)
-	r := &runner{client: newClient(timeout, cmp.Or(opts.Budget, defaultBudget)), target: target}
+	budget := cmp.Or(opts.Budget, max(minBudget, budgetPerOperation*len(spec.Operations())))
+	r := &runner{client: newClient(timeout, budget), target: target}
 	res := &results{root: report.Location{File: specPath, Line: 1, Column: 1}}
 
 	// TLS first: a server that speaks only an old protocol is reported
