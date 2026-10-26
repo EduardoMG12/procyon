@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -341,17 +340,17 @@ func (s *session) asB(ctx context.Context, op lint.Operation, f filled) (lint.Ce
 			"declare one of A's under test.ids in .procyon.yaml")
 		return skipped, nil
 	}
-	finding, note, cell, err := s.otherAccount(ctx, op, f, s.ofA, s.ofB, s.readers, s.a, s.b)
+	v, err := s.otherAccount(ctx, op, f)
 	if err != nil {
 		return lint.Cell{}, err
 	}
-	if finding != nil {
-		s.res.findings = append(s.res.findings, *finding)
+	if v.finding != nil {
+		s.res.findings = append(s.res.findings, *v.finding)
 	}
-	if note != "" {
-		s.res.note(op.Location, op.Key()+": "+note)
+	if v.note != "" {
+		s.res.note(op.Location, op.Key()+": "+v.note)
 	}
-	return cell, nil
+	return v.cell, nil
 }
 
 // queueMalformed keeps a non-public write for the malformed pass, or notes
@@ -443,161 +442,6 @@ func anonymousAccess(op lint.Operation, exchange lint.Exchange) lint.Finding {
 	}
 }
 
-// otherAccount calls op as B with A's object in the path and returns a
-// PRC102 finding if B reached it, or a note when it cannot tell.
-//
-// A read is reached when B's 2xx answer holds values A's answer for the
-// same path also held, and that B's own top-level reads never showed:
-// A's data, not something every user sees. A write or delete is reached
-// when A, reading the object before and after, sees it changed or gone;
-// without a GET on the same path, a write counts when its 2xx answer holds
-// A's path values, and a delete cannot be told.
-func (r *runner) otherAccount(ctx context.Context, op lint.Operation, f filled,
-	ofA, ofB *discovery, readers map[string]lint.Operation, a, b caller) (*lint.Finding, string, lint.Cell, error) {
-	skipped := lint.Cell{Outcome: lint.Skipped}
-	path, values := f.path, f.values
-	if op.Method == http.MethodGet && ofA.bodies[path] == nil {
-		// Discovery read another object (A's own was not known yet): A
-		// reads this one now, to compare with what B gets.
-		exchange, body, err := r.sendFull(ctx, op, path, a)
-		if err != nil || !success(exchange) {
-			return nil, "not tested as B: A's own read of it failed", skipped, err
-		}
-		ofA.bodies[path] = body
-	}
-	if op.Method != http.MethodGet && op.NeedsBody && op.Body == nil {
-		return nil, "not tested as B: it needs a request body and the spec gives no example", skipped, nil
-	}
-	reader, canRead := readers[op.Path]
-	if op.Method == http.MethodDelete && !canRead {
-		return nil, "not tested as B: without a GET on the same path, Procyon cannot tell whether a delete worked", skipped, nil
-	}
-
-	var before []byte
-	if op.Method != http.MethodGet && canRead {
-		exchange, body, err := r.sendFull(ctx, reader, path, a)
-		if err != nil || !success(exchange) {
-			return nil, "not tested as B: A could not read the object first", skipped, err
-		}
-		before = body
-		if op.Method != http.MethodDelete && !shown(before, op.Body) {
-			return nil, "not tested as B: the GET on this path does not show the fields this write sets, so a change could not be seen", skipped, nil
-		}
-		if op.Method != http.MethodDelete && holds(before, op.Body) {
-			return nil, "not tested as B: A's object already holds the request example's values, so a change could not be seen", skipped, nil
-		}
-	}
-	exchange, body, err := r.sendFull(ctx, op, path, b)
-	if err != nil || !success(exchange) {
-		return nil, "", cellOf(exchange, false), err
-	}
-	evidence := []lint.Exchange{exchange}
-	var reached bool
-	switch {
-	case op.Method == http.MethodGet:
-		shared := sharedUnseen(body, ofA.bodies[path], ofB.harvest, values)
-		// Values B's own object on the same path also holds ("active", a
-		// type, a year) are not A's data.
-		if own, err := ofB.fill(op.Path); len(shared) > 0 && err == nil && own.own && own.path != path {
-			mine, mineBody, err := r.sendFull(ctx, op, own.path, b)
-			if err != nil {
-				return nil, "", lint.Cell{}, err
-			}
-			if success(mine) {
-				var inMine []string
-				if v, ok := decode(mineBody); ok {
-					walk(v, func(value string) { inMine = append(inMine, value) })
-				}
-				shared = slices.DeleteFunc(shared, func(v string) bool { return slices.Contains(inMine, v) })
-			}
-		}
-		reached = len(shared) > 0
-	case before == nil && !shows(body, unseen(values, ofB.harvest)):
-		// A 2xx to a write Procyon cannot check is not a pass.
-		return nil, fmt.Sprintf("not confirmed: B got %d, and without a GET on the same path Procyon cannot tell whether "+
-			"A's object changed", exchange.Status), lint.Cell{Outcome: lint.Skipped, Status: exchange.Status}, nil
-	default:
-		reached = before == nil // a write's answer that holds A's values
-	}
-	if before != nil {
-		after, afterBody, err := r.sendFull(ctx, reader, path, a)
-		if err != nil {
-			return nil, "", lint.Cell{}, err
-		}
-		evidence = append(evidence, after)
-		switch {
-		case op.Method == http.MethodDelete && (after.Status == http.StatusNotFound || after.Status == http.StatusGone):
-			reached = true // gone
-		case op.Method == http.MethodDelete && !success(after):
-			// A 429 or a 503 says nothing about the object.
-			return nil, fmt.Sprintf("not confirmed: after B's delete, A's read got %d", after.Status), skipped, nil
-		case op.Method == http.MethodDelete:
-			reached = false // still there
-		default:
-			// Only the fields B sent count: a timestamp or a view counter
-			// changes on every read.
-			reached = success(after) && holds(afterBody, op.Body)
-		}
-	}
-	if !reached {
-		return nil, "", cellOf(exchange, false), nil
-	}
-	what := map[string]string{http.MethodGet: "read", http.MethodDelete: "delete"}[op.Method]
-	if what == "" {
-		what = "change"
-	}
-	return &lint.Finding{
-		Rule:      lint.RuntimeRule("PRC102"),
-		Location:  op.Location,
-		Operation: op.Key(),
-		Why: fmt.Sprintf("Test account B called this operation on an object of test account A and got %d: "+
-			"any user can %s other users' objects by changing the ID in the path.", exchange.Status, what),
-		Fix: "On the server, check that the object belongs to the caller (or that the caller may " + what +
-			" it) before acting, and answer 404 otherwise.",
-		Evidence: evidence,
-	}, "", cellOf(exchange, true), nil
-}
-
-// shown reports whether a JSON object body has at least one top-level field
-// of the JSON object example: a read that can show what a write changes.
-func shown(body, example []byte) bool {
-	got, ok1 := decode(body)
-	want, ok2 := decode(example)
-	gotFields, ok3 := got.(map[string]any)
-	wantFields, ok4 := want.(map[string]any)
-	if !ok1 || !ok2 || !ok3 || !ok4 {
-		return false
-	}
-	for name := range wantFields {
-		if _, ok := gotFields[name]; ok {
-			return true
-		}
-	}
-	return false
-}
-
-// sharedUnseen lists the field values B's answer and A's answer both hold
-// that B's own reads never showed: A's data. Values that prove nothing are
-// left out: the path's own values (an API may echo the ID it was asked
-// for), booleans, short numbers and short words ("ok", "1", a status any
-// object can have).
-func sharedUnseen(toB, toA []byte, ofB *harvest, pathValues []string) []string {
-	var inA []string
-	if v, ok := decode(toA); ok {
-		walk(v, func(value string) { inA = append(inA, value) })
-	}
-	var shared []string
-	if v, ok := decode(toB); ok {
-		walk(v, func(value string) {
-			telling := len(value) >= minTelling && value != "true" && value != "false" && !slices.Contains(pathValues, value)
-			if telling && slices.Contains(inA, value) && !ofB.saw(value) && !slices.Contains(shared, value) {
-				shared = append(shared, value)
-			}
-		})
-	}
-	return shared
-}
-
 // identityMarks lists the values that mark one account's own objects, by the
 // path they came from: for each read both accounts made that answers one
 // object (GET /me, not a list), the fields where the account's answer
@@ -630,38 +474,8 @@ func identityMarks(mine, theirs *discovery) map[string]string {
 	return marks
 }
 
-// holds reports whether a JSON object body has every top-level field of
-// the JSON object example with the same value. An example that is not an
-// object proves nothing either way.
-func holds(body, example []byte) bool {
-	got, ok1 := decode(body)
-	want, ok2 := decode(example)
-	gotFields, ok3 := got.(map[string]any)
-	wantFields, ok4 := want.(map[string]any)
-	if !ok1 || !ok2 || !ok3 || !ok4 || len(wantFields) == 0 {
-		return false
-	}
-	for name, value := range wantFields {
-		if !reflect.DeepEqual(gotFields[name], value) {
-			return false
-		}
-	}
-	return true
-}
-
 func success(exchange lint.Exchange) bool {
 	return exchange.Status >= 200 && exchange.Status < 300
-}
-
-// unseen keeps the values B's own responses never showed.
-func unseen(values []string, ofB *harvest) []string {
-	var kept []string
-	for _, v := range values {
-		if !ofB.saw(v) {
-			kept = append(kept, v)
-		}
-	}
-	return kept
 }
 
 // inTestOrder orders operations as runtime tests run them: reads, then

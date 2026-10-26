@@ -21,16 +21,8 @@ const vulnapiSpec = "../vulnapi/openapi.yaml"
 // finding as "rule operation".
 func runAgainst(t *testing.T, fixed bool) (lint.Report, []string) {
 	t.Helper()
-	srv := httptest.NewServer(vulnapi.New(fixed))
-	defer srv.Close()
-	report, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got []string
-	for _, f := range report.Findings {
-		got = append(got, f.Rule.ID+" "+f.Operation)
-	}
+	report := runOn(t, vulnapiSpec, vulnapi.New(fixed), Options{})
+	got := findingKeys(report)
 	return report, got
 }
 
@@ -110,29 +102,24 @@ func TestPRC102NeedsAsObjectInTheResponse(t *testing.T) {
 		"empty list":   `[]`,
 		"not JSON":     `ok`,
 	} {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			token := r.Header.Get("Authorization")
-			switch {
-			case token == "":
-				w.WriteHeader(http.StatusUnauthorized)
-			case r.URL.Path == "/notes" && token == "Bearer "+vulnapi.TokenA:
-				w.Write([]byte(`[{"id": "1", "owner": "alice"}]`))
-			case r.URL.Path == "/notes":
-				w.Write([]byte(`[{"id": "3", "owner": "bob"}]`))
-			case token == "Bearer "+vulnapi.TokenB:
-				w.Write([]byte(answer))
+		t.Run(name, func(t *testing.T) {
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				token := r.Header.Get("Authorization")
+				switch {
+				case token == "":
+					w.WriteHeader(http.StatusUnauthorized)
+				case r.URL.Path == "/notes" && token == "Bearer "+vulnapi.TokenA:
+					w.Write([]byte(`[{"id": "1", "owner": "alice"}]`))
+				case r.URL.Path == "/notes":
+					w.Write([]byte(`[{"id": "3", "owner": "bob"}]`))
+				case token == "Bearer "+vulnapi.TokenB:
+					w.Write([]byte(answer))
+				}
+			})
+			for _, f := range findingsOf(runOn(t, vulnapiSpec, handler, Options{}), "PRC102") {
+				t.Errorf("PRC102 on %s, want none", f.Operation)
 			}
-		}))
-		report, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB})
-		srv.Close()
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, f := range report.Findings {
-			if f.Rule.ID == "PRC102" {
-				t.Errorf("%s: PRC102 on %s, want none", name, f.Operation)
-			}
-		}
+		})
 	}
 }
 
@@ -140,7 +127,7 @@ func TestPRC102NeedsAsObjectInTheResponse(t *testing.T) {
 // A reads it before and after.
 func TestPRC102WritesAreConfirmedByA(t *testing.T) {
 	var sentByB []string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("Authorization")
 		if r.Method != "GET" && token == "Bearer "+vulnapi.TokenB {
 			sentByB = append(sentByB, r.Method+" "+r.URL.Path)
@@ -161,16 +148,10 @@ func TestPRC102WritesAreConfirmedByA(t *testing.T) {
 		default: // B's PUT and DELETE say yes and do nothing
 			w.WriteHeader(http.StatusOK)
 		}
-	}))
-	defer srv.Close()
-	report, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, f := range report.Findings {
-		if f.Rule.ID == "PRC102" {
-			t.Errorf("PRC102 on %s, want none: A's note never changed", f.Operation)
-		}
+	})
+	report := runOn(t, vulnapiSpec, handler, Options{})
+	for _, f := range findingsOf(report, "PRC102") {
+		t.Errorf("PRC102 on %s, want none: A's note never changed", f.Operation)
 	}
 	if want := []string{"PUT /notes/1", "DELETE /notes/1"}; !slices.Equal(sentByB, want) {
 		t.Errorf("B sent %q, want %q", sentByB, want)
@@ -181,7 +162,7 @@ func TestPRC102WritesAreConfirmedByA(t *testing.T) {
 // server error) is not proof the object is gone.
 func TestPRC102DeleteNeedsA404(t *testing.T) {
 	deleted := false
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("Authorization")
 		switch {
 		case token == "":
@@ -198,12 +179,8 @@ func TestPRC102DeleteNeedsA404(t *testing.T) {
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
-	}))
-	defer srv.Close()
-	report, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB})
-	if err != nil {
-		t.Fatal(err)
-	}
+	})
+	report := runOn(t, vulnapiSpec, handler, Options{})
 	for _, f := range report.Findings {
 		if f.Operation == "DELETE /notes/{id}" {
 			t.Errorf("PRC102 on DELETE after a 429, want a note")
@@ -262,13 +239,7 @@ func TestRunFillsTheAuthorizationMatrix(t *testing.T) {
 // object holding the example; B's checks run first, so PRC102 is still
 // found (the malformed pass runs after every write's B check).
 func TestMalformedWritesNeverHidePRC102(t *testing.T) {
-	srv := httptest.NewServer(vulnapi.New(false))
-	defer srv.Close()
-	report, err := Run(context.Background(), "../../testdata/specs/runtime-notes-title-only.yaml",
-		Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB})
-	if err != nil {
-		t.Fatal(err)
-	}
+	report := runOn(t, "../../testdata/specs/runtime-notes-title-only.yaml", vulnapi.New(false), Options{})
 	if !slices.ContainsFunc(report.Findings, func(f lint.Finding) bool { return f.Rule.ID == "PRC102" && f.Operation == "PUT /notes/{id}" }) {
 		t.Errorf("findings %v, want PRC102 on PUT /notes/{id}", report.Findings)
 	}
@@ -299,17 +270,8 @@ func TestRunOverHTTPS(t *testing.T) {
 }
 
 func TestRunWithABaseSpecTestsOnlyChangedOperations(t *testing.T) {
-	srv := httptest.NewServer(vulnapi.New(false))
-	defer srv.Close()
-	report, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB,
-		BaseSpec: "../../testdata/specs/runtime-notes-base.yaml"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got []string
-	for _, f := range report.Findings {
-		got = append(got, f.Rule.ID+" "+f.Operation)
-	}
+	report := runOn(t, vulnapiSpec, vulnapi.New(false), Options{BaseSpec: "../../testdata/specs/runtime-notes-base.yaml"})
+	got := findingKeys(report)
 	// GET /notes (PRC101), GET and DELETE /notes/{id} did not change.
 	want := []string{"PRC103 POST /notes", "PRC104 POST /notes", "PRC102 PUT /notes/{id}", "PRC103 PUT /notes/{id}", "PRC104 PUT /notes/{id}"}
 	if !slices.Equal(got, want) {
@@ -332,8 +294,8 @@ func TestRunWithABaseSpecTestsOnlyChangedOperations(t *testing.T) {
 // server is PRC103 and the run goes on; test.skip is never called.
 func TestLessonsFromVAmPI(t *testing.T) {
 	reset := false
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user := map[string]string{"Bearer " + vulnapi.TokenA: "alice", "Bearer " + vulnapi.TokenB: "bob"}[r.Header.Get("Authorization")]
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := userOf(r)
 		switch {
 		case r.URL.Path == "/reset":
 			reset = true
@@ -366,19 +328,10 @@ func TestLessonsFromVAmPI(t *testing.T) {
 			}
 			w.WriteHeader(http.StatusCreated)
 		}
-	}))
-	defer srv.Close()
-	report, err := Run(context.Background(), "../../testdata/specs/runtime-vampi-like.yaml", Options{
-		BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB,
-		Timeout: 300 * time.Millisecond, Skip: []string{"GET /reset"},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got []string
-	for _, f := range report.Findings {
-		got = append(got, f.Rule.ID+" "+f.Operation)
-	}
+	report := runOn(t, "../../testdata/specs/runtime-vampi-like.yaml", handler,
+		Options{Timeout: 300 * time.Millisecond, Skip: []string{"GET /reset"}})
+	got := findingKeys(report)
 	if want := []string{"PRC102 GET /books/{title}", "PRC103 POST /comments"}; !slices.Equal(got, want) {
 		t.Errorf("findings %q, want %q", got, want)
 	}
@@ -402,8 +355,8 @@ func TestNoPRC102OnObjectsEveryoneMayRead(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			views := 0
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				user := map[string]string{"Bearer " + vulnapi.TokenA: "alice", "Bearer " + vulnapi.TokenB: "bob"}[r.Header.Get("Authorization")]
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				user := userOf(r)
 				id := strings.TrimPrefix(r.URL.Path, "/notes/")
 				switch {
 				case r.URL.Path == "/health":
@@ -428,16 +381,10 @@ func TestNoPRC102OnObjectsEveryoneMayRead(t *testing.T) {
 				default: // only the owner may change or delete
 					w.WriteHeader(http.StatusNotFound)
 				}
-			}))
-			defer srv.Close()
-			report, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB})
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, f := range report.Findings {
-				if f.Rule.ID == "PRC102" {
-					t.Errorf("PRC102 on %s: %+v", f.Operation, f.Evidence)
-				}
+			})
+			report := runOn(t, vulnapiSpec, handler, Options{})
+			for _, f := range findingsOf(report, "PRC102") {
+				t.Errorf("PRC102 on %s: %+v", f.Operation, f.Evidence)
 			}
 			// A's note was found by A's name in GET /me, not by order: B's
 			// test ran on note 1.
@@ -453,13 +400,7 @@ func TestNoPRC102OnObjectsEveryoneMayRead(t *testing.T) {
 // A write that needs a body the spec gives no example for is never dropped
 // silently: a note says why it was not tested.
 func TestWriteWithoutAnExampleGetsANote(t *testing.T) {
-	srv := httptest.NewServer(vulnapi.New(true))
-	defer srv.Close()
-	report, err := Run(context.Background(), "../../testdata/specs/runtime-notes-no-example.yaml",
-		Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB})
-	if err != nil {
-		t.Fatal(err)
-	}
+	report := runOn(t, "../../testdata/specs/runtime-notes-no-example.yaml", vulnapi.New(true), Options{})
 	for _, want := range []string{
 		"POST /notes: malformed input not tested: it needs a request body",
 		"PUT /notes/{id}: not tested as B: it needs a request body",
