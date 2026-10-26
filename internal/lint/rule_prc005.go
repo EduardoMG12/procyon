@@ -10,12 +10,14 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-var prc005 = Rule{
-	ID:       "PRC005",
-	Title:    "Response returns a secret",
-	Severity: High,
-	OWASP:    "API3:2023 Broken Object Property Level Authorization",
-	check:    checkPRC005,
+var prc005 = lintRule{
+	Rule: Rule{
+		ID:       "PRC005",
+		Title:    "Response returns a secret",
+		Severity: High,
+		OWASP:    "API3:2023 Broken Object Property Level Authorization",
+	},
+	check: checkPRC005,
 }
 
 // checkPRC005 reports response fields holding a secret. Passwords, secrets

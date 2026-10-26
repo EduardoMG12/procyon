@@ -8,12 +8,14 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-var prc009 = Rule{
-	ID:       "PRC009",
-	Title:    "Client can write a privileged field",
-	Severity: Medium,
-	OWASP:    "API3:2023 Broken Object Property Level Authorization",
-	check:    checkPRC009,
+var prc009 = lintRule{
+	Rule: Rule{
+		ID:       "PRC009",
+		Title:    "Client can write a privileged field",
+		Severity: Medium,
+		OWASP:    "API3:2023 Broken Object Property Level Authorization",
+	},
+	check: checkPRC009,
 }
 
 // checkPRC009 reports request body fields that grant privileges (role,

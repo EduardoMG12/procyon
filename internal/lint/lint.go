@@ -55,7 +55,7 @@ func Run(path string, opts Options) (Report, error) {
 	seen := map[string]bool{}
 	for _, rule := range rules {
 		for _, f := range rule.check(doc) {
-			f.Rule = rule
+			f.Rule = rule.Rule
 			f.Location = asGiven(f.Location)
 			key := fmt.Sprintf("%s %s:%d:%d %s %s", rule.ID, f.Location.File, f.Location.Line, f.Location.Column, f.Operation, f.Why)
 			if seen[key] {
@@ -71,7 +71,7 @@ func Run(path string, opts Options) (Report, error) {
 	if today.IsZero() {
 		today = time.Now()
 	}
-	applyIgnores(&report, ignoresOf(ignores, rules), today)
+	applyIgnores(&report, ignoresOf(ignores, Rules()), today)
 	report.Failed = failed(report)
 	return report, nil
 }

@@ -1,41 +1,38 @@
 package lint
 
 import (
-	"slices"
 	"sort"
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-// Rule is one security check.
-type Rule struct {
-	ID       string
-	Title    string
-	Severity Severity
-	OWASP    string // OWASP API Security Top 10 (2023) category
+// lintRule is one lint rule: what reports show about it, and its check.
+type lintRule struct {
+	Rule
 	// check returns the rule's findings; the engine fills in Finding.Rule.
 	check func(doc *openapi3.T) []Finding
 }
 
-// DocsURL is the page that explains the rule.
-func (r Rule) DocsURL() string {
-	return "https://github.com/EduardoMG12/procyon/blob/main/docs/rules/" + r.ID + ".md"
-}
-
-// Rules returns every rule Procyon runs, in ID order.
+// Rules returns every lint rule, in ID order.
 func Rules() []Rule {
-	return slices.Clone(rules)
+	out := make([]Rule, len(rules))
+	for i, r := range rules {
+		out[i] = r.Rule
+	}
+	return out
 }
 
-// rules is every rule Procyon runs, in ID order.
-var rules = []Rule{prc001, prc002, prc003, prc004, prc005, prc006, prc007, prc008, prc009, prc010, prc011}
+// rules is every lint rule, in ID order.
+var rules = []lintRule{prc001, prc002, prc003, prc004, prc005, prc006, prc007, prc008, prc009, prc010, prc011}
 
-var prc001 = Rule{
-	ID:       "PRC001",
-	Title:    "Operation has no authentication",
-	Severity: High,
-	OWASP:    "API2:2023 Broken Authentication",
+var prc001 = lintRule{
+	Rule: Rule{
+		ID:       "PRC001",
+		Title:    "Operation has no authentication",
+		Severity: High,
+		OWASP:    "API2:2023 Broken Authentication",
+	},
 	check: func(doc *openapi3.T) []Finding {
 		var findings []Finding
 		forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
@@ -175,11 +172,11 @@ func (p *onePerPlace) add(f Finding) {
 		// Operations are visited one after another, so a repeat (the same
 		// schema under two media types) is always the last one added.
 		last := g.Operation
-		if n := len(g.also); n > 0 {
-			last = g.also[n-1]
+		if n := len(g.Also); n > 0 {
+			last = g.Also[n-1]
 		}
 		if last != f.Operation {
-			g.also = append(g.also, f.Operation)
+			g.Also = append(g.Also, f.Operation)
 		}
 		return
 	}

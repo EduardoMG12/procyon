@@ -8,12 +8,14 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-var prc002 = Rule{
-	ID:       "PRC002",
-	Title:    "Security requirement names an undefined scheme",
-	Severity: High,
-	OWASP:    "API2:2023 Broken Authentication",
-	check:    checkPRC002,
+var prc002 = lintRule{
+	Rule: Rule{
+		ID:       "PRC002",
+		Title:    "Security requirement names an undefined scheme",
+		Severity: High,
+		OWASP:    "API2:2023 Broken Authentication",
+	},
+	check: checkPRC002,
 }
 
 // checkPRC002 reports requirements that name a scheme components does not
@@ -27,7 +29,7 @@ func checkPRC002(doc *openapi3.T) []Finding {
 			findings = append(findings, Finding{
 				Location:  locateField(origin, "security"),
 				Operation: operation,
-				about:     about,
+				Element:   about,
 				Why: fmt.Sprintf("The requirement names the scheme %q, which the spec never defines, "+
 					"so the protection it documents does not exist: clients and gateways built from the spec cannot authenticate, "+
 					"and nothing says how the operation is really protected.", name),

@@ -8,12 +8,14 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-var prc008 = Rule{
-	ID:       "PRC008",
-	Title:    "Unbounded input or output",
-	Severity: Low,
-	OWASP:    "API4:2023 Unrestricted Resource Consumption",
-	check:    checkPRC008,
+var prc008 = lintRule{
+	Rule: Rule{
+		ID:       "PRC008",
+		Title:    "Unbounded input or output",
+		Severity: Low,
+		OWASP:    "API4:2023 Unrestricted Resource Consumption",
+	},
+	check: checkPRC008,
 }
 
 // boundedFormats have a length fixed by their format, so a missing

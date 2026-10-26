@@ -6,12 +6,14 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-var prc003 = Rule{
-	ID:       "PRC003",
-	Title:    "Weak authentication scheme",
-	Severity: Medium,
-	OWASP:    "API2:2023 Broken Authentication",
-	check:    checkPRC003,
+var prc003 = lintRule{
+	Rule: Rule{
+		ID:       "PRC003",
+		Title:    "Weak authentication scheme",
+		Severity: Medium,
+		OWASP:    "API2:2023 Broken Authentication",
+	},
+	check: checkPRC003,
 }
 
 // checkPRC003 reports API keys sent in the query string and HTTP Basic.
@@ -29,7 +31,7 @@ func checkPRC003(doc *openapi3.T) []Finding {
 		default:
 			return
 		}
-		findings = append(findings, Finding{Location: locate(scheme.Origin), Why: why, Fix: fix, about: scheme})
+		findings = append(findings, Finding{Location: locate(scheme.Origin), Why: why, Fix: fix, Element: scheme})
 	})
 	return findings
 }
