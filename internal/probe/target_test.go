@@ -188,7 +188,7 @@ func TestRunNotesRedirects(t *testing.T) {
 	})
 	rep := runOn(t, vulnapiSpec, handler, Options{})
 	if !slices.ContainsFunc(rep.Notes, func(n report.Note) bool {
-		return strings.Contains(n.Message, "answers were redirects (first: GET /health answered 307 to /health/)")
+		return strings.Contains(n.Message, "answers were redirects (first: ") && strings.Contains(n.Message, "answered 307 to")
 	}) {
 		t.Errorf("notes = %v, want one about the redirects", rep.Notes)
 	}

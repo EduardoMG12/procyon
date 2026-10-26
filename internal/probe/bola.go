@@ -1,7 +1,9 @@
 package probe
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"slices"
@@ -89,6 +91,11 @@ func (s *session) writeAsB(ctx context.Context, op loader.Operation, f filled) (
 	if op.NeedsBody && op.Body == nil {
 		return cannotTell("not tested as B: it needs a request body and the spec gives no example"), nil
 	}
+	// B writes something A's object cannot already hold, even when A made
+	// that object from the same example. If the server refuses the changed
+	// body (the field was an email or an enum), B sends the example as is.
+	original := op.Body
+	op.Body = asB(op.Body)
 	reader, canRead := s.readers[op.Path]
 	if !canRead {
 		if op.Method == http.MethodDelete {
@@ -101,6 +108,10 @@ func (s *session) writeAsB(ctx context.Context, op loader.Operation, f filled) (
 		return cannotTell(note), err
 	}
 	exchange, _, err := s.sendFull(ctx, op, f.path, s.b)
+	if err == nil && !success(exchange) && !bytes.Equal(op.Body, original) {
+		op.Body = original
+		exchange, _, err = s.sendFull(ctx, op, f.path, s.b)
+	}
 	if err != nil || !success(exchange) {
 		return verdict{cell: cellOf(exchange, false)}, err
 	}
@@ -216,4 +227,22 @@ func unseen(values []string, ofB *harvest) []string {
 		}
 	}
 	return kept
+}
+
+// asB is the example with its first text field (by name) marked as B's
+// write, so A's object, made from the same example or not, never already
+// holds it. An example with no text field is sent as it is.
+func asB(example []byte) []byte {
+	fields, ok := decodeObject(example)
+	if !ok {
+		return example
+	}
+	for _, name := range sortedKeys(fields) {
+		if text, isText := fields[name].(string); isText {
+			fields[name] = text + " (written by B)"
+			changed, _ := json.Marshal(fields) // decoded JSON always encodes back
+			return changed
+		}
+	}
+	return example
 }

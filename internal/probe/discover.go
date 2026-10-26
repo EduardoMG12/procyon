@@ -3,25 +3,92 @@ package probe
 import (
 	"context"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/EduardoMG12/procyon/internal/loader"
 	"github.com/EduardoMG12/procyon/internal/report"
 )
 
-// discoverAccounts reads as A, then as B, and marks which values are each
-// one's own (identityMarks). B reads only paths with nothing in them: what
-// B is shown without naming an object, so a value B "saw" never comes from
-// reading A's objects, which is the very thing being tested.
-func (r *runner) discoverAccounts(ctx context.Context, ops []loader.Operation, a, b caller, ids map[string][]string) (ofA, ofB *discovery, err error) {
+// discoverAccounts has each account create its own objects (create), then
+// reads as A, then as B, and marks which values are each one's own
+// (identityMarks). B reads only paths with nothing in them: what B is shown
+// without naming an object, so a value B "saw" never comes from reading A's
+// objects, which is the very thing being tested. created lists what each
+// account made, for a note.
+func (r *runner) discoverAccounts(ctx context.Context, ops []loader.Operation, a, b caller, ids map[string][]string) (ofA, ofB *discovery, created []string, err error) {
+	madeA, err := r.create(ctx, ops, a)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	madeB, err := r.create(ctx, ops, b)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	if ofA, err = r.discover(ctx, ops, a, newHarvest(ids), false); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if ofB, err = r.discover(ctx, ops, b, newHarvest(nil), true); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
+	}
+	// What an account created is recorded after what it read, so an object
+	// the environment seeded comes first: it holds real data, where a
+	// created one holds only the example both accounts sent.
+	for _, account := range []struct {
+		name string
+		d    *discovery
+		made []createdObject
+	}{{a.name, ofA, madeA}, {b.name, ofB, madeB}} {
+		for _, m := range account.made {
+			account.d.add(m.path, m.body)
+			created = append(created, account.name+": POST "+m.path)
+		}
 	}
 	ofA.identity, ofB.identity = identityMarks(ofA, ofB), identityMarks(ofB, ofA)
-	return ofA, ofB, nil
+	return ofA, ofB, created, nil
+}
+
+// create has who add one object to every collection the spec lets it add
+// to, so it has an object of its own to be tested with even when the
+// environment seeded none: a POST on a collection, a path that also has a
+// GET or a GET on one of its items (POST /notes next to GET /notes or GET
+// /notes/{id}), with the spec's example as the body. What it answers is
+// recorded like a read, under the collection's path, so the new object's
+// ID can fill /notes/{id} when nothing else can. Only collections: a POST /logout or
+// /reset-password has neither, and is never sent.
+func (r *runner) create(ctx context.Context, ops []loader.Operation, who caller) (made []createdObject, err error) {
+	for _, op := range ops {
+		if op.Method != http.MethodPost || strings.Contains(op.Path, "{") || op.Public || op.Body == nil || r.skip[op.Key()] ||
+			!isCollection(ops, op.Path) {
+			continue
+		}
+		exchange, body, err := r.sendFull(ctx, op, op.Path, who)
+		if err != nil {
+			return nil, err
+		}
+		if success(exchange) {
+			made = append(made, createdObject{op.Path, body})
+		}
+	}
+	return made, nil
+}
+
+// createdObject is what an account's POST to a collection answered.
+type createdObject struct {
+	path string
+	body []byte
+}
+
+// isCollection reports whether path holds objects: a GET on it, or on one
+// of its items ({id} right below it).
+func isCollection(ops []loader.Operation, path string) bool {
+	return slices.ContainsFunc(ops, func(o loader.Operation) bool {
+		if o.Method != http.MethodGet {
+			return false
+		}
+		item, ok := strings.CutPrefix(o.Path, path+"/{")
+		return o.Path == path || ok && strings.Count(item, "/") == 0
+	})
 }
 
 // identityMarks lists the values that mark one account's own objects, by the
