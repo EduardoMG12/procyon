@@ -9,7 +9,7 @@ import (
 // Runtime rules are checked by `procyon test` against a running API, not by
 // linting the spec. Their catalog lives here, next to the lint rules, so an
 // x-procyon-ignore can name either kind and a typo in either is caught.
-// They have no check: internal/test produces their findings.
+// They have no check: internal/probe produces their findings.
 var runtimeRules = []report.Rule{prc101, prc102, prc103, prc104, prc105}
 
 var prc101 = report.Rule{

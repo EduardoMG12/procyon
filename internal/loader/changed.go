@@ -125,7 +125,7 @@ func (f *fingerprints) node(ref string) any {
 		case map[string]any:
 			v = node[part]
 		case []any:
-			i, err := strconv.Atoi(part) // strict, like the pointer in internal/test/login.go
+			i, err := strconv.Atoi(part) // strict, like the pointer in internal/probe/login.go
 			if err != nil || i < 0 || i >= len(node) {
 				return nil
 			}

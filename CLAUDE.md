@@ -102,9 +102,11 @@ Updated 2026-10-25. v0.1 is done and released as v0.1.0 (#21). v0.2
 is built: spec #69, slices #70–#86, PRs #91–#109, merged locally on the
 owner's machine, one commit per PR. It runs against vulnapi (ours, every PR)
 and VAmPI (weekly, `.github/workflows/benchmark.yml`). Not yet released.
-The automatic `/code-review` skips paths containing "test" or "spec", so
-`internal/test/` and `internal/lint/spec.go` are reviewed by a separate
-agent given the file list.
+Packages: `report` (model + engine), `loader` (specs), `lint` (rules),
+`probe` (runtime tests), `words`, `format`, `cmd/procyon`; `internal/arch`
+tests the import directions. The automatic `/code-review` skips paths
+containing "test" or "spec": give a separate review agent the file list
+for test files.
 Before every push, run the tests on a clean `git archive` of the commit:
 new files left out of a commit pass locally and fail everywhere else. The
 repository is public since 2026-10-24 and CI runs on every PR, but still
