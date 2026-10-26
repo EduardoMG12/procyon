@@ -46,8 +46,11 @@ func (r *runner) send(ctx context.Context, op loader.Operation, path string, who
 
 // sendFull is send, also returning the response body (up to maxResponse).
 func (r *runner) sendFull(ctx context.Context, op loader.Operation, path string, who caller) (report.Exchange, []byte, error) {
+	// path is already escaped (harvest.fill): set it as the raw path, or
+	// "Ana Maria" would go out as Ana%2520Maria.
 	u := *r.target
-	u.Path = strings.TrimSuffix(r.target.Path, "/") + path
+	u.RawPath = strings.TrimSuffix(r.target.EscapedPath(), "/") + path
+	u.Path, _ = url.PathUnescape(u.RawPath)
 	var body io.Reader
 	if op.Method != http.MethodGet && op.Body != nil {
 		body = bytes.NewReader(op.Body)
