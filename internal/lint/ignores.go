@@ -18,46 +18,14 @@ import (
 // the element it is written on.
 const ignoreKey = "x-procyon-ignore"
 
-// ignore is one parsed x-procyon-ignore entry.
-type ignore struct {
-	rule      string
-	reason    string
-	expires   string    // as written
-	until     time.Time // the expiry date (its day, month and year only)
-	operation string    // the operation it is written on, or ""
-	about     []any     // the elements it covers, when not an operation
-	where     string    // how notes name that element
-	location  report.Location
-	used      bool
-}
-
-// on names where the ignore lives, for notes.
-func (ig *ignore) on() string {
-	if ig.operation != "" {
-		return ig.operation
-	}
-	return ig.where
-}
-
-// covers reports whether the ignore is written on the element f is about.
-func (ig *ignore) covers(f report.Finding) bool {
-	if ig.rule != f.Rule.ID {
-		return false
-	}
-	if ig.operation != "" {
-		return ig.operation == f.Operation
-	}
-	return f.Element != nil && slices.Contains(ig.about, f.Element)
-}
-
 // parseIgnores reads every x-procyon-ignore in the spec. A malformed entry
 // is an error: a typo must never silently ignore something.
 //
 // An ignore on a security scheme also covers its OAuth2 flows. In a spec
 // converted from Swagger 2.0, an ignore at the root also covers the servers
 // (built from schemes and host, which cannot carry extensions).
-func parseIgnores(doc *openapi3.T, asGiven func(report.Location) report.Location, swagger bool) ([]*ignore, error) {
-	var ignores []*ignore
+func parseIgnores(doc *openapi3.T, asGiven func(report.Location) report.Location, swagger bool) ([]report.Ignore, error) {
+	var ignores []report.Ignore
 	var firstErr error
 	// add parses the ignores written on one element.
 	add := func(ext map[string]any, origin *openapi3.Origin, operation string, where string, about ...any) {
@@ -65,8 +33,8 @@ func parseIgnores(doc *openapi3.T, asGiven func(report.Location) report.Location
 			return
 		}
 		more, err := parseIgnoreList(ext[ignoreKey], operation, asGiven(locateField(origin, ignoreKey)))
-		for _, ig := range more {
-			ig.about, ig.where = about, where
+		for i := range more {
+			more[i].Elements, more[i].Where = about, where
 		}
 		ignores, firstErr = append(ignores, more...), err
 	}
@@ -117,7 +85,7 @@ func parseIgnores(doc *openapi3.T, asGiven func(report.Location) report.Location
 	return ignores, firstErr
 }
 
-func parseIgnoreList(value any, operation string, loc report.Location) ([]*ignore, error) {
+func parseIgnoreList(value any, operation string, loc report.Location) ([]report.Ignore, error) {
 	// Errors name the operation when there is one; otherwise the location
 	// says where.
 	if value == nil {
@@ -134,7 +102,7 @@ func parseIgnoreList(value any, operation string, loc report.Location) ([]*ignor
 	if !ok {
 		return nil, fail("must be a list of {rule, reason, expires}")
 	}
-	var ignores []*ignore
+	var ignores []report.Ignore
 	for i, entry := range entries {
 		fields, ok := entry.(map[string]any)
 		if !ok {
@@ -145,22 +113,22 @@ func parseIgnoreList(value any, operation string, loc report.Location) ([]*ignor
 				return nil, fail("entry %d has an unknown key %q (use rule, reason, expires)", i+1, key)
 			}
 		}
-		ig := &ignore{operation: operation, location: loc}
-		ig.rule, _ = fields["rule"].(string)
-		if !knownRule(ig.rule) {
-			return nil, fail("entry %d: unknown rule %q", i+1, ig.rule)
+		ig := report.Ignore{Operation: operation, Location: loc}
+		ig.Rule, _ = fields["rule"].(string)
+		if !knownRule(ig.Rule) {
+			return nil, fail("entry %d: unknown rule %q", i+1, ig.Rule)
 		}
-		ig.reason, _ = fields["reason"].(string)
-		if ig.reason = strings.TrimSpace(ig.reason); ig.reason == "" {
-			return nil, fail("entry %d (%s) needs a reason: why is this finding acceptable here?", i+1, ig.rule)
+		ig.Reason, _ = fields["reason"].(string)
+		if ig.Reason = strings.TrimSpace(ig.Reason); ig.Reason == "" {
+			return nil, fail("entry %d (%s) needs a reason: why is this finding acceptable here?", i+1, ig.Rule)
 		}
 		if raw, set := fields["expires"]; set {
-			ig.expires = fmt.Sprint(raw)
-			until, err := time.Parse(time.DateOnly, ig.expires)
+			ig.Expires = fmt.Sprint(raw)
+			until, err := time.Parse(time.DateOnly, ig.Expires)
 			if err != nil {
-				return nil, fail("entry %d (%s): expires %q is not a date like 2027-01-31", i+1, ig.rule, ig.expires)
+				return nil, fail("entry %d (%s): expires %q is not a date like 2027-01-31", i+1, ig.Rule, ig.Expires)
 			}
-			ig.until = until
+			ig.Until = until
 		}
 		ignores = append(ignores, ig)
 	}
@@ -170,50 +138,4 @@ func parseIgnoreList(value any, operation string, loc report.Location) ([]*ignor
 func knownRule(id string) bool {
 	isID := func(r report.Rule) bool { return r.ID == id }
 	return slices.ContainsFunc(Rules(), isID) || slices.ContainsFunc(runtimeRules, isID)
-}
-
-// applyIgnores moves the findings an ignore matches out of report.Findings
-// into report.Ignored, and adds notes for expired and unused ignores. An
-// ignore expires at the end of its date.
-func applyIgnores(rep *report.Report, ignores []*ignore, today time.Time) {
-	// An ignore lasts until the end of its date where Procyon runs, so the
-	// same spec gives the same verdict all day in any time zone.
-	expired := func(ig *ignore) bool {
-		if ig.until.IsZero() {
-			return false
-		}
-		y, m, d := ig.until.Date()
-		return !today.Before(time.Date(y, m, d+1, 0, 0, 0, 0, today.Location()))
-	}
-	kept := rep.Findings[:0]
-	for _, f := range rep.Findings {
-		// A finding about a shared schema is checked operation by
-		// operation: an ignore on one covers that one only, and the finding
-		// is gone only when every operation is ignored.
-		var left []string
-		for _, op := range append([]string{f.Operation}, f.Also...) {
-			one := f
-			one.Operation, one.Also = op, nil
-			i := slices.IndexFunc(ignores, func(ig *ignore) bool { return ig.covers(one) && !expired(ig) })
-			if i < 0 {
-				left = append(left, op)
-				continue
-			}
-			ignores[i].used = true
-			rep.Ignored = append(rep.Ignored, report.IgnoredFinding{Finding: one, Reason: ignores[i].reason, Expires: ignores[i].expires})
-		}
-		if len(left) > 0 {
-			f.Operation, f.Also = left[0], left[1:]
-			kept = append(kept, f)
-		}
-	}
-	rep.Findings = kept
-	for _, ig := range ignores {
-		switch {
-		case expired(ig):
-			rep.Notes = append(rep.Notes, report.Note{Location: ig.location, Message: fmt.Sprintf("ignore of %s on %s expired on %s; its findings count again", ig.rule, ig.on(), ig.expires)})
-		case !ig.used:
-			rep.Notes = append(rep.Notes, report.Note{Location: ig.location, Message: fmt.Sprintf("ignore of %s on %s matches no finding; remove it", ig.rule, ig.on())})
-		}
-	}
 }
