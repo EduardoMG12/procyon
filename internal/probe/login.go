@@ -95,13 +95,19 @@ var envVar = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 // (naming it, never a value).
 func expand(v any) (any, []string, error) {
 	var secrets []string
-	var missing string
+	var missing, refused string
 	var expandValue func(any) any
 	expandValue = func(v any) any {
 		switch v := v.(type) {
 		case string:
 			return envVar.ReplaceAllStringFunc(v, func(m string) string {
 				name := envVar.FindStringSubmatch(m)[1]
+				if !strings.HasPrefix(name, "PROCYON_") {
+					if refused == "" {
+						refused = name
+					}
+					return ""
+				}
 				value, ok := os.LookupEnv(name)
 				if !ok && missing == "" {
 					missing = name
@@ -127,6 +133,11 @@ func expand(v any) (any, []string, error) {
 		return v
 	}
 	out := expandValue(v)
+	if refused != "" {
+		// The config sits next to the spec, where a pull request can change
+		// it: it must not be able to send CI's other secrets to the target.
+		return nil, nil, fmt.Errorf("${%s}: only variables named PROCYON_* can be used in a login", refused)
+	}
 	if missing != "" {
 		return nil, nil, fmt.Errorf("${%s} is not set", missing)
 	}

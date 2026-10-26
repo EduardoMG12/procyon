@@ -5,6 +5,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/EduardoMG12/procyon/internal/format"
@@ -138,5 +139,23 @@ func TestTerminal(t *testing.T) {
 				t.Errorf("output differs from %s\n--- got ---\n%s\n--- want ---\n%s", path, got.Bytes(), want)
 			}
 		})
+	}
+}
+
+// An escape sequence in a spec or an API's answer is shown, never sent to
+// the terminal.
+func TestTerminalShowsControlCharacters(t *testing.T) {
+	f := bola
+	f.Operation = "GET /a\x1b[2J"
+	f.Evidence = []report.Exchange{{Caller: "B", Method: "GET", URL: "/a", Status: 200, Body: "\x1b]52;c;cHduZWQ=\x07ok"}}
+	var got bytes.Buffer
+	if err := format.Terminal(&got, report.Report{FailOn: report.High, Findings: []report.Finding{f}}, format.TerminalOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.ContainsAny(got.String(), "\x1b\x07") {
+		t.Errorf("raw control characters reached the output: %q", got.String())
+	}
+	if !strings.Contains(got.String(), `\x1b]52;c;cHduZWQ=\x07ok`) || !strings.Contains(got.String(), `GET /a\x1b[2J`) {
+		t.Errorf("control characters are not shown: %q", got.String())
 	}
 }

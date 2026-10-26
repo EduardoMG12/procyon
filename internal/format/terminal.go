@@ -91,7 +91,7 @@ func (t *terminal) finding(f report.Finding, source []string) {
 	if f.Operation != "" {
 		loc += "  " + f.Operation
 	}
-	t.line(indent + loc)
+	t.line(indent + visible(loc))
 	t.line("")
 
 	if t.excerpt(source, f.Location.Line, f.Location.Column) {
@@ -118,7 +118,7 @@ func (t *terminal) excerpt(source []string, line, column int) bool {
 		if n == line {
 			mark = "> "
 		}
-		s := fmt.Sprintf("%s%s%*d | %s", indent, mark, width, n, window(source[n-1], column))
+		s := fmt.Sprintf("%s%s%*d | %s", indent, mark, width, n, visible(window(source[n-1], column)))
 		if n == line {
 			s = t.paint(bold, s)
 		}
@@ -131,7 +131,7 @@ func (t *terminal) excerpt(source []string, line, column int) bool {
 // lines aligned under the text.
 func (t *terminal) labelled(label, text string) {
 	prefix := indent + fmt.Sprintf("%-*s", labelWidth, label)
-	for _, l := range wrap(text, lineWidth-len(prefix)) {
+	for _, l := range wrap(visible(text), lineWidth-len(prefix)) {
 		t.line(prefix + l)
 		prefix = strings.Repeat(" ", len(prefix))
 	}
@@ -145,12 +145,12 @@ func (t *terminal) evidence(exchanges []report.Exchange) {
 	}
 	t.line(indent + "Proof:")
 	for _, e := range exchanges {
-		t.line(indent + "  " + exchangeLine(e))
+		t.line(indent + "  " + visible(exchangeLine(e)))
 		if sent := flatten(e.Sent); sent != "" {
-			t.line(indent + "    sent " + window(sent, 0))
+			t.line(indent + "    sent " + visible(window(sent, 0)))
 		}
 		if body := flatten(e.Body); body != "" {
-			t.line(indent + "    " + window(body, 0))
+			t.line(indent + "    " + visible(window(body, 0)))
 		}
 	}
 }
@@ -163,15 +163,15 @@ func (t *terminal) ignored(ignored []report.IgnoredFinding) {
 	}
 	t.line(fmt.Sprintf("Ignored (%d)", len(ignored)))
 	for _, i := range ignored {
-		line := indent + i.Finding.Rule.ID + "  " + location(i.Finding.Location)
+		line := indent + i.Finding.Rule.ID + "  " + visible(location(i.Finding.Location))
 		if i.Finding.Operation != "" {
-			line += "  " + i.Finding.Operation
+			line += "  " + visible(i.Finding.Operation)
 		}
 		if i.Expires != "" {
 			line += "  (until " + i.Expires + ")"
 		}
 		t.line(line)
-		t.line(indent + indent + i.Reason)
+		t.line(indent + indent + visible(i.Reason))
 	}
 	t.line("")
 }
@@ -183,7 +183,7 @@ func (t *terminal) notes(notes []report.Note) {
 	}
 	t.line(fmt.Sprintf("Notes (%d)", len(notes)))
 	for _, n := range notes {
-		t.line(indent + location(n.Location) + "  " + n.Message)
+		t.line(indent + visible(location(n.Location)+"  "+n.Message))
 	}
 	t.line("")
 }
