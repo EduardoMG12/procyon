@@ -1,0 +1,177 @@
+openapi: 3.0.3
+info:
+  title: Notes, with no request example
+  version: "1"
+  description: >
+    The acceptance API of `procyon test`. See README.md for what is planted.
+servers:
+  - url: http://localhost:8080
+security:
+  - bearer: []
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+  schemas:
+    Note:
+      type: object
+      properties:
+        id:
+          type: string
+          readOnly: true
+          maxLength: 20
+        owner:
+          type: string
+          readOnly: true
+          maxLength: 50
+        title:
+          type: string
+          maxLength: 100
+        body:
+          type: string
+          maxLength: 10000
+    NoteInput:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          maxLength: 100
+        body:
+          type: string
+          maxLength: 10000
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          maxLength: 500
+  parameters:
+    NoteID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 20
+paths:
+  /health:
+    get:
+      x-procyon-public: "Container healthcheck, returns no data"
+      operationId: health
+      responses:
+        "200":
+          description: The API is up.
+  /login:
+    post:
+      x-procyon-public: "Signing in needs no account yet"
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                  maxLength: 50
+                password:
+                  type: string
+                  format: password
+                  maxLength: 100
+      responses:
+        "200":
+          description: The account's token, under session.token.
+        "401":
+          description: Wrong username or password.
+  /me:
+    get:
+      operationId: me
+      responses:
+        "200":
+          description: The caller.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    maxLength: 50
+        "401":
+          description: No valid token.
+  /notes:
+    get:
+      operationId: listNotes
+      responses:
+        "200":
+          description: The caller's notes.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 100
+                items:
+                  $ref: "#/components/schemas/Note"
+        "401":
+          description: No valid token.
+    post:
+      operationId: createNote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NoteInput"
+      responses:
+        "201":
+          description: The new note.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "400":
+          description: The body is not a valid note.
+  /notes/{id}:
+    parameters:
+      - $ref: "#/components/parameters/NoteID"
+    get:
+      operationId: getNote
+      responses:
+        "200":
+          description: The note.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "404":
+          description: No such note, or not the caller's.
+    put:
+      operationId: updateNote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NoteInput"
+      responses:
+        "200":
+          description: The changed note.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+        "404":
+          description: No such note, or not the caller's.
+    delete:
+      operationId: deleteNote
+      responses:
+        "204":
+          description: Deleted.
+        "404":
+          description: No such note, or not the caller's.

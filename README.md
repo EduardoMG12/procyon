@@ -129,6 +129,14 @@ procyon test openapi.yaml --compose docker-compose.yml --service api --port 8080
 It runs only against a copy you own, and changes and deletes data there on
 purpose: never point it at a system whose data matters.
 
+What `procyon test` cannot find (yet): injection (SQL, NoSQL, commands),
+SSRF, forged or weak JWTs, missing rate limits, mass assignment of fields
+the spec does not list, and anything that needs more than two accounts or
+roles (an admin). It cannot confirm a write whose result no read shows (a
+password change): that is a note, never a pass. Each rule's page lists its
+known limits; [docs/benchmark.md](docs/benchmark.md) shows what it finds in
+VAmPI and what it misses.
+
 ### In GitHub Actions, as a PR comment
 
 ```yaml

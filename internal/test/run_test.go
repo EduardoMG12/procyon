@@ -97,8 +97,8 @@ func TestInTestOrder(t *testing.T) {
 
 func TestRunNeedsBothAccounts(t *testing.T) {
 	_, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: "http://127.0.0.1:1", TokenA: "a"})
-	if err == nil || !strings.Contains(err.Error(), "PROCYON_USER_B_TOKEN") {
-		t.Errorf("err = %v, want it to name PROCYON_USER_B_TOKEN", err)
+	if err == nil || !strings.Contains(err.Error(), "PROCYON_USER_B_TOKEN") || strings.Contains(err.Error(), "PROCYON_USER_A_TOKEN") {
+		t.Errorf("err = %v, want it to name PROCYON_USER_B_TOKEN only", err)
 	}
 }
 
@@ -447,5 +447,25 @@ func TestNoPRC102OnObjectsEveryoneMayRead(t *testing.T) {
 				t.Errorf("B was not tested on A's note: %+v", report.Matrix)
 			}
 		})
+	}
+}
+
+// A write that needs a body the spec gives no example for is never dropped
+// silently: a note says why it was not tested.
+func TestWriteWithoutAnExampleGetsANote(t *testing.T) {
+	srv := httptest.NewServer(vulnapi.New(true))
+	defer srv.Close()
+	report, err := Run(context.Background(), "../../testdata/specs/runtime-notes-no-example.yaml",
+		Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"POST /notes: malformed input not tested: it needs a request body",
+		"PUT /notes/{id}: not tested as B: it needs a request body",
+	} {
+		if !slices.ContainsFunc(report.Notes, func(n lint.Note) bool { return strings.HasPrefix(n.Message, want) }) {
+			t.Errorf("no note %q in %v", want, report.Notes)
+		}
 	}
 }

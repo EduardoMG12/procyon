@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -49,6 +50,21 @@ type positionedError interface {
 	GetMessage() string
 }
 
+// positionOf is "file:line:column" of the YAML node at path ($.test.x),
+// or the file name alone when it cannot be found.
+func positionOf(data []byte, path string) string {
+	p, err := yaml.PathString(path)
+	if err != nil {
+		return configFile
+	}
+	node, err := p.ReadNode(bytes.NewReader(data))
+	if err != nil || node == nil || node.GetToken() == nil {
+		return configFile
+	}
+	pos := node.GetToken().Position
+	return fmt.Sprintf("%s:%d:%d", configFile, pos.Line, pos.Column)
+}
+
 // loadConfig returns the zero config when there is no file.
 func loadConfig() (config, error) {
 	var cfg config
@@ -76,10 +92,14 @@ func loadConfig() (config, error) {
 	if cfg.Format != "" && formats[cfg.Format] == nil {
 		return cfg, fmt.Errorf("%s: format: unknown format %q (use %s)", configFile, cfg.Format, formatNames())
 	}
-	for i, l := range []*test.Login{cfg.Test.Accounts.A.Login, cfg.Test.Accounts.B.Login} {
-		name := []string{"a", "b"}[i]
-		if l != nil && (l.Operation == "" || l.Token == "") {
-			return cfg, fmt.Errorf("%s: test.accounts.%s.login needs operation (\"POST /login\") and token (a JSON pointer such as /token)", configFile, name)
+	for _, account := range []struct {
+		name  string
+		login *test.Login
+	}{{"a", cfg.Test.Accounts.A.Login}, {"b", cfg.Test.Accounts.B.Login}} {
+		if l := account.login; l != nil && (l.Operation == "" || l.Token == "") {
+			key := "test.accounts." + account.name + ".login"
+			return cfg, fmt.Errorf("%s: %s needs operation (\"POST /login\") and token (a JSON pointer such as /token)",
+				positionOf(data, "$."+key), key)
 		}
 	}
 	for _, value := range cfg.Output {

@@ -201,7 +201,7 @@ func TestConfigFile(t *testing.T) {
 		{"invalid YAML", "fail-on: [\n", nil, 2, ".procyon.yaml:"},
 		{"unknown format", "format: html\n", nil, 2, `.procyon.yaml: format: unknown format "html"`},
 		{"output without a path", "output: [json]\n", nil, 2, `.procyon.yaml: output: "json": want format=path`},
-		{"login without a token pointer", "test:\n  accounts:\n    a:\n      login:\n        operation: POST /login\n", nil, 2, "test.accounts.a.login needs operation"},
+		{"login without a token pointer", "test:\n  accounts:\n    a:\n      login:\n        operation: POST /login\n", nil, 2, ".procyon.yaml:5:18: test.accounts.a.login needs operation"},
 		{"unknown key in a login", "test:\n  accounts:\n    b:\n      login:\n        url: /login\n", nil, 2, "url"},
 	}
 	for _, tt := range tests {
