@@ -24,6 +24,9 @@ type command struct {
 	name  string
 	flags func(*flag.FlagSet) // registers the command's own flags, or nil
 	run   func(spec string, common invocation) (report.Report, error)
+	// inputs are the files the command reads besides the spec, which no
+	// --output may overwrite, or nil.
+	inputs func() []string
 }
 
 // invocation is what the shared flags and .procyon.yaml decided for one
@@ -60,7 +63,8 @@ func testCommand() command {
 			f.IntVar(&tf.port, "port", 0, "")
 			f.StringVar(&tf.baseSpec, "base-spec", "", "")
 		},
-		run: func(spec string, in invocation) (report.Report, error) { return runTest(spec, in, tf) },
+		run:    func(spec string, in invocation) (report.Report, error) { return runTest(spec, in, tf) },
+		inputs: func() []string { return []string{tf.baseSpec} },
 	}
 }
 
@@ -74,6 +78,16 @@ func runTest(spec string, in invocation, tf testFlags) (rep report.Report, err e
 		return report.Report{}, errors.New("--compose needs --service (the service that serves the API) and --port (its port in the container)")
 	case tf.compose == "" && tf.baseURL == "":
 		return report.Report{}, errors.New("--compose or --base-url is required: where the copy of your API under test runs")
+	case tf.compose == "" && (tf.service != "" || tf.port != 0):
+		return report.Report{}, errors.New("--service and --port go with --compose; with --base-url, the URL says where the API is")
+	}
+	// A base spec that does not load is a note (the change may have broken
+	// it); a path that does not exist is a typo, which would quietly test
+	// every operation instead of the changed ones.
+	if tf.baseSpec != "" {
+		if _, err := os.Stat(tf.baseSpec); err != nil {
+			return report.Report{}, fmt.Errorf("--base-spec: %w", err)
+		}
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -95,6 +109,10 @@ func runTest(spec string, in invocation, tf testFlags) (rep report.Report, err e
 	})
 }
 
+// errLeftRunning is a teardown that failed after the tests ran: the report
+// is still printed, then the warning, and the exit code is 2.
+var errLeftRunning = errors.New("the tests ran, but the environment was left running")
+
 // withDown adds a failed teardown to a run's error: the user must hear the
 // environment may still be up.
 func withDown(err, downErr error) error {
@@ -102,7 +120,7 @@ func withDown(err, downErr error) error {
 	case downErr == nil:
 		return err
 	case err == nil:
-		return fmt.Errorf("the tests ran, but the environment was left running: %w", downErr)
+		return fmt.Errorf("%w: %w", errLeftRunning, downErr)
 	}
 	return errors.Join(err, fmt.Errorf("and the environment may be left running: %w", downErr))
 }
@@ -115,6 +133,10 @@ func runCommand(cmd command, args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	spec, in, err := parseCommon(cmd, args, cfg)
+	if errors.Is(err, flag.ErrHelp) {
+		fmt.Fprint(stdout, usage)
+		return exitPass
+	}
 	if err != nil {
 		// Some end with the usage text, which ends its own line.
 		fmt.Fprint(stderr, strings.TrimSuffix(err.Error(), "\n")+"\n")
@@ -122,20 +144,28 @@ func runCommand(cmd command, args []string, stdout, stderr io.Writer) int {
 	}
 	// Output files are created before the run, so a path that cannot be
 	// written stops it before anything is printed.
-	files, err := openOutputs(in.outputs)
+	inputs := []string{spec}
+	if cmd.inputs != nil {
+		inputs = append(inputs, cmd.inputs()...)
+	}
+	files, err := openOutputs(in.outputs, inputs)
 	if err != nil {
 		fmt.Fprintf(stderr, "procyon: %v\n", err)
 		return exitUsage
 	}
 	defer closeAll(files)
 
-	rep, err := cmd.run(spec, in)
-	if err != nil {
-		fmt.Fprintf(stderr, "procyon: %v\n", err)
+	rep, runErr := cmd.run(spec, in)
+	if runErr != nil && !errors.Is(runErr, errLeftRunning) {
+		fmt.Fprintf(stderr, "procyon: %v\n", runErr)
 		return exitUsage
 	}
 	if err := writeReport(rep, in, stdout, files); err != nil {
 		fmt.Fprintf(stderr, "procyon: %v\n", err)
+		return exitUsage
+	}
+	if runErr != nil {
+		fmt.Fprintf(stderr, "procyon: %v\n", runErr)
 		return exitUsage
 	}
 	if rep.Failed {
@@ -162,6 +192,9 @@ func parseCommon(cmd command, args []string, cfg config) (string, invocation, er
 		cmd.flags(flags)
 	}
 	specs, err := parseInterspersed(flags, args)
+	if errors.Is(err, flag.ErrHelp) {
+		return "", in, err
+	}
 	if err != nil {
 		return "", in, fmt.Errorf("procyon %s: %v\n\n%s", cmd.name, err, usage)
 	}
