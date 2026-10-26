@@ -9,7 +9,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/report"
 )
 
 // SARIF writes the report as SARIF 2.1.0, the format GitHub code scanning
@@ -23,7 +23,7 @@ import (
 // Ignored findings are results with an in-source suppression and its
 // reason, so GitHub shows them as dismissed instead of losing them. Notes
 // are tool notifications, not results.
-func SARIF(w io.Writer, report lint.Report, base string, rules []lint.Rule) error {
+func SARIF(w io.Writer, rep report.Report, base string, rules []report.Rule) error {
 	uri := artifactURI(base)
 	index := map[string]int{}
 	driver := sarifDriver{
@@ -51,15 +51,15 @@ func SARIF(w io.Writer, report lint.Report, base string, rules []lint.Rule) erro
 		Invocations: []sarifInvocation{{ExecutionSuccessful: true, Notifications: []sarifNotification{}}},
 		Results:     []sarifResult{},
 	}
-	for _, n := range report.Notes {
+	for _, n := range rep.Notes {
 		run.Invocations[0].Notifications = append(run.Invocations[0].Notifications, sarifNotification{
 			Level: "note", Message: sarifText{n.Message}, Locations: []sarifLocation{sarifLoc(n.Location, uri)},
 		})
 	}
-	for _, f := range report.Findings {
+	for _, f := range rep.Findings {
 		run.Results = append(run.Results, sarifFinding(f, index, uri))
 	}
-	for _, i := range report.Ignored {
+	for _, i := range rep.Ignored {
 		r := sarifFinding(i.Finding, index, uri)
 		r.Suppressions = []sarifSuppression{{Kind: "inSource", Justification: i.Reason}}
 		run.Results = append(run.Results, r)
@@ -74,7 +74,7 @@ func SARIF(w io.Writer, report lint.Report, base string, rules []lint.Rule) erro
 	})
 }
 
-func sarifFinding(f lint.Finding, index map[string]int, uri func(string) string) sarifResult {
+func sarifFinding(f report.Finding, index map[string]int, uri func(string) string) sarifResult {
 	text := f.Why + " Fix: " + f.Fix
 	if f.Operation != "" {
 		text = f.Operation + ": " + text
@@ -95,7 +95,7 @@ func sarifFinding(f lint.Finding, index map[string]int, uri func(string) string)
 	}
 }
 
-func sarifLoc(l lint.Location, uri func(string) string) sarifLocation {
+func sarifLoc(l report.Location, uri func(string) string) sarifLocation {
 	return sarifLocation{sarifPhysical{
 		ArtifactLocation: sarifArtifact{URI: uri(l.File)},
 		Region:           sarifRegion{StartLine: max(l.Line, 1), StartColumn: max(l.Column, 1)},
@@ -125,11 +125,11 @@ func artifactURI(base string) func(file string) string {
 	}
 }
 
-func sarifLevel(s lint.Severity) string {
+func sarifLevel(s report.Severity) string {
 	switch s {
-	case lint.Critical, lint.High:
+	case report.Critical, report.High:
 		return "error"
-	case lint.Medium:
+	case report.Medium:
 		return "warning"
 	}
 	return "note"
@@ -137,13 +137,13 @@ func sarifLevel(s lint.Severity) string {
 
 // securitySeverity is the score GitHub uses to label a security result
 // critical (9.0+), high (7.0+), medium (4.0+) or low.
-func securitySeverity(s lint.Severity) string {
+func securitySeverity(s report.Severity) string {
 	switch s {
-	case lint.Critical:
+	case report.Critical:
 		return "9.5"
-	case lint.High:
+	case report.High:
 		return "8.0"
-	case lint.Medium:
+	case report.Medium:
 		return "5.5"
 	}
 	return "2.0"

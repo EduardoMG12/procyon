@@ -5,7 +5,7 @@ import (
 	"io"
 	"path/filepath"
 
-	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/report"
 )
 
 // The JSON format's shape is a contract with every script that reads it:
@@ -76,33 +76,33 @@ type jsonNote struct {
 }
 
 // JSON writes the whole report as JSON, for scripts and other tools.
-func JSON(w io.Writer, report lint.Report) error {
+func JSON(w io.Writer, rep report.Report) error {
 	out := jsonReport{
 		Version:  jsonVersion,
-		Failed:   report.Failed,
-		FailOn:   report.FailOn.String(),
+		Failed:   rep.Failed,
+		FailOn:   rep.FailOn.String(),
 		Findings: []jsonFinding{},
 		Ignored:  []jsonIgnored{},
 		Notes:    []jsonNote{},
 	}
-	for _, f := range report.Findings {
+	for _, f := range rep.Findings {
 		out.Findings = append(out.Findings, toJSON(f))
 		switch f.Rule.Severity {
-		case lint.Critical:
+		case report.Critical:
 			out.Summary.Critical++
-		case lint.High:
+		case report.High:
 			out.Summary.High++
-		case lint.Medium:
+		case report.Medium:
 			out.Summary.Medium++
-		case lint.Low:
+		case report.Low:
 			out.Summary.Low++
 		}
 	}
-	for _, i := range report.Ignored {
+	for _, i := range rep.Ignored {
 		out.Ignored = append(out.Ignored, jsonIgnored{toJSON(i.Finding), i.Reason, i.Expires})
 	}
-	out.Summary.Ignored = len(report.Ignored)
-	for _, n := range report.Notes {
+	out.Summary.Ignored = len(rep.Ignored)
+	for _, n := range rep.Notes {
 		out.Notes = append(out.Notes, jsonNote{jsonLoc(n.Location), n.Message})
 	}
 	enc := json.NewEncoder(w)
@@ -111,7 +111,7 @@ func JSON(w io.Writer, report lint.Report) error {
 	return enc.Encode(out)
 }
 
-func toJSON(f lint.Finding) jsonFinding {
+func toJSON(f report.Finding) jsonFinding {
 	return jsonFinding{
 		Rule: jsonRule{
 			ID: f.Rule.ID, Title: f.Rule.Title, Severity: f.Rule.Severity.String(),
@@ -125,7 +125,7 @@ func toJSON(f lint.Finding) jsonFinding {
 	}
 }
 
-func evidenceJSON(exchanges []lint.Exchange) []jsonExchange {
+func evidenceJSON(exchanges []report.Exchange) []jsonExchange {
 	var out []jsonExchange
 	for _, e := range exchanges {
 		out = append(out, jsonExchange{e.Caller, e.Method, e.URL, e.Status, e.Body, e.Sent})
@@ -133,6 +133,6 @@ func evidenceJSON(exchanges []lint.Exchange) []jsonExchange {
 	return out
 }
 
-func jsonLoc(l lint.Location) jsonLocation {
+func jsonLoc(l report.Location) jsonLocation {
 	return jsonLocation{File: filepath.ToSlash(l.File), Line: l.Line, Column: l.Column}
 }

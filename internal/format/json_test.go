@@ -7,37 +7,37 @@ import (
 	"testing"
 
 	"github.com/EduardoMG12/procyon/internal/format"
-	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/report"
 )
 
 func TestJSON(t *testing.T) {
-	report := lint.Report{
-		FailOn: lint.High,
+	rep := report.Report{
+		FailOn: report.High,
 		Failed: true,
-		Findings: []lint.Finding{{
-			Rule:      lint.Rule{ID: "PRC001", Title: "Operation has no authentication", Severity: lint.High, OWASP: "API2:2023 Broken Authentication"},
-			Location:  lint.Location{File: filepath.Join("specs", "shop.yaml"), Line: 9, Column: 5},
+		Findings: []report.Finding{{
+			Rule:      report.Rule{ID: "PRC001", Title: "Operation has no authentication", Severity: report.High, OWASP: "API2:2023 Broken Authentication"},
+			Location:  report.Location{File: filepath.Join("specs", "shop.yaml"), Line: 9, Column: 5},
 			Operation: "GET /orders",
 			Why:       "Anyone can call it.",
 			Fix:       "Add security.",
 		}, bola},
-		Ignored: []lint.IgnoredFinding{{
-			Finding: lint.Finding{
-				Rule:     lint.Rule{ID: "PRC004", Title: "Server URL does not use TLS", Severity: lint.High, OWASP: "API8:2023 Security Misconfiguration"},
-				Location: lint.Location{File: filepath.Join("specs", "shop.yaml"), Line: 6, Column: 12},
+		Ignored: []report.IgnoredFinding{{
+			Finding: report.Finding{
+				Rule:     report.Rule{ID: "PRC004", Title: "Server URL does not use TLS", Severity: report.High, OWASP: "API8:2023 Security Misconfiguration"},
+				Location: report.Location{File: filepath.Join("specs", "shop.yaml"), Line: 6, Column: 12},
 				Why:      "Unencrypted.",
 				Fix:      "Use https.",
 			},
 			Reason:  "Internal mirror",
 			Expires: "2027-01-31",
 		}},
-		Notes: []lint.Note{{
-			Location: lint.Location{File: filepath.Join("specs", "shop.yaml"), Line: 27, Column: 7},
+		Notes: []report.Note{{
+			Location: report.Location{File: filepath.Join("specs", "shop.yaml"), Line: 27, Column: 7},
 			Message:  "ignore of PRC010 on GET /orders matches no finding; remove it",
 		}},
 	}
 	var got bytes.Buffer
-	if err := format.JSON(&got, report); err != nil {
+	if err := format.JSON(&got, rep); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join("testdata", "report.json.golden")

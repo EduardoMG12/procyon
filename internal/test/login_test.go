@@ -22,12 +22,12 @@ func TestLoginGivesTheSameFindingsAsTokens(t *testing.T) {
 	srv := httptest.NewServer(vulnapi.New(false))
 	defer srv.Close()
 	a, b := logins("alice-password")
-	report, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL, LoginA: a, LoginB: b})
+	rep, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL, LoginA: a, LoginB: b})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var got []string
-	for _, f := range report.Findings {
+	for _, f := range rep.Findings {
 		got = append(got, f.Rule.ID+" "+f.Operation)
 		for _, e := range f.Evidence {
 			if strings.Contains(e.URL+e.Body, vulnapi.TokenA) || strings.Contains(e.URL+e.Body, vulnapi.TokenB) {

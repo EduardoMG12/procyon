@@ -12,25 +12,26 @@ import (
 
 	"github.com/EduardoMG12/procyon/internal/format"
 	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/report"
 )
 
-func sarifReport() lint.Report {
-	prc001 := lint.Rule{ID: "PRC001", Title: "Operation has no authentication", Severity: lint.High, OWASP: "API2:2023 Broken Authentication"}
-	prc004 := lint.Rule{ID: "PRC004", Title: "Server URL does not use TLS", Severity: lint.High, OWASP: "API8:2023 Security Misconfiguration"}
-	return lint.Report{
-		FailOn: lint.High,
+func sarifReport() report.Report {
+	prc001 := report.Rule{ID: "PRC001", Title: "Operation has no authentication", Severity: report.High, OWASP: "API2:2023 Broken Authentication"}
+	prc004 := report.Rule{ID: "PRC004", Title: "Server URL does not use TLS", Severity: report.High, OWASP: "API8:2023 Security Misconfiguration"}
+	return report.Report{
+		FailOn: report.High,
 		Failed: true,
-		Findings: []lint.Finding{{
-			Rule: prc001, Location: lint.Location{File: filepath.Join(".", "specs", "shop.yaml"), Line: 9, Column: 5},
+		Findings: []report.Finding{{
+			Rule: prc001, Location: report.Location{File: filepath.Join(".", "specs", "shop.yaml"), Line: 9, Column: 5},
 			Operation: "GET /orders", Why: "Anyone can call it.", Fix: "Add security.",
 		}},
-		Ignored: []lint.IgnoredFinding{{
-			Finding: lint.Finding{Rule: prc004, Location: lint.Location{File: filepath.Join("specs", "shop.yaml"), Line: 6, Column: 12},
+		Ignored: []report.IgnoredFinding{{
+			Finding: report.Finding{Rule: prc004, Location: report.Location{File: filepath.Join("specs", "shop.yaml"), Line: 6, Column: 12},
 				Why: "Unencrypted.", Fix: "Use https."},
 			Reason: "Internal mirror",
 		}},
-		Notes: []lint.Note{{
-			Location: lint.Location{File: filepath.Join("specs", "shop.yaml"), Line: 27, Column: 7},
+		Notes: []report.Note{{
+			Location: report.Location{File: filepath.Join("specs", "shop.yaml"), Line: 27, Column: 7},
 			Message:  "ignore of PRC010 on GET /orders matches no finding; remove it",
 		}},
 	}
@@ -38,9 +39,9 @@ func sarifReport() lint.Report {
 
 func TestSARIF(t *testing.T) {
 	var got bytes.Buffer
-	if err := format.SARIF(&got, sarifReport(), "", []lint.Rule{
-		{ID: "PRC001", Title: "Operation has no authentication", Severity: lint.High, OWASP: "API2:2023 Broken Authentication"},
-		{ID: "PRC004", Title: "Server URL does not use TLS", Severity: lint.High, OWASP: "API8:2023 Security Misconfiguration"},
+	if err := format.SARIF(&got, sarifReport(), "", []report.Rule{
+		{ID: "PRC001", Title: "Operation has no authentication", Severity: report.High, OWASP: "API2:2023 Broken Authentication"},
+		{ID: "PRC004", Title: "Server URL does not use TLS", Severity: report.High, OWASP: "API8:2023 Security Misconfiguration"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -135,12 +136,12 @@ func TestSARIFArtifactURIs(t *testing.T) {
 		outside: "file://" + (&url.URL{Path: filepath.ToSlash(outside)}).EscapedPath(),
 	}
 	for file, want := range cases {
-		report := lint.Report{Findings: []lint.Finding{{
-			Rule:     lint.Rule{ID: "PRC001", Severity: lint.High},
-			Location: lint.Location{File: file, Line: 1, Column: 1},
+		rep := report.Report{Findings: []report.Finding{{
+			Rule:     report.Rule{ID: "PRC001", Severity: report.High},
+			Location: report.Location{File: file, Line: 1, Column: 1},
 		}}}
 		var got bytes.Buffer
-		if err := format.SARIF(&got, report, base, lint.Rules()); err != nil {
+		if err := format.SARIF(&got, rep, base, lint.Rules()); err != nil {
 			t.Fatal(err)
 		}
 		var log struct {
@@ -165,8 +166,8 @@ func TestSARIFArtifactURIs(t *testing.T) {
 
 func TestSARIFEvidence(t *testing.T) {
 	var got bytes.Buffer
-	report := lint.Report{FailOn: lint.High, Findings: []lint.Finding{bola}}
-	if err := format.SARIF(&got, report, "", []lint.Rule{bola.Rule}); err != nil {
+	rep := report.Report{FailOn: report.High, Findings: []report.Finding{bola}}
+	if err := format.SARIF(&got, rep, "", []report.Rule{bola.Rule}); err != nil {
 		t.Fatal(err)
 	}
 	want := "Proof: B: DELETE /orders/1 → 204; A: GET /orders/1 → 404"

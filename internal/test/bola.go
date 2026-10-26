@@ -7,19 +7,20 @@ import (
 	"slices"
 
 	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/report"
 )
 
 // verdict is how one B check ended: a finding, a note saying why it could
 // not tell, and the matrix cell either way.
 type verdict struct {
-	finding *lint.Finding
+	finding *report.Finding
 	note    string
-	cell    lint.Cell
+	cell    report.Cell
 }
 
 // cannotTell is a verdict with no finding: a note, and a skipped cell.
 func cannotTell(note string) verdict {
-	return verdict{note: note, cell: lint.Cell{Outcome: lint.Skipped}}
+	return verdict{note: note, cell: report.Cell{Outcome: report.Skipped}}
 }
 
 // otherAccount calls op as B with A's object in the path (f) and tells
@@ -59,7 +60,7 @@ func (s *session) readAsB(ctx context.Context, op lint.Operation, f filled) (ver
 	if len(shared) == 0 {
 		return verdict{cell: cellOf(exchange, false)}, nil
 	}
-	return verdict{finding: bolaFinding(op, exchange, []lint.Exchange{exchange}), cell: cellOf(exchange, true)}, nil
+	return verdict{finding: bolaFinding(op, exchange, []report.Exchange{exchange}), cell: cellOf(exchange, true)}, nil
 }
 
 // withoutBsOwn drops the values B's own object on the same operation also
@@ -123,7 +124,7 @@ func (s *session) writeAsB(ctx context.Context, op lint.Operation, f filled) (ve
 	if !reached {
 		return verdict{cell: cellOf(exchange, false)}, nil
 	}
-	return verdict{finding: bolaFinding(op, exchange, []lint.Exchange{exchange, after}), cell: cellOf(exchange, true)}, nil
+	return verdict{finding: bolaFinding(op, exchange, []report.Exchange{exchange, after}), cell: cellOf(exchange, true)}, nil
 }
 
 // readBefore is A's read of its object before B's write or delete. Its note
@@ -153,18 +154,18 @@ func (s *session) unreadableWrite(ctx context.Context, op lint.Operation, f fill
 		return verdict{cell: cellOf(exchange, false)}, err
 	}
 	if mentionsAny(body, unseen(f.values, s.ofB.harvest)) {
-		return verdict{finding: bolaFinding(op, exchange, []lint.Exchange{exchange}), cell: cellOf(exchange, true)}, nil
+		return verdict{finding: bolaFinding(op, exchange, []report.Exchange{exchange}), cell: cellOf(exchange, true)}, nil
 	}
 	return verdict{
 		note: fmt.Sprintf("not confirmed: B got %d, and without a GET on the same path Procyon cannot tell whether "+
 			"A's object changed", exchange.Status),
-		cell: lint.Cell{Outcome: lint.Skipped, Status: exchange.Status},
+		cell: report.Cell{Outcome: report.Skipped, Status: exchange.Status},
 	}, nil
 }
 
 // bolaFinding is a PRC102 finding: what B did to A's object, and the
 // requests that prove it.
-func bolaFinding(op lint.Operation, exchange lint.Exchange, evidence []lint.Exchange) *lint.Finding {
+func bolaFinding(op lint.Operation, exchange report.Exchange, evidence []report.Exchange) *report.Finding {
 	var what string
 	switch op.Method {
 	case http.MethodGet:
@@ -174,7 +175,7 @@ func bolaFinding(op lint.Operation, exchange lint.Exchange, evidence []lint.Exch
 	default:
 		what = "change"
 	}
-	return &lint.Finding{
+	return &report.Finding{
 		Rule:      lint.RuntimeRule("PRC102"),
 		Location:  op.Location,
 		Operation: op.Key(),

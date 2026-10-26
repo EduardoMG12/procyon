@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/report"
 	"github.com/EduardoMG12/procyon/internal/vulnapi"
 )
 
@@ -19,15 +20,15 @@ const vulnapiSpec = "../vulnapi/openapi.yaml"
 
 // runAgainst tests the notes API, vulnerable or fixed, and returns each
 // finding as "rule operation".
-func runAgainst(t *testing.T, fixed bool) (lint.Report, []string) {
+func runAgainst(t *testing.T, fixed bool) (report.Report, []string) {
 	t.Helper()
-	report := runOn(t, vulnapiSpec, vulnapi.New(fixed), Options{})
-	got := findingKeys(report)
-	return report, got
+	rep := runOn(t, vulnapiSpec, vulnapi.New(fixed), Options{})
+	got := findingKeys(rep)
+	return rep, got
 }
 
 func TestRunFindsThePlantedVulnerabilities(t *testing.T) {
-	report, got := runAgainst(t, false)
+	rep, got := runAgainst(t, false)
 	want := []string{
 		"PRC101 GET /notes",
 		"PRC103 POST /notes", "PRC104 POST /notes",
@@ -37,15 +38,15 @@ func TestRunFindsThePlantedVulnerabilities(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Errorf("vulnerable API: findings %q, want %q", got, want)
 	}
-	if !report.Failed {
+	if !rep.Failed {
 		t.Error("a critical finding did not fail the run")
 	}
-	bola := report.Findings[slices.Index(got, "PRC102 GET /notes/{id}")].Evidence
+	bola := rep.Findings[slices.Index(got, "PRC102 GET /notes/{id}")].Evidence
 	if len(bola) != 1 || bola[0].Caller != "B" || !strings.HasSuffix(bola[0].URL, "/notes/1") ||
 		strings.Contains(bola[0].URL+bola[0].Body, vulnapi.TokenB) {
 		t.Errorf("PRC102 evidence = %+v, want B's GET /notes/1, with no token", bola)
 	}
-	evidence := report.Findings[0].Evidence
+	evidence := rep.Findings[0].Evidence
 	if len(evidence) != 1 || evidence[0].Caller != "anonymous" || evidence[0].Status != 200 ||
 		!strings.HasSuffix(evidence[0].URL, "/notes") || !strings.Contains(evidence[0].Body, `"owner":"alice"`) {
 		t.Errorf("evidence = %+v, want the anonymous GET /notes and its 200 with alice's notes", evidence)
@@ -53,14 +54,14 @@ func TestRunFindsThePlantedVulnerabilities(t *testing.T) {
 }
 
 func TestRunFindsNothingInTheFixedTwin(t *testing.T) {
-	report, got := runAgainst(t, true)
-	if len(got) != 0 || report.Failed {
-		t.Errorf("fixed API: findings %q, failed %v; want none", got, report.Failed)
+	rep, got := runAgainst(t, true)
+	if len(got) != 0 || rep.Failed {
+		t.Errorf("fixed API: findings %q, failed %v; want none", got, rep.Failed)
 	}
 	// A's GET /notes showed note IDs, so every operation on /notes/{id} was
 	// called: the only note is that a plain http target has no TLS to check.
-	if len(report.Notes) != 1 || !strings.HasPrefix(report.Notes[0].Message, "TLS not checked") {
-		t.Errorf("notes = %v, want only the TLS one", report.Notes)
+	if len(rep.Notes) != 1 || !strings.HasPrefix(rep.Notes[0].Message, "TLS not checked") {
+		t.Errorf("notes = %v, want only the TLS one", rep.Notes)
 	}
 }
 
@@ -149,8 +150,8 @@ func TestPRC102WritesAreConfirmedByA(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		}
 	})
-	report := runOn(t, vulnapiSpec, handler, Options{})
-	for _, f := range findingsOf(report, "PRC102") {
+	rep := runOn(t, vulnapiSpec, handler, Options{})
+	for _, f := range findingsOf(rep, "PRC102") {
 		t.Errorf("PRC102 on %s, want none: A's note never changed", f.Operation)
 	}
 	if want := []string{"PUT /notes/1", "DELETE /notes/1"}; !slices.Equal(sentByB, want) {
@@ -180,14 +181,14 @@ func TestPRC102DeleteNeedsA404(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	})
-	report := runOn(t, vulnapiSpec, handler, Options{})
-	for _, f := range report.Findings {
+	rep := runOn(t, vulnapiSpec, handler, Options{})
+	for _, f := range rep.Findings {
 		if f.Operation == "DELETE /notes/{id}" {
 			t.Errorf("PRC102 on DELETE after a 429, want a note")
 		}
 	}
-	if !slices.ContainsFunc(report.Notes, func(n lint.Note) bool { return strings.Contains(n.Message, "A's read got 429") }) {
-		t.Errorf("notes = %v, want one saying A's read got 429", report.Notes)
+	if !slices.ContainsFunc(rep.Notes, func(n report.Note) bool { return strings.Contains(n.Message, "A's read got 429") }) {
+		t.Errorf("notes = %v, want one saying A's read got 429", rep.Notes)
 	}
 }
 
@@ -214,9 +215,9 @@ func TestEvidenceNeverHoldsPartOfAToken(t *testing.T) {
 }
 
 func TestRunFillsTheAuthorizationMatrix(t *testing.T) {
-	report, _ := runAgainst(t, false)
+	rep, _ := runAgainst(t, false)
 	var got []string
-	for _, row := range report.Matrix {
+	for _, row := range rep.Matrix {
 		got = append(got, fmt.Sprintf("%s A=%s %d B=%s %d anon=%s %d", row.Operation,
 			row.A.Outcome, row.A.Status, row.B.Outcome, row.B.Status, row.Anonymous.Outcome, row.Anonymous.Status))
 	}
@@ -239,12 +240,12 @@ func TestRunFillsTheAuthorizationMatrix(t *testing.T) {
 // object holding the example; B's checks run first, so PRC102 is still
 // found (the malformed pass runs after every write's B check).
 func TestMalformedWritesNeverHidePRC102(t *testing.T) {
-	report := runOn(t, "../../testdata/specs/runtime-notes-title-only.yaml", vulnapi.New(false), Options{})
-	if !slices.ContainsFunc(report.Findings, func(f lint.Finding) bool { return f.Rule.ID == "PRC102" && f.Operation == "PUT /notes/{id}" }) {
-		t.Errorf("findings %v, want PRC102 on PUT /notes/{id}", report.Findings)
+	rep := runOn(t, "../../testdata/specs/runtime-notes-title-only.yaml", vulnapi.New(false), Options{})
+	if !slices.ContainsFunc(rep.Findings, func(f report.Finding) bool { return f.Rule.ID == "PRC102" && f.Operation == "PUT /notes/{id}" }) {
+		t.Errorf("findings %v, want PRC102 on PUT /notes/{id}", rep.Findings)
 	}
 	// What was sent is in the evidence: each mutation tells itself apart.
-	for _, f := range report.Findings {
+	for _, f := range rep.Findings {
 		if f.Rule.ID == "PRC104" {
 			for _, e := range f.Evidence {
 				if e.Sent == "" {
@@ -260,31 +261,31 @@ func TestMalformedWritesNeverHidePRC102(t *testing.T) {
 func TestRunOverHTTPS(t *testing.T) {
 	srv := httptest.NewTLSServer(vulnapi.New(true))
 	defer srv.Close()
-	report, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB})
+	rep, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: srv.URL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(report.Findings) != 0 || len(report.Notes) != 0 {
-		t.Errorf("findings %v, notes %v; want none", report.Findings, report.Notes)
+	if len(rep.Findings) != 0 || len(rep.Notes) != 0 {
+		t.Errorf("findings %v, notes %v; want none", rep.Findings, rep.Notes)
 	}
 }
 
 func TestRunWithABaseSpecTestsOnlyChangedOperations(t *testing.T) {
-	report := runOn(t, vulnapiSpec, vulnapi.New(false), Options{BaseSpec: "../../testdata/specs/runtime-notes-base.yaml"})
-	got := findingKeys(report)
+	rep := runOn(t, vulnapiSpec, vulnapi.New(false), Options{BaseSpec: "../../testdata/specs/runtime-notes-base.yaml"})
+	got := findingKeys(rep)
 	// GET /notes (PRC101), GET and DELETE /notes/{id} did not change.
 	want := []string{"PRC103 POST /notes", "PRC104 POST /notes", "PRC102 PUT /notes/{id}", "PRC103 PUT /notes/{id}", "PRC104 PUT /notes/{id}"}
 	if !slices.Equal(got, want) {
 		t.Errorf("findings %q, want %q", got, want)
 	}
 	skipped := 0
-	for _, row := range report.Matrix {
-		if row.Anonymous.Outcome == lint.Unchanged {
+	for _, row := range rep.Matrix {
+		if row.Anonymous.Outcome == report.Unchanged {
 			skipped++
 		}
 	}
-	if skipped != 5 || !slices.ContainsFunc(report.Notes, func(n lint.Note) bool { return strings.Contains(n.Message, "5 of 8 operations unchanged") }) {
-		t.Errorf("skipped rows %d, notes %v; want 5 and the unchanged note", skipped, report.Notes)
+	if skipped != 5 || !slices.ContainsFunc(rep.Notes, func(n report.Note) bool { return strings.Contains(n.Message, "5 of 8 operations unchanged") }) {
+		t.Errorf("skipped rows %d, notes %v; want 5 and the unchanged note", skipped, rep.Notes)
 	}
 }
 
@@ -329,9 +330,9 @@ func TestLessonsFromVAmPI(t *testing.T) {
 			w.WriteHeader(http.StatusCreated)
 		}
 	})
-	report := runOn(t, "../../testdata/specs/runtime-vampi-like.yaml", handler,
+	rep := runOn(t, "../../testdata/specs/runtime-vampi-like.yaml", handler,
 		Options{Timeout: 300 * time.Millisecond, Skip: []string{"GET /reset"}})
-	got := findingKeys(report)
+	got := findingKeys(rep)
 	if want := []string{"PRC102 GET /books/{title}", "PRC103 POST /comments"}; !slices.Equal(got, want) {
 		t.Errorf("findings %q, want %q", got, want)
 	}
@@ -339,8 +340,8 @@ func TestLessonsFromVAmPI(t *testing.T) {
 		t.Error("GET /reset was called, though listed in Skip")
 	}
 	for _, want := range []string{"PUT /users/{username}/password: not confirmed", "GET /reset not called"} {
-		if !slices.ContainsFunc(report.Notes, func(n lint.Note) bool { return strings.Contains(n.Message, want) }) {
-			t.Errorf("no note %q in %v", want, report.Notes)
+		if !slices.ContainsFunc(rep.Notes, func(n report.Note) bool { return strings.Contains(n.Message, want) }) {
+			t.Errorf("no note %q in %v", want, rep.Notes)
 		}
 	}
 }
@@ -382,16 +383,16 @@ func TestNoPRC102OnObjectsEveryoneMayRead(t *testing.T) {
 					w.WriteHeader(http.StatusNotFound)
 				}
 			})
-			report := runOn(t, vulnapiSpec, handler, Options{})
-			for _, f := range findingsOf(report, "PRC102") {
+			rep := runOn(t, vulnapiSpec, handler, Options{})
+			for _, f := range findingsOf(rep, "PRC102") {
 				t.Errorf("PRC102 on %s: %+v", f.Operation, f.Evidence)
 			}
 			// A's note was found by A's name in GET /me, not by order: B's
 			// test ran on note 1.
-			if !slices.ContainsFunc(report.Matrix, func(row lint.MatrixRow) bool {
-				return row.Operation == "GET /notes/{id}" && row.B.Outcome == lint.Allowed
+			if !slices.ContainsFunc(rep.Matrix, func(row report.MatrixRow) bool {
+				return row.Operation == "GET /notes/{id}" && row.B.Outcome == report.Allowed
 			}) {
-				t.Errorf("B was not tested on A's note: %+v", report.Matrix)
+				t.Errorf("B was not tested on A's note: %+v", rep.Matrix)
 			}
 		})
 	}
@@ -400,13 +401,13 @@ func TestNoPRC102OnObjectsEveryoneMayRead(t *testing.T) {
 // A write that needs a body the spec gives no example for is never dropped
 // silently: a note says why it was not tested.
 func TestWriteWithoutAnExampleGetsANote(t *testing.T) {
-	report := runOn(t, "../../testdata/specs/runtime-notes-no-example.yaml", vulnapi.New(true), Options{})
+	rep := runOn(t, "../../testdata/specs/runtime-notes-no-example.yaml", vulnapi.New(true), Options{})
 	for _, want := range []string{
 		"POST /notes: malformed input not tested: it needs a request body",
 		"PUT /notes/{id}: not tested as B: it needs a request body",
 	} {
-		if !slices.ContainsFunc(report.Notes, func(n lint.Note) bool { return strings.HasPrefix(n.Message, want) }) {
-			t.Errorf("no note %q in %v", want, report.Notes)
+		if !slices.ContainsFunc(rep.Notes, func(n report.Note) bool { return strings.HasPrefix(n.Message, want) }) {
+			t.Errorf("no note %q in %v", want, rep.Notes)
 		}
 	}
 }

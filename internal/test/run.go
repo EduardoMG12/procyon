@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/report"
 )
 
 // Options control a runtime test.
@@ -21,7 +22,7 @@ type Options struct {
 	// private address.
 	BaseURL string
 	// FailOn and RefRoot work as in a lint.
-	FailOn  lint.Severity
+	FailOn  report.Severity
 	RefRoot string
 	// Timeout is how long one request may take. Zero means defaultTimeout.
 	Timeout time.Duration
@@ -72,34 +73,34 @@ const (
 // Deletes come last so a destructive request never removes what a later
 // one needs, and malformed bodies come after B's writes so an accepted one
 // never hides what B could do to A's object.
-func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error) {
+func Run(ctx context.Context, specPath string, opts Options) (report.Report, error) {
 	if err := needAccounts(opts); err != nil {
-		return lint.Report{}, err
+		return report.Report{}, err
 	}
 	spec, changed, baseNote, err := loadSpecs(specPath, opts)
 	if err != nil {
-		return lint.Report{}, err
+		return report.Report{}, err
 	}
 	target, err := checkTarget(ctx, opts.BaseURL, lookupHost)
 	if err != nil {
-		return lint.Report{}, err
+		return report.Report{}, err
 	}
 	timeout := cmp.Or(opts.Timeout, defaultTimeout)
 	r := &runner{client: newClient(target, timeout, cmp.Or(opts.Budget, defaultBudget)), target: target}
-	res := &results{root: lint.Location{File: specPath, Line: 1, Column: 1}}
+	res := &results{root: report.Location{File: specPath, Line: 1, Column: 1}}
 
 	// TLS first: a server that speaks only an old protocol is reported
 	// before anything else can fail on it.
 	res.tls(ctx, target, timeout)
 	a, b, err := r.signIn(ctx, spec, opts)
 	if err != nil {
-		return lint.Report{}, err
+		return report.Report{}, err
 	}
 	ops := inTestOrder(spec.Operations())
 	r.skip = res.skipSet(ops, opts.Skip)
 	ofA, ofB, err := r.discoverAccounts(ctx, ops, a, b, opts.IDs)
 	if err != nil {
-		return lint.Report{}, err
+		return report.Report{}, err
 	}
 
 	s := &session{runner: r, res: res, ofA: ofA, ofB: ofB, a: a, b: b, changed: changed, readers: readers(ops)}
@@ -109,12 +110,12 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 	}
 	for _, op := range ops[:firstDelete] {
 		if err := s.testOperation(ctx, op); err != nil {
-			return lint.Report{}, err
+			return report.Report{}, err
 		}
 	}
 	noAnswer, err := s.malformedPass(ctx)
 	if err != nil {
-		return lint.Report{}, err
+		return report.Report{}, err
 	}
 	for _, op := range ops[firstDelete:] {
 		if noAnswer {
@@ -122,7 +123,7 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 			continue
 		}
 		if err := s.testOperation(ctx, op); err != nil {
-			return lint.Report{}, err
+			return report.Report{}, err
 		}
 	}
 
@@ -130,23 +131,23 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 	if s.unchanged > 0 {
 		res.note(res.root, fmt.Sprintf("%d of %d operations unchanged since %s, not tested", s.unchanged, len(ops), opts.BaseSpec))
 	}
-	report := spec.Finish(res.findings, res.notes, lint.Options{FailOn: opts.FailOn})
-	report.Matrix = res.matrix
-	return report, nil
+	rep := spec.Finish(res.findings, res.notes, lint.Options{FailOn: opts.FailOn})
+	rep.Matrix = res.matrix
+	return rep, nil
 }
 
 // results collects what a run reports.
 type results struct {
-	root     lint.Location // the spec's first line, for notes about the whole run
-	findings []lint.Finding
-	notes    []lint.Note
-	matrix   []lint.MatrixRow
+	root     report.Location // the spec's first line, for notes about the whole run
+	findings []report.Finding
+	notes    []report.Note
+	matrix   []report.MatrixRow
 }
 
 // note adds a note, unless message is empty.
-func (res *results) note(where lint.Location, message string) {
+func (res *results) note(where report.Location, message string) {
 	if message != "" {
-		res.notes = append(res.notes, lint.Note{Location: where, Message: message})
+		res.notes = append(res.notes, report.Note{Location: where, Message: message})
 	}
 }
 
@@ -273,31 +274,31 @@ type session struct {
 	unchanged int
 }
 
-var skipped = lint.Cell{Outcome: lint.Skipped}
+var skipped = report.Cell{Outcome: report.Skipped}
 
 // testOperation tests one operation: anonymously (PRC101), then as B on
 // A's object (PRC102), and queues a write for the malformed pass. Each ends
 // as a row of the matrix.
 func (s *session) testOperation(ctx context.Context, op lint.Operation) error {
 	key := op.Key()
-	row := lint.MatrixRow{Operation: key, A: s.ofA.cells[key]}
+	row := report.MatrixRow{Operation: key, A: s.ofA.cells[key]}
 	switch {
 	case s.skip[key]:
 		s.res.note(op.Location, key+" not called: listed under test.skip")
-		s.res.matrix = append(s.res.matrix, lint.MatrixRow{Operation: key, A: skipped, B: skipped, Anonymous: skipped})
+		s.res.matrix = append(s.res.matrix, report.MatrixRow{Operation: key, A: skipped, B: skipped, Anonymous: skipped})
 		return nil
 	case s.changed != nil && !s.changed[key]:
 		// Still read as A during discovery, to find IDs for the changed
 		// operations; just not tested.
 		s.unchanged++
-		row.B, row.Anonymous = lint.Cell{Outcome: lint.Unchanged}, lint.Cell{Outcome: lint.Unchanged}
+		row.B, row.Anonymous = report.Cell{Outcome: report.Unchanged}, report.Cell{Outcome: report.Unchanged}
 		s.res.matrix = append(s.res.matrix, row)
 		return nil
 	}
 	f, err := s.ofA.fill(op.Path)
 	if err != nil {
 		s.res.note(op.Location, fmt.Sprintf("%s not tested: %v in A's responses; declare one under test.ids in .procyon.yaml", key, err))
-		s.res.matrix = append(s.res.matrix, lint.MatrixRow{Operation: key, A: skipped, B: skipped, Anonymous: skipped})
+		s.res.matrix = append(s.res.matrix, report.MatrixRow{Operation: key, A: skipped, B: skipped, Anonymous: skipped})
 		return nil
 	}
 	if row.Anonymous, err = s.anonymous(ctx, op, f.path); err != nil {
@@ -316,13 +317,13 @@ func (s *session) testOperation(ctx context.Context, op lint.Operation) error {
 // anonymous calls op with no credentials. Only an operation the spec
 // protects can be reached by mistake (PRC101); one it leaves open is
 // PRC001's business. Public operations are not called.
-func (s *session) anonymous(ctx context.Context, op lint.Operation, path string) (lint.Cell, error) {
+func (s *session) anonymous(ctx context.Context, op lint.Operation, path string) (report.Cell, error) {
 	if op.Public {
-		return lint.Cell{Outcome: lint.Public}, nil
+		return report.Cell{Outcome: report.Public}, nil
 	}
 	exchange, err := s.send(ctx, op, path, anonymous)
 	if err != nil {
-		return lint.Cell{}, err
+		return report.Cell{}, err
 	}
 	reached := success(exchange) && op.NeedsAuth
 	if reached {
@@ -332,7 +333,7 @@ func (s *session) anonymous(ctx context.Context, op lint.Operation, path string)
 }
 
 // asB tests B on A's object in the path (PRC102).
-func (s *session) asB(ctx context.Context, op lint.Operation, f filled) (lint.Cell, error) {
+func (s *session) asB(ctx context.Context, op lint.Operation, f filled) (report.Cell, error) {
 	if !f.own && len(unseen(f.values, s.ofB.harvest)) == 0 {
 		// Every user is shown these IDs (a public list of every book), and
 		// nothing says which object is A's: B reaching it proves nothing.
@@ -342,7 +343,7 @@ func (s *session) asB(ctx context.Context, op lint.Operation, f filled) (lint.Ce
 	}
 	v, err := s.otherAccount(ctx, op, f)
 	if err != nil {
-		return lint.Cell{}, err
+		return report.Cell{}, err
 	}
 	if v.finding != nil {
 		s.res.findings = append(s.res.findings, *v.finding)
@@ -397,19 +398,19 @@ func (s *session) malformedPass(ctx context.Context) (noAnswer bool, err error) 
 func (s *session) skipAfterHang(op lint.Operation) {
 	key := op.Key()
 	s.res.note(op.Location, key+" not tested: the server stopped answering after a malformed request")
-	s.res.matrix = append(s.res.matrix, lint.MatrixRow{Operation: key, A: s.ofA.cells[key], B: skipped, Anonymous: skipped})
+	s.res.matrix = append(s.res.matrix, report.MatrixRow{Operation: key, A: s.ofA.cells[key], B: skipped, Anonymous: skipped})
 }
 
 // cellOf is the matrix cell of a call: a finding when reached, otherwise
 // allowed or denied by its status.
-func cellOf(exchange lint.Exchange, reached bool) lint.Cell {
+func cellOf(exchange report.Exchange, reached bool) report.Cell {
 	switch {
 	case reached:
-		return lint.Cell{Outcome: lint.Reached, Status: exchange.Status}
+		return report.Cell{Outcome: report.Reached, Status: exchange.Status}
 	case success(exchange):
-		return lint.Cell{Outcome: lint.Allowed, Status: exchange.Status}
+		return report.Cell{Outcome: report.Allowed, Status: exchange.Status}
 	}
-	return lint.Cell{Outcome: lint.Denied, Status: exchange.Status}
+	return report.Cell{Outcome: report.Denied, Status: exchange.Status}
 }
 
 // requestError is a request that could not be sent or answered: its
@@ -429,8 +430,8 @@ type filledOp struct {
 }
 
 // anonymousAccess is a PRC101 finding.
-func anonymousAccess(op lint.Operation, exchange lint.Exchange) lint.Finding {
-	return lint.Finding{
+func anonymousAccess(op lint.Operation, exchange report.Exchange) report.Finding {
+	return report.Finding{
 		Rule:      lint.RuntimeRule("PRC101"),
 		Location:  op.Location,
 		Operation: op.Key(),
@@ -438,7 +439,7 @@ func anonymousAccess(op lint.Operation, exchange lint.Exchange) lint.Finding {
 			"though the spec says it needs authentication.", exchange.Status),
 		Fix: "Make the server answer 401 to requests without valid credentials on this operation. " +
 			"If it is meant to be open, mark it x-procyon-public with the reason.",
-		Evidence: []lint.Exchange{exchange},
+		Evidence: []report.Exchange{exchange},
 	}
 }
 
@@ -474,7 +475,7 @@ func identityMarks(mine, theirs *discovery) map[string]string {
 	return marks
 }
 
-func success(exchange lint.Exchange) bool {
+func success(exchange report.Exchange) bool {
 	return exchange.Status >= 200 && exchange.Status < 300
 }
 
@@ -516,13 +517,13 @@ type runner struct {
 // send calls one operation as who and records the exchange, with every
 // token masked. A request that cannot be sent at all (the API is down, the
 // budget is used up) stops the run: its findings would be incomplete.
-func (r *runner) send(ctx context.Context, op lint.Operation, path string, who caller) (lint.Exchange, error) {
+func (r *runner) send(ctx context.Context, op lint.Operation, path string, who caller) (report.Exchange, error) {
 	exchange, _, err := r.sendFull(ctx, op, path, who)
 	return exchange, err
 }
 
 // sendFull is send, also returning the response body (up to maxResponse).
-func (r *runner) sendFull(ctx context.Context, op lint.Operation, path string, who caller) (lint.Exchange, []byte, error) {
+func (r *runner) sendFull(ctx context.Context, op lint.Operation, path string, who caller) (report.Exchange, []byte, error) {
 	u := *r.target
 	u.Path = strings.TrimSuffix(r.target.Path, "/") + path
 	var body io.Reader
@@ -531,7 +532,7 @@ func (r *runner) sendFull(ctx context.Context, op lint.Operation, path string, w
 	}
 	req, err := http.NewRequestWithContext(ctx, op.Method, u.String(), body)
 	if err != nil {
-		return lint.Exchange{}, nil, fmt.Errorf("%s %s: %w", op.Method, op.Path, err)
+		return report.Exchange{}, nil, fmt.Errorf("%s %s: %w", op.Method, op.Path, err)
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -540,14 +541,14 @@ func (r *runner) sendFull(ctx context.Context, op lint.Operation, path string, w
 	resp, err := r.client.do(req)
 	if err != nil {
 		// The error may quote the URL, and a query-string token with it.
-		return lint.Exchange{}, nil, &requestError{msg: fmt.Sprintf("%s %s: %s", op.Method, op.Path, mask(err.Error(), r.tokens...)), err: err}
+		return report.Exchange{}, nil, &requestError{msg: fmt.Sprintf("%s %s: %s", op.Method, op.Path, mask(err.Error(), r.tokens...)), err: err}
 	}
 	defer resp.Body.Close()
 	got, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse))
 	if err != nil {
-		return lint.Exchange{}, nil, fmt.Errorf("%s %s: reading the response: %w", op.Method, op.Path, err)
+		return report.Exchange{}, nil, fmt.Errorf("%s %s: reading the response: %w", op.Method, op.Path, err)
 	}
-	exchange := lint.Exchange{
+	exchange := report.Exchange{
 		Caller: who.name,
 		Method: op.Method,
 		URL:    mask(req.URL.RequestURI(), r.tokens...),
@@ -588,7 +589,7 @@ func (r *runner) requestURI(path string) string {
 // "saw" never comes from reading A's objects, which is the very thing being
 // tested.
 func (r *runner) discover(ctx context.Context, ops []lint.Operation, who caller, h *harvest, topLevel bool) (*discovery, error) {
-	d := &discovery{harvest: h, cells: map[string]lint.Cell{}, bodies: map[string][]byte{}}
+	d := &discovery{harvest: h, cells: map[string]report.Cell{}, bodies: map[string][]byte{}}
 	done := make([]bool, len(ops))
 	for progress := true; progress; {
 		progress = false
@@ -620,6 +621,6 @@ func (r *runner) discover(ctx context.Context, ops []lint.Operation, who caller,
 // discovery is what one caller's reads showed.
 type discovery struct {
 	*harvest
-	cells  map[string]lint.Cell // what each read got, by operation, for the matrix
-	bodies map[string][]byte    // each successful read's response body, by the path sent
+	cells  map[string]report.Cell // what each read got, by operation, for the matrix
+	bodies map[string][]byte      // each successful read's response body, by the path sent
 }

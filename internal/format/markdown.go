@@ -7,32 +7,32 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/report"
 )
 
 // Markdown writes a summary for a CI job page ($GITHUB_STEP_SUMMARY on
 // GitHub Actions): a table of counts, then findings, ignored findings and
 // notes. Text that comes from the spec (paths, operations, ignore reasons)
 // is escaped, so a spec cannot inject links, images or HTML into the page.
-func Markdown(w io.Writer, report lint.Report) error {
+func Markdown(w io.Writer, rep report.Report) error {
 	var b strings.Builder
 	verdict := "✅ passed"
-	if report.Failed {
+	if rep.Failed {
 		verdict = "❌ failed"
 	}
-	count := map[lint.Severity]int{}
-	for _, f := range report.Findings {
+	count := map[report.Severity]int{}
+	for _, f := range rep.Findings {
 		count[f.Rule.Severity]++
 	}
 	fmt.Fprintf(&b, "## Procyon: %s\n\n| Severity | Findings |\n|---|---|\n", verdict)
-	for _, s := range []lint.Severity{lint.Critical, lint.High, lint.Medium, lint.Low} {
+	for _, s := range []report.Severity{report.Critical, report.High, report.Medium, report.Low} {
 		fmt.Fprintf(&b, "| %s | %d |\n", s, count[s])
 	}
-	fmt.Fprintf(&b, "| ignored | %d |\n\nThe run fails at **%s** or above.\n", len(report.Ignored), report.FailOn)
+	fmt.Fprintf(&b, "| ignored | %d |\n\nThe run fails at **%s** or above.\n", len(rep.Ignored), rep.FailOn)
 
-	findings := slices.Clone(report.Findings)
+	findings := slices.Clone(rep.Findings)
 	// Most serious first, like the terminal; location order within each.
-	slices.SortStableFunc(findings, func(a, b lint.Finding) int {
+	slices.SortStableFunc(findings, func(a, b report.Finding) int {
 		return int(b.Rule.Severity) - int(a.Rule.Severity)
 	})
 	if len(findings) > 0 {
@@ -59,12 +59,12 @@ func Markdown(w io.Writer, report lint.Report) error {
 		}
 	}
 
-	matrix(&b, report.Matrix)
+	matrix(&b, rep.Matrix)
 
-	if len(report.Ignored) > 0 {
+	if len(rep.Ignored) > 0 {
 		b.WriteString("\n### Ignored\n\n")
 	}
-	for _, i := range report.Ignored {
+	for _, i := range rep.Ignored {
 		fmt.Fprintf(&b, "- **%s** %s", i.Finding.Rule.ID, code(markdownLocation(i.Finding.Location)))
 		if i.Finding.Operation != "" {
 			b.WriteString(" " + code(i.Finding.Operation))
@@ -75,10 +75,10 @@ func Markdown(w io.Writer, report lint.Report) error {
 		b.WriteString(": " + escape(i.Reason) + "\n")
 	}
 
-	if len(report.Notes) > 0 {
+	if len(rep.Notes) > 0 {
 		b.WriteString("\n### Notes\n\n")
 	}
-	for _, n := range report.Notes {
+	for _, n := range rep.Notes {
 		fmt.Fprintf(&b, "- %s: %s\n", code(markdownLocation(n.Location)), escape(n.Message))
 	}
 	_, err := io.WriteString(w, b.String())
@@ -87,7 +87,7 @@ func Markdown(w io.Writer, report lint.Report) error {
 
 // matrix writes a runtime test's authorization matrix: who got what from
 // each operation.
-func matrix(b *strings.Builder, rows []lint.MatrixRow) {
+func matrix(b *strings.Builder, rows []report.MatrixRow) {
 	if len(rows) == 0 {
 		return
 	}
@@ -100,11 +100,11 @@ func matrix(b *strings.Builder, rows []lint.MatrixRow) {
 }
 
 // icons draw the matrix's outcomes; NotCalled has none and is drawn "–".
-var icons = map[lint.Outcome]string{
-	lint.Allowed: "✅", lint.Denied: "🚫", lint.Reached: "❌", lint.Public: "🌐", lint.Skipped: "⏭️", lint.Unchanged: "💤",
+var icons = map[report.Outcome]string{
+	report.Allowed: "✅", report.Denied: "🚫", report.Reached: "❌", report.Public: "🌐", report.Skipped: "⏭️", report.Unchanged: "💤",
 }
 
-func cell(c lint.Cell) string {
+func cell(c report.Cell) string {
 	icon := icons[c.Outcome]
 	if icon == "" {
 		return "–"
@@ -115,7 +115,7 @@ func cell(c lint.Cell) string {
 	return icon
 }
 
-func markdownLocation(l lint.Location) string {
+func markdownLocation(l report.Location) string {
 	return fmt.Sprintf("%s:%d:%d", filepath.ToSlash(l.File), l.Line, l.Column)
 }
 

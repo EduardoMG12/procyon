@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/report"
 )
 
 // tlsProblem is one weakness of an https target's TLS, with what proves it.
@@ -117,14 +118,14 @@ func publiclySigned(chain []*x509.Certificate) bool {
 }
 
 // weakTLS is a PRC105 finding about the whole spec's target.
-func weakTLS(where lint.Location, target *url.URL, problems []tlsProblem) lint.Finding {
+func weakTLS(where report.Location, target *url.URL, problems []tlsProblem) report.Finding {
 	var whats []string
-	var evidence []lint.Exchange
+	var evidence []report.Exchange
 	for _, p := range problems {
 		whats = append(whats, p.what)
-		evidence = append(evidence, lint.Exchange{Caller: anonymous.name, Method: "TLS", URL: target.Host, Body: p.proof})
+		evidence = append(evidence, report.Exchange{Caller: anonymous.name, Method: "TLS", URL: target.Host, Body: p.proof})
 	}
-	return lint.Finding{
+	return report.Finding{
 		Rule:     lint.RuntimeRule("PRC105"),
 		Location: where,
 		Why: "The API's TLS " + strings.Join(whats, "; ") + ": a client can be pushed onto a connection " +
