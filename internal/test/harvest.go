@@ -1,7 +1,6 @@
 package test
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -55,18 +54,6 @@ func (h *harvest) add(path string, body []byte) {
 	_, isObject := v.(map[string]any)
 	h.single[path] = isObject
 	objects(v, func(o object) { h.byPath[path] = append(h.byPath[path], o) })
-}
-
-// decode parses JSON keeping numbers as written: as float64, the ID
-// 1234567890123456789 would become 1234567890123456800.
-func decode(body []byte) (any, bool) {
-	dec := json.NewDecoder(bytes.NewReader(body))
-	dec.UseNumber()
-	var v any
-	if dec.Decode(&v) != nil {
-		return nil, false
-	}
-	return v, true
 }
 
 // objects calls fn for every JSON object in v, breadth first: an object
@@ -204,18 +191,4 @@ func (h *harvest) saw(value string) bool {
 		}
 	}
 	return false
-}
-
-// shows reports whether a JSON body holds one of values in any field: the
-// response is about the object those values name.
-func shows(body []byte, values []string) bool {
-	v, ok := decode(body)
-	if !ok {
-		return false
-	}
-	found := false
-	walk(v, func(value string) {
-		found = found || slices.Contains(values, value)
-	})
-	return found
 }
