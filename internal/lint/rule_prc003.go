@@ -3,22 +3,24 @@ package lint
 import (
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/report"
+
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
 var prc003 = lintRule{
-	Rule: Rule{
+	Rule: report.Rule{
 		ID:       "PRC003",
 		Title:    "Weak authentication scheme",
-		Severity: Medium,
+		Severity: report.Medium,
 		OWASP:    "API2:2023 Broken Authentication",
 	},
 	check: checkPRC003,
 }
 
 // checkPRC003 reports API keys sent in the query string and HTTP Basic.
-func checkPRC003(doc *openapi3.T) []Finding {
-	var findings []Finding
+func checkPRC003(doc *openapi3.T) []report.Finding {
+	var findings []report.Finding
 	forEachScheme(doc, func(name string, scheme *openapi3.SecurityScheme) {
 		var why, fix string
 		switch {
@@ -31,7 +33,7 @@ func checkPRC003(doc *openapi3.T) []Finding {
 		default:
 			return
 		}
-		findings = append(findings, Finding{Location: locate(scheme.Origin), Why: why, Fix: fix, Element: scheme})
+		findings = append(findings, report.Finding{Location: locate(scheme.Origin), Why: why, Fix: fix, Element: scheme})
 	})
 	return findings
 }

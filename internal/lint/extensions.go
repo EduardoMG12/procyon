@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/report"
+
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
@@ -19,7 +21,7 @@ func publicReason(op *openapi3.Operation) string {
 
 // checkExtensions rejects malformed Procyon extensions. A typo in one must
 // never silently change what Procyon reports, so it stops the run instead.
-func checkExtensions(doc *openapi3.T, asGiven func(Location) Location) error {
+func checkExtensions(doc *openapi3.T, asGiven func(report.Location) report.Location) error {
 	var first error
 	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		if _, marked := op.Extensions[publicKey]; !marked || first != nil {

@@ -45,13 +45,13 @@ func TestCorpus(t *testing.T) {
 	})
 	var lines []string
 	for _, name := range names {
-		report, err := lint.Run(specs[name], lint.Options{})
+		rep, err := lint.Run(specs[name], lint.Options{})
 		if err != nil {
 			t.Errorf("%s: %v", name, err)
 			continue
 		}
 		counts := map[string]int{}
-		for _, f := range report.Findings {
+		for _, f := range rep.Findings {
 			counts[f.Rule.ID]++
 		}
 		if len(counts) == 0 {
@@ -107,12 +107,12 @@ func TestKnownBadSpecs(t *testing.T) {
 			if !ok {
 				t.Fatalf("expected.txt names %q, which is not in the corpus", name)
 			}
-			report, err := lint.Run(path, lint.Options{})
+			rep, err := lint.Run(path, lint.Options{})
 			if err != nil {
 				t.Fatalf("%s: %v", name, err)
 			}
 			found[name] = []string{}
-			for _, f := range report.Findings {
+			for _, f := range rep.Findings {
 				found[name] = append(found[name], fmt.Sprintf("%s %d:%d %s", f.Rule.ID, f.Location.Line, f.Location.Column, f.Operation))
 			}
 		}

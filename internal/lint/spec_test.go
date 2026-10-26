@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/EduardoMG12/procyon/internal/report"
 )
 
 func TestLoadListsOperationsInOrder(t *testing.T) {
@@ -54,12 +56,12 @@ func TestLoadRefusesWhatRunRefuses(t *testing.T) {
 // other kind's unused.
 func TestIgnoresOfLintAndRuntimeRulesStayApart(t *testing.T) {
 	path := "../../testdata/specs/runtime-ignores.yaml"
-	report, err := Run(path, Options{})
+	rep, err := Run(path, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(report.Ignored) != 1 || report.Ignored[0].Finding.Rule.ID != "PRC001" || len(report.Notes) != 0 {
-		t.Errorf("lint: ignored %v, notes %v; want PRC001 ignored and no notes", report.Ignored, report.Notes)
+	if len(rep.Ignored) != 1 || rep.Ignored[0].Finding.Rule.ID != "PRC001" || len(rep.Notes) != 0 {
+		t.Errorf("lint: ignored %v, notes %v; want PRC001 ignored and no notes", rep.Ignored, rep.Notes)
 	}
 
 	spec, err := Load(path, Options{})
@@ -67,16 +69,16 @@ func TestIgnoresOfLintAndRuntimeRulesStayApart(t *testing.T) {
 		t.Fatal(err)
 	}
 	op := spec.Operations()[0]
-	finding := Finding{Rule: RuntimeRule("PRC101"), Location: op.Location, Operation: op.Method + " " + op.Path}
-	report = spec.Finish([]Finding{finding}, nil, Options{})
-	if len(report.Findings) != 0 || len(report.Ignored) != 1 || len(report.Notes) != 0 || report.Failed {
+	finding := report.Finding{Rule: RuntimeRule("PRC101"), Location: op.Location, Operation: op.Method + " " + op.Path}
+	rep = spec.Finish([]report.Finding{finding}, nil, Options{})
+	if len(rep.Findings) != 0 || len(rep.Ignored) != 1 || len(rep.Notes) != 0 || rep.Failed {
 		t.Errorf("runtime: findings %v, ignored %v, notes %v, failed %v; want PRC101 ignored, no notes, not failed",
-			report.Findings, report.Ignored, report.Notes, report.Failed)
+			rep.Findings, rep.Ignored, rep.Notes, rep.Failed)
 	}
 
-	report = spec.Finish([]Finding{{Rule: RuntimeRule("PRC101"), Operation: "GET /other"}}, nil, Options{})
-	if len(report.Findings) != 1 || !report.Failed {
-		t.Errorf("an unignored critical finding: findings %v, failed %v; want it kept and the run failed", report.Findings, report.Failed)
+	rep = spec.Finish([]report.Finding{{Rule: RuntimeRule("PRC101"), Operation: "GET /other"}}, nil, Options{})
+	if len(rep.Findings) != 1 || !rep.Failed {
+		t.Errorf("an unignored critical finding: findings %v, failed %v; want it kept and the run failed", rep.Findings, rep.Failed)
 	}
 }
 
@@ -156,9 +158,9 @@ func TestRootIgnoreCoversARuntimeFindingAboutTheSpec(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	report := spec.Finish([]Finding{{Rule: RuntimeRule("PRC105"), Location: Location{Line: 1, Column: 1}}}, nil, Options{})
-	if len(report.Findings) != 0 || len(report.Ignored) != 1 {
-		t.Errorf("findings %v, ignored %v; want PRC105 ignored", report.Findings, report.Ignored)
+	rep := spec.Finish([]report.Finding{{Rule: RuntimeRule("PRC105"), Location: report.Location{Line: 1, Column: 1}}}, nil, Options{})
+	if len(rep.Findings) != 0 || len(rep.Ignored) != 1 {
+		t.Errorf("findings %v, ignored %v; want PRC105 ignored", rep.Findings, rep.Ignored)
 	}
 }
 

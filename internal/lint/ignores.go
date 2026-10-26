@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/EduardoMG12/procyon/internal/report"
+
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
@@ -25,7 +27,7 @@ type ignore struct {
 	operation string    // the operation it is written on, or ""
 	about     []any     // the elements it covers, when not an operation
 	where     string    // how notes name that element
-	location  Location
+	location  report.Location
 	used      bool
 }
 
@@ -38,7 +40,7 @@ func (ig *ignore) on() string {
 }
 
 // covers reports whether the ignore is written on the element f is about.
-func (ig *ignore) covers(f Finding) bool {
+func (ig *ignore) covers(f report.Finding) bool {
 	if ig.rule != f.Rule.ID {
 		return false
 	}
@@ -54,7 +56,7 @@ func (ig *ignore) covers(f Finding) bool {
 // An ignore on a security scheme also covers its OAuth2 flows. In a spec
 // converted from Swagger 2.0, an ignore at the root also covers the servers
 // (built from schemes and host, which cannot carry extensions).
-func parseIgnores(doc *openapi3.T, asGiven func(Location) Location, swagger bool) ([]*ignore, error) {
+func parseIgnores(doc *openapi3.T, asGiven func(report.Location) report.Location, swagger bool) ([]*ignore, error) {
 	var ignores []*ignore
 	var firstErr error
 	// add parses the ignores written on one element.
@@ -115,7 +117,7 @@ func parseIgnores(doc *openapi3.T, asGiven func(Location) Location, swagger bool
 	return ignores, firstErr
 }
 
-func parseIgnoreList(value any, operation string, loc Location) ([]*ignore, error) {
+func parseIgnoreList(value any, operation string, loc report.Location) ([]*ignore, error) {
 	// Errors name the operation when there is one; otherwise the location
 	// says where.
 	if value == nil {
@@ -166,14 +168,14 @@ func parseIgnoreList(value any, operation string, loc Location) ([]*ignore, erro
 }
 
 func knownRule(id string) bool {
-	isID := func(r Rule) bool { return r.ID == id }
+	isID := func(r report.Rule) bool { return r.ID == id }
 	return slices.ContainsFunc(Rules(), isID) || slices.ContainsFunc(runtimeRules, isID)
 }
 
 // applyIgnores moves the findings an ignore matches out of report.Findings
 // into report.Ignored, and adds notes for expired and unused ignores. An
 // ignore expires at the end of its date.
-func applyIgnores(report *Report, ignores []*ignore, today time.Time) {
+func applyIgnores(rep *report.Report, ignores []*ignore, today time.Time) {
 	// An ignore lasts until the end of its date where Procyon runs, so the
 	// same spec gives the same verdict all day in any time zone.
 	expired := func(ig *ignore) bool {
@@ -183,8 +185,8 @@ func applyIgnores(report *Report, ignores []*ignore, today time.Time) {
 		y, m, d := ig.until.Date()
 		return !today.Before(time.Date(y, m, d+1, 0, 0, 0, 0, today.Location()))
 	}
-	kept := report.Findings[:0]
-	for _, f := range report.Findings {
+	kept := rep.Findings[:0]
+	for _, f := range rep.Findings {
 		// A finding about a shared schema is checked operation by
 		// operation: an ignore on one covers that one only, and the finding
 		// is gone only when every operation is ignored.
@@ -198,20 +200,20 @@ func applyIgnores(report *Report, ignores []*ignore, today time.Time) {
 				continue
 			}
 			ignores[i].used = true
-			report.Ignored = append(report.Ignored, IgnoredFinding{Finding: one, Reason: ignores[i].reason, Expires: ignores[i].expires})
+			rep.Ignored = append(rep.Ignored, report.IgnoredFinding{Finding: one, Reason: ignores[i].reason, Expires: ignores[i].expires})
 		}
 		if len(left) > 0 {
 			f.Operation, f.Also = left[0], left[1:]
 			kept = append(kept, f)
 		}
 	}
-	report.Findings = kept
+	rep.Findings = kept
 	for _, ig := range ignores {
 		switch {
 		case expired(ig):
-			report.Notes = append(report.Notes, Note{Location: ig.location, Message: fmt.Sprintf("ignore of %s on %s expired on %s; its findings count again", ig.rule, ig.on(), ig.expires)})
+			rep.Notes = append(rep.Notes, report.Note{Location: ig.location, Message: fmt.Sprintf("ignore of %s on %s expired on %s; its findings count again", ig.rule, ig.on(), ig.expires)})
 		case !ig.used:
-			report.Notes = append(report.Notes, Note{Location: ig.location, Message: fmt.Sprintf("ignore of %s on %s matches no finding; remove it", ig.rule, ig.on())})
+			rep.Notes = append(rep.Notes, report.Note{Location: ig.location, Message: fmt.Sprintf("ignore of %s on %s matches no finding; remove it", ig.rule, ig.on())})
 		}
 	}
 }

@@ -2,6 +2,7 @@ package lint
 
 import (
 	"encoding/json"
+	"github.com/EduardoMG12/procyon/internal/report"
 	"maps"
 	"slices"
 	"strings"
@@ -22,7 +23,7 @@ type Spec struct {
 type Operation struct {
 	Method   string // "GET"
 	Path     string // "/orders/{id}"
-	Location Location
+	Location report.Location
 	// Public is true when the operation is marked x-procyon-public.
 	Public bool
 	// NeedsAuth is true when the spec requires credentials for it (a

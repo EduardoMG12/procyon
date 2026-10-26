@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/report"
 )
 
 // TestRules pins exactly which findings of the rules under test each
@@ -278,11 +279,11 @@ func TestRules(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.spec, func(t *testing.T) {
-			report, err := lint.Run(spec(tt.spec), lint.Options{})
+			rep, err := lint.Run(spec(tt.spec), lint.Options{})
 			if err != nil {
 				t.Fatalf("Run: %v", err)
 			}
-			got := summarize(report.Findings, tt.rules)
+			got := summarize(rep.Findings, tt.rules)
 			if !slices.Equal(got, tt.want) {
 				t.Errorf("findings:\n got  %q\n want %q", got, tt.want)
 			}
@@ -290,7 +291,7 @@ func TestRules(t *testing.T) {
 	}
 }
 
-func summarize(findings []lint.Finding, rules []string) []string {
+func summarize(findings []report.Finding, rules []string) []string {
 	out := []string{}
 	for _, f := range findings {
 		if !slices.Contains(rules, f.Rule.ID) {

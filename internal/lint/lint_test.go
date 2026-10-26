@@ -90,11 +90,11 @@ func TestRunRejectsBadInput(t *testing.T) {
 }
 
 func TestRunKeepsSourceLinesWithoutCarriageReturns(t *testing.T) {
-	report, err := lint.Run(spec("crlf.yaml"), lint.Options{})
+	rep, err := lint.Run(spec("crlf.yaml"), lint.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	lines := report.Sources[spec("crlf.yaml")]
+	lines := rep.Sources[spec("crlf.yaml")]
 	if len(lines) != 10 {
 		t.Fatalf("got %d source lines, want 10", len(lines))
 	}
@@ -108,37 +108,37 @@ func TestRunKeepsSourceLinesWithoutCarriageReturns(t *testing.T) {
 // wrote it, and it must be the key of the report's source lines.
 func TestFindingsUseThePathAsGiven(t *testing.T) {
 	path := spec("dir with space/no-auth.yaml")
-	report, err := lint.Run(path, lint.Options{})
+	rep, err := lint.Run(path, lint.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(report.Findings) != 1 {
-		t.Fatalf("got %d findings, want 1", len(report.Findings))
+	if len(rep.Findings) != 1 {
+		t.Fatalf("got %d findings, want 1", len(rep.Findings))
 	}
-	if got := report.Findings[0].Location.File; got != path {
+	if got := rep.Findings[0].Location.File; got != path {
 		t.Errorf("finding file = %q, want %q", got, path)
 	}
-	if _, ok := report.Sources[report.Findings[0].Location.File]; !ok {
-		t.Errorf("no source lines for %q", report.Findings[0].Location.File)
+	if _, ok := rep.Sources[rep.Findings[0].Location.File]; !ok {
+		t.Errorf("no source lines for %q", rep.Findings[0].Location.File)
 	}
 }
 
 func TestSpecsSplitAcrossLocalFiles(t *testing.T) {
 	path := spec("split/api.yaml")
-	report, err := lint.Run(path, lint.Options{})
+	rep, err := lint.Run(path, lint.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(report.Findings) != 1 {
-		t.Fatalf("got %d findings, want 1 (PRC001 on GET /orders)", len(report.Findings))
+	if len(rep.Findings) != 1 {
+		t.Fatalf("got %d findings, want 1 (PRC001 on GET /orders)", len(rep.Findings))
 	}
-	f := report.Findings[0]
+	f := rep.Findings[0]
 	// The operation is written in paths/orders.yaml, line 1, column 1.
 	want := filepath.Clean(spec("split/paths/orders.yaml")) // \ on Windows, like the location
 	if f.Location.File != want || f.Location.Line != 1 || f.Location.Column != 1 {
 		t.Errorf("location = %s:%d:%d, want %s:1:1", f.Location.File, f.Location.Line, f.Location.Column, want)
 	}
-	if _, ok := report.Sources[want]; !ok {
+	if _, ok := rep.Sources[want]; !ok {
 		t.Errorf("no source lines for %s, so no excerpt", want)
 	}
 }
@@ -191,15 +191,15 @@ func TestRefCannotEscapeWithAbsolutePathThroughSymlink(t *testing.T) {
 	if err := os.WriteFile(spec, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	report, err := lint.Run(spec, lint.Options{})
-	for _, lines := range report.Sources {
+	rep, err := lint.Run(spec, lint.Options{})
+	for _, lines := range rep.Sources {
 		if strings.Contains(strings.Join(lines, "\n"), "STOLEN") {
 			t.Fatal("Procyon read a file outside the spec's directory")
 		}
 	}
-	if err == nil && len(report.Findings) > 0 {
+	if err == nil && len(rep.Findings) > 0 {
 		// Reading the decoy inside the directory is fine; the stolen file is not.
-		t.Logf("read the decoy: %s", report.Findings[0].Location.File)
+		t.Logf("read the decoy: %s", rep.Findings[0].Location.File)
 	}
 }
 
@@ -431,8 +431,8 @@ func TestRefRootCannotBeWidenedThroughASymlinkInTheSpecPath(t *testing.T) {
 	}
 	spec := filepath.Join(link, "api.yaml")
 	writeSpec(t, spec, "../../../secret.yaml")
-	report, err := lint.Run(spec, lint.Options{RefRoot: refRoot})
-	for file := range report.Sources {
+	rep, err := lint.Run(spec, lint.Options{RefRoot: refRoot})
+	for file := range rep.Sources {
 		if strings.HasSuffix(file, "secret.yaml") {
 			t.Fatal("read a file outside RefRoot")
 		}

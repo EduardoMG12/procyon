@@ -8,24 +8,25 @@ import (
 	"time"
 
 	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/report"
 )
 
 // today is fixed so expiry is deterministic: after 2026-01-31.
 var today = time.Date(2026, 10, 23, 0, 0, 0, 0, time.UTC)
 
 func TestIgnores(t *testing.T) {
-	report, err := lint.Run(spec("ignores.yaml"), lint.Options{Today: today})
+	rep, err := lint.Run(spec("ignores.yaml"), lint.Options{Today: today})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var findings, ignored, notes []string
-	for _, f := range report.Findings {
+	for _, f := range rep.Findings {
 		findings = append(findings, fmt.Sprintf("%s %s", f.Rule.ID, f.Operation))
 	}
-	for _, i := range report.Ignored {
+	for _, i := range rep.Ignored {
 		ignored = append(ignored, fmt.Sprintf("%s %s: %s", i.Finding.Rule.ID, i.Finding.Operation, i.Reason))
 	}
-	for _, n := range report.Notes {
+	for _, n := range rep.Notes {
 		notes = append(notes, n.Message)
 	}
 
@@ -51,7 +52,7 @@ func TestIgnores(t *testing.T) {
 			t.Errorf("ignored %q: missing %q", ignored, w)
 		}
 	}
-	for _, f := range report.Findings {
+	for _, f := range rep.Findings {
 		if f.Operation == "GET /health" {
 			t.Errorf("finding %s %s should be ignored", f.Rule.ID, f.Operation)
 		}
@@ -70,23 +71,23 @@ func TestIgnores(t *testing.T) {
 // Ignored findings never fail the run: whether it fails depends only on
 // the findings left, even when ignored ones are high.
 func TestIgnoredFindingsDoNotFail(t *testing.T) {
-	report, err := lint.Run(spec("ignores.yaml"), lint.Options{Today: today})
+	rep, err := lint.Run(spec("ignores.yaml"), lint.Options{Today: today})
 	if err != nil {
 		t.Fatal(err)
 	}
-	highIgnored := slices.ContainsFunc(report.Ignored, func(i lint.IgnoredFinding) bool { return i.Finding.Rule.Severity >= lint.High })
+	highIgnored := slices.ContainsFunc(rep.Ignored, func(i report.IgnoredFinding) bool { return i.Finding.Rule.Severity >= report.High })
 	if !highIgnored {
 		t.Fatal("fixture should ignore at least one high finding")
 	}
-	highLeft := slices.ContainsFunc(report.Findings, func(f lint.Finding) bool { return f.Rule.Severity >= lint.High })
-	if report.Failed != highLeft {
-		t.Errorf("Failed = %v, want %v (only findings left decide)", report.Failed, highLeft)
+	highLeft := slices.ContainsFunc(rep.Findings, func(f report.Finding) bool { return f.Rule.Severity >= report.High })
+	if rep.Failed != highLeft {
+		t.Errorf("Failed = %v, want %v (only findings left decide)", rep.Failed, highLeft)
 	}
-	report, err = lint.Run(spec("ignores.yaml"), lint.Options{Today: today, FailOn: lint.Critical})
+	rep, err = lint.Run(spec("ignores.yaml"), lint.Options{Today: today, FailOn: report.Critical})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.Failed {
+	if rep.Failed {
 		t.Error("nothing is critical, yet the run failed")
 	}
 }
@@ -105,11 +106,11 @@ func TestIgnoreExpiresAtTheEndOfTheDayInAnyTimeZone(t *testing.T) {
 		{time.Date(2026, 2, 1, 0, 0, 0, 0, saoPaulo), true},
 		{time.Date(2026, 2, 1, 8, 0, 0, 0, tokyo), true}, // the 1st locally
 	} {
-		report, err := lint.Run(spec("ignores.yaml"), lint.Options{Today: tc.now})
+		rep, err := lint.Run(spec("ignores.yaml"), lint.Options{Today: tc.now})
 		if err != nil {
 			t.Fatal(err)
 		}
-		expired := slices.ContainsFunc(report.Notes, func(n lint.Note) bool { return strings.Contains(n.Message, "expired") })
+		expired := slices.ContainsFunc(rep.Notes, func(n report.Note) bool { return strings.Contains(n.Message, "expired") })
 		if expired != tc.expired {
 			t.Errorf("at %s: expired = %v, want %v", tc.now, expired, tc.expired)
 		}
@@ -120,17 +121,17 @@ func TestIgnoreExpiresAtTheEndOfTheDayInAnyTimeZone(t *testing.T) {
 // visit first: that operation's finding is ignored, the other's is still
 // reported, and the ignore is not reported as unused.
 func TestIgnoreOnOneOperationOfASharedSchema(t *testing.T) {
-	report, err := lint.Run(spec("prc009-shared-ignore-second.yaml"), lint.Options{Today: today})
+	rep, err := lint.Run(spec("prc009-shared-ignore-second.yaml"), lint.Options{Today: today})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var findings, ignored []string
-	for _, f := range report.Findings {
+	for _, f := range rep.Findings {
 		if f.Rule.ID == "PRC009" {
 			findings = append(findings, fmt.Sprintf("%s %s", f.Rule.ID, f.Operation))
 		}
 	}
-	for _, i := range report.Ignored {
+	for _, i := range rep.Ignored {
 		ignored = append(ignored, fmt.Sprintf("%s %s", i.Finding.Rule.ID, i.Finding.Operation))
 	}
 	if want := []string{"PRC009 POST /admin/users"}; !slices.Equal(findings, want) {
@@ -139,7 +140,7 @@ func TestIgnoreOnOneOperationOfASharedSchema(t *testing.T) {
 	if want := []string{"PRC009 POST /register"}; !slices.Equal(ignored, want) {
 		t.Errorf("ignored = %q, want %q", ignored, want)
 	}
-	for _, n := range report.Notes {
+	for _, n := range rep.Notes {
 		t.Errorf("unexpected note: %s", n.Message)
 	}
 }

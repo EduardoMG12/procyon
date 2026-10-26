@@ -4,19 +4,21 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/report"
+
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
 // lintRule is one lint rule: what reports show about it, and its check.
 type lintRule struct {
-	Rule
+	report.Rule
 	// check returns the rule's findings; the engine fills in Finding.Rule.
-	check func(doc *openapi3.T) []Finding
+	check func(doc *openapi3.T) []report.Finding
 }
 
 // Rules returns every lint rule, in ID order.
-func Rules() []Rule {
-	out := make([]Rule, len(rules))
+func Rules() []report.Rule {
+	out := make([]report.Rule, len(rules))
 	for i, r := range rules {
 		out[i] = r.Rule
 	}
@@ -27,19 +29,19 @@ func Rules() []Rule {
 var rules = []lintRule{prc001, prc002, prc003, prc004, prc005, prc006, prc007, prc008, prc009, prc010, prc011}
 
 var prc001 = lintRule{
-	Rule: Rule{
+	Rule: report.Rule{
 		ID:       "PRC001",
 		Title:    "Operation has no authentication",
-		Severity: High,
+		Severity: report.High,
 		OWASP:    "API2:2023 Broken Authentication",
 	},
-	check: func(doc *openapi3.T) []Finding {
-		var findings []Finding
+	check: func(doc *openapi3.T) []report.Finding {
+		var findings []report.Finding
 		forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 			if !unauthenticated(doc, path, op) || publicReason(op) != "" {
 				return
 			}
-			findings = append(findings, Finding{
+			findings = append(findings, report.Finding{
 				Location:  locate(op.Origin),
 				Operation: method + " " + path,
 				Why:       "Anyone who can reach the API can call this operation, without proving who they are.",
@@ -139,19 +141,19 @@ func forEachOperation(doc *openapi3.T, fn func(method, path string, op *openapi3
 }
 
 // locate turns kin-openapi's origin of an element into a Location.
-func locate(origin *openapi3.Origin) Location {
+func locate(origin *openapi3.Origin) report.Location {
 	if origin == nil || origin.Key == nil {
-		return Location{}
+		return report.Location{}
 	}
-	return Location{File: origin.Key.File, Line: origin.Key.Line, Column: origin.Key.Column}
+	return report.Location{File: origin.Key.File, Line: origin.Key.Line, Column: origin.Key.Column}
 }
 
 // locateField points at one field of an element (the url of a server), or at
 // the element itself when the field has no recorded location.
-func locateField(origin *openapi3.Origin, field string) Location {
+func locateField(origin *openapi3.Origin, field string) report.Location {
 	if origin != nil {
 		if loc, ok := origin.Fields.Lookup(field); ok {
-			return Location{File: loc.File, Line: loc.Line, Column: loc.Column}
+			return report.Location{File: loc.File, Line: loc.Line, Column: loc.Column}
 		}
 	}
 	return locate(origin)
@@ -162,11 +164,11 @@ func locateField(origin *openapi3.Origin, field string) Location {
 // one finding at that place, listing every operation that reaches it, so an
 // ignore on one of them covers only that one (see applyIgnores).
 type onePerPlace struct {
-	findings []Finding
-	at       map[Location]int // place -> index in findings
+	findings []report.Finding
+	at       map[report.Location]int // place -> index in findings
 }
 
-func (p *onePerPlace) add(f Finding) {
+func (p *onePerPlace) add(f report.Finding) {
 	if i, ok := p.at[f.Location]; ok {
 		g := &p.findings[i]
 		// Operations are visited one after another, so a repeat (the same
@@ -181,7 +183,7 @@ func (p *onePerPlace) add(f Finding) {
 		return
 	}
 	if p.at == nil {
-		p.at = map[Location]int{}
+		p.at = map[report.Location]int{}
 	}
 	p.at[f.Location] = len(p.findings)
 	p.findings = append(p.findings, f)

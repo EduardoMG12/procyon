@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/EduardoMG12/procyon/internal/report"
+
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/goccy/go-yaml"
 	"github.com/goccy/go-yaml/ast"
@@ -23,7 +25,7 @@ import (
 type Options struct {
 	// FailOn is the fail threshold: the lowest severity that fails the run.
 	// Zero means the default, High.
-	FailOn Severity
+	FailOn report.Severity
 	// RefRoot is the directory $refs may read files from. Empty means the
 	// spec's own directory. A monorepo whose specs share files from a
 	// sibling folder sets it to the repository root. It must contain the
@@ -34,19 +36,19 @@ type Options struct {
 }
 
 // Run lints the spec at path.
-func Run(path string, opts Options) (Report, error) {
+func Run(path string, opts Options) (report.Report, error) {
 	doc, files, err := load(path, opts)
 	if err != nil {
-		return Report{}, err
+		return report.Report{}, err
 	}
-	report := Report{FailOn: opts.FailOn, Sources: files.lines}
-	if report.FailOn == 0 {
-		report.FailOn = High
+	rep := report.Report{FailOn: opts.FailOn, Sources: files.lines}
+	if rep.FailOn == 0 {
+		rep.FailOn = report.High
 	}
 	asGiven := files.asGiven
 	ignores, err := parseIgnores(doc, asGiven, files.back != nil)
 	if err != nil {
-		return Report{}, err
+		return report.Report{}, err
 	}
 	// Identical findings are one finding: a converted Swagger 2.0 spec copies
 	// an element once per media type. Findings that differ only in their
@@ -62,18 +64,18 @@ func Run(path string, opts Options) (Report, error) {
 				continue
 			}
 			seen[key] = true
-			report.Findings = append(report.Findings, f)
+			rep.Findings = append(rep.Findings, f)
 		}
 	}
 	// Same spec, same report, same order: sort by where findings point.
-	sortFindings(report.Findings)
+	sortFindings(rep.Findings)
 	today := opts.Today
 	if today.IsZero() {
 		today = time.Now()
 	}
-	applyIgnores(&report, ignoresOf(ignores, Rules()), today)
-	report.Failed = failed(report)
-	return report, nil
+	applyIgnores(&rep, ignoresOf(ignores, Rules()), today)
+	rep.Failed = failed(rep)
+	return rep, nil
 }
 
 // load reads the spec at path, recording the file, line and column of every
