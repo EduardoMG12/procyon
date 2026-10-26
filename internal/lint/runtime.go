@@ -62,43 +62,6 @@ func RuntimeRule(id string) Rule {
 	return runtimeRules[i]
 }
 
-// Exchange is one request a runtime test sent and what it got: the
-// evidence behind a runtime finding. Credentials never appear in it.
-type Exchange struct {
-	Caller string // "anonymous", "A" or "B"
-	Method string
-	URL    string // the path and query, as sent: "/notes/1"
-	Status int    // 0 when the request got no answer within the timeout
-	Body   string // the start of the response body
-	Sent   string // the start of the request body, when there was one
-}
-
-// MatrixRow is one operation of a runtime test's authorization matrix:
-// what each caller got from it.
-type MatrixRow struct {
-	Operation       string // "GET /notes/{id}"
-	A, B, Anonymous Cell
-}
-
-// Cell is what one caller got from one operation.
-type Cell struct {
-	Outcome Outcome
-	Status  int // the HTTP status, when the operation was called
-}
-
-// Outcome is how a call ended, for the authorization matrix.
-type Outcome string
-
-const (
-	NotCalled Outcome = ""          // this caller is not tested on this operation
-	Allowed   Outcome = "allowed"   // a 2xx, as expected
-	Denied    Outcome = "denied"    // not a 2xx
-	Reached   Outcome = "finding"   // a 2xx that is a finding (PRC101, PRC102)
-	Public    Outcome = "public"    // x-procyon-public, not called anonymously
-	Skipped   Outcome = "skipped"   // could not be called; a note says why
-	Unchanged Outcome = "unchanged" // not tested: unchanged since --base-spec
-)
-
 // Finish turns the findings and notes of a runtime test of this spec into a
 // report, the way Run does for a lint: sorted, with the spec's ignores of
 // runtime rules applied and the fail threshold checked.
@@ -106,8 +69,8 @@ func (s *Spec) Finish(findings []Finding, notes []Note, opts Options) Report {
 	// A finding about no operation (PRC105, the target's TLS) is about the
 	// spec as a whole: an ignore at the spec's root covers it.
 	for i := range findings {
-		if findings[i].Operation == "" && findings[i].about == nil {
-			findings[i].about = s.doc
+		if findings[i].Operation == "" && findings[i].Element == nil {
+			findings[i].Element = s.doc
 		}
 	}
 	report := Report{FailOn: cmp.Or(opts.FailOn, High), Sources: s.files.lines, Findings: findings}

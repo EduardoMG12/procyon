@@ -8,12 +8,14 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-var prc010 = Rule{
-	ID:       "PRC010",
-	Title:    "Admin operation uses only the default security",
-	Severity: Medium,
-	OWASP:    "API5:2023 Broken Function Level Authorization",
-	check:    checkPRC010,
+var prc010 = lintRule{
+	Rule: Rule{
+		ID:       "PRC010",
+		Title:    "Admin operation uses only the default security",
+		Severity: Medium,
+		OWASP:    "API5:2023 Broken Function Level Authorization",
+	},
+	check: checkPRC010,
 }
 
 // adminWords are path words that mark an operation as administrative.

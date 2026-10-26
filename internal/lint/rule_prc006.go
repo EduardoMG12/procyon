@@ -7,12 +7,14 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-var prc006 = Rule{
-	ID:       "PRC006",
-	Title:    "Personal data returned without authentication",
-	Severity: High,
-	OWASP:    "API3:2023 Broken Object Property Level Authorization",
-	check:    checkPRC006,
+var prc006 = lintRule{
+	Rule: Rule{
+		ID:       "PRC006",
+		Title:    "Personal data returned without authentication",
+		Severity: High,
+		OWASP:    "API3:2023 Broken Object Property Level Authorization",
+	},
+	check: checkPRC006,
 }
 
 // checkPRC006 reports personal data in what a GET returns to anyone: no

@@ -9,12 +9,14 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-var prc004 = Rule{
-	ID:       "PRC004",
-	Title:    "Server URL does not use TLS",
-	Severity: High,
-	OWASP:    "API8:2023 Security Misconfiguration",
-	check:    checkPRC004,
+var prc004 = lintRule{
+	Rule: Rule{
+		ID:       "PRC004",
+		Title:    "Server URL does not use TLS",
+		Severity: High,
+		OWASP:    "API8:2023 Security Misconfiguration",
+	},
+	check: checkPRC004,
 }
 
 // checkPRC004 reports http:// server URLs at every level a spec can declare
@@ -28,7 +30,7 @@ func checkPRC004(doc *openapi3.T) []Finding {
 		findings = append(findings, Finding{
 			Location:  locateField(server.Origin, "url"),
 			Operation: operation,
-			about:     server,
+			Element:   server,
 			Why:       "Requests to this server travel unencrypted, credentials and tokens included: anyone on the network path can read or change them.",
 			Fix:       "Use an https:// URL. Local development servers (localhost, 127.0.0.1, [::1]) are exempt.",
 		})

@@ -8,12 +8,14 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-var prc007 = Rule{
-	ID:       "PRC007",
-	Title:    "Object addressed by ID without authentication",
-	Severity: High,
-	OWASP:    "API1:2023 Broken Object Level Authorization",
-	check:    checkPRC007,
+var prc007 = lintRule{
+	Rule: Rule{
+		ID:       "PRC007",
+		Title:    "Object addressed by ID without authentication",
+		Severity: High,
+		OWASP:    "API1:2023 Broken Object Level Authorization",
+	},
+	check: checkPRC007,
 }
 
 // identifierWords, as the last word of a path parameter's name, mean it

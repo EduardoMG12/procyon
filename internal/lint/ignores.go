@@ -16,21 +16,6 @@ import (
 // the element it is written on.
 const ignoreKey = "x-procyon-ignore"
 
-// IgnoredFinding is a finding an ignore matched. It is still reported, and
-// never fails the run.
-type IgnoredFinding struct {
-	Finding Finding
-	Reason  string
-	Expires string // "2027-01-31", or "" for never
-}
-
-// Note is something a run wants the reader to know that is not a finding: an
-// ignore that expired, or one that matches nothing. Notes never fail a run.
-type Note struct {
-	Location Location
-	Message  string
-}
-
 // ignore is one parsed x-procyon-ignore entry.
 type ignore struct {
 	rule      string
@@ -60,7 +45,7 @@ func (ig *ignore) covers(f Finding) bool {
 	if ig.operation != "" {
 		return ig.operation == f.Operation
 	}
-	return f.about != nil && slices.Contains(ig.about, f.about)
+	return f.Element != nil && slices.Contains(ig.about, f.Element)
 }
 
 // parseIgnores reads every x-procyon-ignore in the spec. A malformed entry
@@ -182,7 +167,7 @@ func parseIgnoreList(value any, operation string, loc Location) ([]*ignore, erro
 
 func knownRule(id string) bool {
 	isID := func(r Rule) bool { return r.ID == id }
-	return slices.ContainsFunc(rules, isID) || slices.ContainsFunc(runtimeRules, isID)
+	return slices.ContainsFunc(Rules(), isID) || slices.ContainsFunc(runtimeRules, isID)
 }
 
 // applyIgnores moves the findings an ignore matches out of report.Findings
@@ -204,9 +189,9 @@ func applyIgnores(report *Report, ignores []*ignore, today time.Time) {
 		// operation: an ignore on one covers that one only, and the finding
 		// is gone only when every operation is ignored.
 		var left []string
-		for _, op := range append([]string{f.Operation}, f.also...) {
+		for _, op := range append([]string{f.Operation}, f.Also...) {
 			one := f
-			one.Operation, one.also = op, nil
+			one.Operation, one.Also = op, nil
 			i := slices.IndexFunc(ignores, func(ig *ignore) bool { return ig.covers(one) && !expired(ig) })
 			if i < 0 {
 				left = append(left, op)
@@ -216,7 +201,7 @@ func applyIgnores(report *Report, ignores []*ignore, today time.Time) {
 			report.Ignored = append(report.Ignored, IgnoredFinding{Finding: one, Reason: ignores[i].reason, Expires: ignores[i].expires})
 		}
 		if len(left) > 0 {
-			f.Operation, f.also = left[0], left[1:]
+			f.Operation, f.Also = left[0], left[1:]
 			kept = append(kept, f)
 		}
 	}
@@ -224,11 +209,9 @@ func applyIgnores(report *Report, ignores []*ignore, today time.Time) {
 	for _, ig := range ignores {
 		switch {
 		case expired(ig):
-			report.Notes = append(report.Notes, Note{ig.location,
-				fmt.Sprintf("ignore of %s on %s expired on %s; its findings count again", ig.rule, ig.on(), ig.expires)})
+			report.Notes = append(report.Notes, Note{Location: ig.location, Message: fmt.Sprintf("ignore of %s on %s expired on %s; its findings count again", ig.rule, ig.on(), ig.expires)})
 		case !ig.used:
-			report.Notes = append(report.Notes, Note{ig.location,
-				fmt.Sprintf("ignore of %s on %s matches no finding; remove it", ig.rule, ig.on())})
+			report.Notes = append(report.Notes, Note{Location: ig.location, Message: fmt.Sprintf("ignore of %s on %s matches no finding; remove it", ig.rule, ig.on())})
 		}
 	}
 }
