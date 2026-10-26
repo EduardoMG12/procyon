@@ -2,12 +2,12 @@ package lint
 
 import (
 	"slices"
-	"strings"
-	"unicode"
+
+	"github.com/EduardoMG12/procyon/internal/words"
 )
 
 // The word lists behind the field-name rules. Each entry is a sequence of
-// words as splitWords produces them, so "api key" matches apiKey, api_key,
+// words as words.Split produces them, so "api key" matches apiKey, api_key,
 // api-key and APIKey. English and Portuguese.
 //
 // Changing a list changes what Procyon reports on every spec: add a fixture
@@ -60,7 +60,7 @@ var (
 	}
 
 	// countWords name numbers that set how much work one request makes
-	// the server do: how many items, repeats or retries. splitWords cannot
+	// the server do: how many items, repeats or retries. words.Split cannot
 	// split an all-lowercase name, so pagesize and perpage are listed too.
 	countWords = [][]string{
 		{"limit"}, {"count"}, {"repeat"}, {"retry"}, {"retries"}, {"attempt"},
@@ -94,7 +94,7 @@ var (
 	}
 )
 
-// piiWords name personal data. Words are compared after splitWords, which
+// piiWords name personal data. Words are compared after words.Split, which
 // lowercases and drops accents.
 var piiWords = [][]string{
 	{"email"}, {"e", "mail"}, {"phone"}, {"telephone"}, {"cellphone"},
@@ -129,89 +129,5 @@ var piiReferenceWords = append(slices.Clone(referenceWords),
 // the word appears whole (or as a plural), the word before it does not make
 // it a reference, and the word after it does not make it a description.
 func matches(name string, list [][]string) bool {
-	return matchesWith(name, list, describingWords, referenceWords)
-}
-
-// matchesWith is matches with the describing and reference words given.
-func matchesWith(name string, list [][]string, describing, reference []string) bool {
-	words := splitWords(name)
-	for i := range words {
-		for _, entry := range list {
-			end := i + len(entry)
-			if end > len(words) || !slices.EqualFunc(words[i:end], entry, sameWord) {
-				continue
-			}
-			if i > 0 && slices.Contains(reference, words[i-1]) {
-				continue
-			}
-			if end < len(words) && slices.Contains(describing, words[end]) {
-				continue
-			}
-			return true
-		}
-	}
-	return false
-}
-
-// sameWord matches a listed word and its plural: tokens, apiKeys, senhas,
-// addresses, celulares.
-func sameWord(word, listed string) bool {
-	rest, ok := strings.CutPrefix(word, listed) // no word+"s" built on each call
-	return ok && (rest == "" || rest == "s" || rest == "es")
-}
-
-// splitWords splits a field name into lowercase words: userPassword,
-// password_hash, api-token, APIKey and senhaUsuario become
-// [user password], [password hash], [api token], [api key], [senha usuario].
-func splitWords(name string) []string {
-	var words []string
-	var current []rune
-	flush := func() {
-		if len(current) > 0 {
-			words = append(words, foldAccents(strings.ToLower(string(current))))
-			current = current[:0]
-		}
-	}
-	runes := []rune(name)
-	for i, r := range runes {
-		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
-			flush() // _, -, ., spaces
-			continue
-		}
-		if i > 0 && len(current) > 0 {
-			prev := runes[i-1]
-			lowerToUpper := unicode.IsLower(prev) && unicode.IsUpper(r)
-			// The last capital of an acronym starts the next word (APIKey),
-			// unless only an "s" follows: IDs and APIs are plural acronyms.
-			acronymEnd := unicode.IsUpper(prev) && unicode.IsUpper(r) &&
-				lowerRun(runes[i+1:]) > 1
-			if lowerToUpper || acronymEnd || unicode.IsDigit(prev) != unicode.IsDigit(r) {
-				flush()
-			}
-		}
-		current = append(current, r)
-	}
-	flush()
-	return words
-}
-
-// lowerRun counts the lowercase letters at the start of runes.
-func lowerRun(runes []rune) int {
-	n := 0
-	for n < len(runes) && unicode.IsLower(runes[n]) {
-		n++
-	}
-	return n
-}
-
-// accents maps the accented letters of Portuguese to plain ones, so
-// permissões and permissoes are the same word.
-var accents = strings.NewReplacer(
-	"á", "a", "à", "a", "â", "a", "ã", "a",
-	"é", "e", "ê", "e", "í", "i",
-	"ó", "o", "ô", "o", "õ", "o", "ú", "u", "ü", "u", "ç", "c",
-)
-
-func foldAccents(word string) string {
-	return accents.Replace(word)
+	return words.Match(name, list, describingWords, referenceWords)
 }

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/EduardoMG12/procyon/internal/words"
+
 	"github.com/EduardoMG12/procyon/internal/report"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -31,7 +33,7 @@ func checkPRC006(doc *openapi3.T) []report.Finding {
 			return
 		}
 		forEachResponseProperty(op, func(name string, prop *openapi3.SchemaRef) {
-			if !textual(prop.Value) || !matchesWith(name, piiWords, piiDescribingWords, piiReferenceWords) {
+			if !textual(prop.Value) || !words.Match(name, piiWords, piiDescribingWords, piiReferenceWords) {
 				return // emailVerified, emailSettings: about the data, not the data
 			}
 			loc := propertyLocation(prop)

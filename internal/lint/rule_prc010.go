@@ -5,6 +5,8 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/EduardoMG12/procyon/internal/words"
+
 	"github.com/EduardoMG12/procyon/internal/report"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -98,11 +100,11 @@ func adminPath(path string) bool {
 		if strings.HasPrefix(segment, "{") {
 			continue // a parameter's name ({admin_id}) is not part of the path
 		}
-		words := strings.FieldsFunc(strings.ToLower(segment), func(r rune) bool {
+		parts := strings.FieldsFunc(strings.ToLower(segment), func(r rune) bool {
 			return !unicode.IsLetter(r) && !unicode.IsDigit(r)
 		})
-		for _, w := range words {
-			if slices.ContainsFunc(adminWords, func(a string) bool { return sameWord(w, a) }) { // admins too
+		for _, w := range parts {
+			if slices.ContainsFunc(adminWords, func(a string) bool { return words.Same(w, a) }) { // admins too
 				return true
 			}
 		}

@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/words"
+
 	"github.com/EduardoMG12/procyon/internal/report"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -76,15 +78,15 @@ func objectIdentifier(doc *openapi3.T, path string, op *openapi3.Operation) stri
 
 // identifies reports whether a path parameter's name identifies an object:
 // its last word is an identifier word, or it is one lowercase word ending
-// in "id" ({userid}, {orderid}), which splitWords cannot split.
+// in "id" ({userid}, {orderid}), which words.Split cannot split.
 func identifies(name string) bool {
-	words := splitWords(name)
-	if len(words) == 0 {
+	parts := words.Split(name)
+	if len(parts) == 0 {
 		return false
 	}
-	last := words[len(words)-1]
+	last := parts[len(parts)-1]
 	if slices.Contains(identifierWords, last) {
 		return true
 	}
-	return len(words) == 1 && len(last) > 3 && (strings.HasSuffix(last, "id") || strings.HasSuffix(last, "ids"))
+	return len(parts) == 1 && len(last) > 3 && (strings.HasSuffix(last, "id") || strings.HasSuffix(last, "ids"))
 }
