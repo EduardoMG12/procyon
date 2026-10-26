@@ -10,9 +10,9 @@ exposed to anonymous callers, clients that can make themselves admin. It runs
 in CI and fails the build before the problem ships, without you writing a
 single test.
 
-> **Status: v0.1.0 released.** Linting the spec works today. Runtime tests
-> against a running copy of your API (`procyon test`, v0.2) work from `main`
-> and are being finished.
+> **Status: v0.2.1 released.** `procyon lint` checks the spec; `procyon test`
+> checks a running, disposable copy of your API as two users and
+> anonymously.
 
 ## Why
 
@@ -35,7 +35,7 @@ Download the binary for your system from the
 against `SHA256SUMS`), or install it with Go:
 
 ```sh
-go install github.com/EduardoMG12/procyon/cmd/procyon@v0.1.0
+go install github.com/EduardoMG12/procyon/cmd/procyon@v0.2.1
 procyon lint openapi.yaml
 ```
 
@@ -86,7 +86,7 @@ steps:
   - uses: actions/setup-go@v6
     with:
       go-version: stable
-  - run: go install github.com/EduardoMG12/procyon/cmd/procyon@v0.1.0
+  - run: go install github.com/EduardoMG12/procyon/cmd/procyon@v0.2.1
   - run: procyon lint openapi.yaml --output sarif=procyon.sarif --output markdown=$GITHUB_STEP_SUMMARY
   - uses: github/codeql-action/upload-sarif@v4
     if: always()
@@ -159,7 +159,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: stable
-      - run: go install github.com/EduardoMG12/procyon/cmd/procyon@main
+      - run: go install github.com/EduardoMG12/procyon/cmd/procyon@v0.2.1
       - name: Test the operations this PR changes
         run: |
           base=()
