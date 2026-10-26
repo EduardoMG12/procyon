@@ -134,9 +134,9 @@ func TestVersion(t *testing.T) {
 }
 
 func TestHelpExitsZeroAndShowsUsage(t *testing.T) {
-	for _, arg := range []string{"--help", "-h", "help"} {
-		t.Run(arg, func(t *testing.T) {
-			r := run(t, arg)
+	for _, args := range [][]string{{"--help"}, {"-h"}, {"help"}, {"lint", "-h"}, {"test", "--help"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			r := run(t, args...)
 			if r.code != 0 {
 				t.Errorf("exit code = %d, want 0", r.code)
 			}
@@ -454,5 +454,30 @@ func TestOutputRefusesSymlinks(t *testing.T) {
 	}
 	if data, _ := os.ReadFile(target); string(data) != "keep me" {
 		t.Errorf("the link's target was written: %q", data)
+	}
+}
+
+// No --output may write over the spec it reads, or over another output.
+func TestOutputNeverOverwritesAnInput(t *testing.T) {
+	dir := t.TempDir()
+	original, err := os.ReadFile(spec("prc001-no-auth.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	specPath := filepath.Join(dir, "openapi.yaml")
+	if err := os.WriteFile(specPath, original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := run(t, "lint", "--output", "json="+specPath, specPath)
+	if r.code != 2 || !strings.Contains(r.stderr, "an input file") {
+		t.Errorf("exit %d, stderr %q; want 2 and the spec refused as an output", r.code, r.stderr)
+	}
+	if data, _ := os.ReadFile(specPath); string(data) != string(original) {
+		t.Error("the spec was overwritten")
+	}
+	report := filepath.Join(dir, "report.out")
+	r = run(t, "lint", "--output", "json="+report, "--output", "markdown="+report, specPath)
+	if r.code != 2 || !strings.Contains(r.stderr, "another --output already writes there") {
+		t.Errorf("exit %d, stderr %q; want 2 and the second output refused", r.code, r.stderr)
 	}
 }

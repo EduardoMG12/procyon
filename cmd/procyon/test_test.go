@@ -31,6 +31,8 @@ func TestTestCommandExitCodes(t *testing.T) {
 		{"a target is required", []string{notesSpec}, 2, "--compose or --base-url is required"},
 		{"compose needs service and port", []string{"--compose", "c.yml", notesSpec}, 2, "--compose needs --service"},
 		{"compose or base URL, not both", []string{"--compose", "c.yml", "--base-url", fixed.URL, notesSpec}, 2, "give one, not both"},
+		{"service and port only with compose", []string{"--base-url", fixed.URL, "--port", "80", notesSpec}, 2, "go with --compose"},
+		{"a missing base spec is an error", []string{"--base-url", fixed.URL, "--base-spec", "nowhere.yaml", notesSpec}, 2, "--base-spec"},
 		{"public target is refused", []string{"--base-url", "http://8.8.8.8", notesSpec}, 2, "not a loopback or private address"},
 		{"lint flags work", []string{"--format", "json", "--base-url", vulnerable.URL, notesSpec}, 1, `"version": 1`},
 	}

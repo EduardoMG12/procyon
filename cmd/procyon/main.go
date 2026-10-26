@@ -83,7 +83,8 @@ func useColor(w io.Writer) bool {
 
 const usage = `Usage:
   procyon lint [flags] <spec>
-                        Check an OpenAPI 3 spec for security problems.
+                        Check an OpenAPI 3 or Swagger 2.0 spec for security
+                        problems.
 
     --fail-on <severity>      critical, high (default), medium or low.
                               Can also be set as fail-on in .procyon.yaml.
@@ -97,7 +98,7 @@ const usage = `Usage:
                               be set as ref-root in .procyon.yaml.
   procyon test [flags] (--compose <file> --service <name> --port <port> | --base-url <url>) <spec>
                         Call a running, disposable copy of the API as two test
-                        accounts and anonymously, and rep what each could
+                        accounts and anonymously, and report what each could
                         do, how it handles malformed input, and its TLS.
                         Takes the same flags as lint. Accounts, IDs and
                         operations to skip can be set under test: in
