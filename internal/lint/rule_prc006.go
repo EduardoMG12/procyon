@@ -2,7 +2,6 @@ package lint
 
 import (
 	"fmt"
-	"net/http"
 
 	"github.com/EduardoMG12/procyon/internal/loader"
 
@@ -31,7 +30,7 @@ var prc006 = lintRule{
 func checkPRC006(doc *openapi3.T) []report.Finding {
 	var found onePerPlace
 	loader.ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-		if method != http.MethodGet || !reachableAnonymously(doc, path, op) {
+		if method != "GET" || !reachableAnonymously(doc, path, op) {
 			return
 		}
 		forEachResponseProperty(op, func(name string, prop *openapi3.SchemaRef) {

@@ -1,7 +1,6 @@
 package lint
 
 import (
-	"net/http"
 	"slices"
 	"strings"
 
@@ -48,7 +47,7 @@ func checkPRC008(doc *openapi3.T) []report.Finding {
 		add := func(loc report.Location, why, fix string) {
 			found.add(report.Finding{Location: loc, Operation: method + " " + path, Why: why, Fix: fix})
 		}
-		if method == http.MethodGet && returnsList(op) && !paged(doc, path, op) {
+		if method == "GET" && returnsList(op) && !paged(doc, path, op) {
 			add(loader.Locate(op.Origin),
 				"This operation returns a whole list with no way to ask for one page, so one request can make the server read and send every record.",
 				"Add paging query parameters (limit and cursor, or page and per_page) and a maximum page size.")
