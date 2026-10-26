@@ -14,11 +14,11 @@ func logins(passwordA string) (*Login, *Login) {
 	return &Login{Operation: "POST /login", Token: "/session/token",
 			Body: map[string]any{"username": "alice", "password": passwordA}},
 		&Login{Operation: "POST /login", Token: "/session/token",
-			Body: map[string]any{"username": "bob", "password": "${VULNAPI_BOB_PASSWORD}"}}
+			Body: map[string]any{"username": "bob", "password": "${PROCYON_TEST_BOB_PASSWORD}"}}
 }
 
 func TestLoginGivesTheSameFindingsAsTokens(t *testing.T) {
-	t.Setenv("VULNAPI_BOB_PASSWORD", "bob-password")
+	t.Setenv("PROCYON_TEST_BOB_PASSWORD", "bob-password")
 	srv := httptest.NewServer(vulnapi.New(false))
 	defer srv.Close()
 	a, b := logins("alice-password")
@@ -43,7 +43,7 @@ func TestLoginGivesTheSameFindingsAsTokens(t *testing.T) {
 }
 
 func TestFailedLoginNamesTheAccount(t *testing.T) {
-	t.Setenv("VULNAPI_BOB_PASSWORD", "bob-password")
+	t.Setenv("PROCYON_TEST_BOB_PASSWORD", "bob-password")
 	srv := httptest.NewServer(vulnapi.New(false))
 	defer srv.Close()
 	a, b := logins("wrong")
@@ -89,7 +89,7 @@ func TestExpand(t *testing.T) {
 
 // A token in the environment wins: the wrong password is never tried.
 func TestEnvTokenWinsOverALogin(t *testing.T) {
-	t.Setenv("VULNAPI_BOB_PASSWORD", "bob-password")
+	t.Setenv("PROCYON_TEST_BOB_PASSWORD", "bob-password")
 	srv := httptest.NewServer(vulnapi.New(true))
 	defer srv.Close()
 	a, b := logins("wrong")
@@ -99,10 +99,20 @@ func TestEnvTokenWinsOverALogin(t *testing.T) {
 }
 
 func TestLoginToAnAPIThatIsDownNamesTheAccount(t *testing.T) {
-	t.Setenv("VULNAPI_BOB_PASSWORD", "bob-password")
+	t.Setenv("PROCYON_TEST_BOB_PASSWORD", "bob-password")
 	a, b := logins("alice-password")
 	_, err := Run(context.Background(), vulnapiSpec, Options{BaseURL: "http://127.0.0.1:1", LoginA: a, LoginB: b})
 	if err == nil || !strings.Contains(err.Error(), "login of test account A") {
 		t.Errorf("err = %v, want it to name account A", err)
+	}
+}
+
+// A login can read only PROCYON_* variables: the config sits next to the
+// spec, where a pull request can change it.
+func TestExpandReadsOnlyProcyonVariables(t *testing.T) {
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "do-not-send")
+	_, _, err := expand(map[string]any{"password": "${AWS_SECRET_ACCESS_KEY}"})
+	if err == nil || !strings.Contains(err.Error(), "only variables named PROCYON_*") || strings.Contains(err.Error(), "do-not-send") {
+		t.Errorf("err = %v, want the variable refused, never its value", err)
 	}
 }

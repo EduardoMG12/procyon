@@ -432,3 +432,27 @@ func TestRefRoot(t *testing.T) {
 		t.Errorf("with ref-root in .procyon.yaml: exit %d, want 1; stderr: %s", r.code, r.stderr)
 	}
 }
+
+// An --output path that is a symbolic link is refused: a committed link
+// named like a report would make Procyon write over what it points at.
+func TestOutputRefusesSymlinks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks need privileges on Windows")
+	}
+	dir := t.TempDir()
+	target := filepath.Join(dir, "README.md")
+	if err := os.WriteFile(target, []byte("keep me"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "procyon.md")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	r := run(t, "lint", "--output", "markdown="+link, spec("prc001-no-auth.yaml"))
+	if r.code != 2 || !strings.Contains(r.stderr, "a symbolic link") {
+		t.Errorf("exit %d, stderr %q; want 2 and the link refused", r.code, r.stderr)
+	}
+	if data, _ := os.ReadFile(target); string(data) != "keep me" {
+		t.Errorf("the link's target was written: %q", data)
+	}
+}

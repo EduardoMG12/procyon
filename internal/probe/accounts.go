@@ -1,6 +1,7 @@
 package probe
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
@@ -41,7 +42,8 @@ func authorize(req *http.Request, cred *loader.Credential, token string) {
 	}
 }
 
-// mask hides every token in s, as written and as URL-encoded, so evidence
+// mask hides every token in s, as written, URL-encoded and JSON-escaped (a
+// JSON string escapes <, > and &, and PHP's escapes / too), so evidence
 // never shows a credential, even one the API echoes back.
 func mask(s string, tokens ...string) string {
 	for _, token := range tokens {
@@ -49,9 +51,17 @@ func mask(s string, tokens ...string) string {
 			continue
 		}
 		s = strings.ReplaceAll(s, token, "****")
-		if escaped := url.QueryEscape(token); escaped != token {
-			s = strings.ReplaceAll(s, escaped, "****")
+		for _, escaped := range []string{url.QueryEscape(token), jsonEscaped(token), strings.ReplaceAll(token, "/", `\/`)} {
+			if escaped != token {
+				s = strings.ReplaceAll(s, escaped, "****")
+			}
 		}
 	}
 	return s
+}
+
+// jsonEscaped is token as encoding/json writes it inside a string.
+func jsonEscaped(token string) string {
+	quoted, _ := json.Marshal(token) // a string always marshals
+	return string(quoted[1 : len(quoted)-1])
 }

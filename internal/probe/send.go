@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/EduardoMG12/procyon/internal/loader"
 	"github.com/EduardoMG12/procyon/internal/report"
@@ -94,7 +95,14 @@ func (r *runner) sendFull(ctx context.Context, op loader.Operation, path string,
 // characters unmasked.
 func (r *runner) excerpt(body string) string {
 	masked := mask(body, r.tokens...)
-	return masked[:min(len(masked), maxBody)]
+	if len(masked) <= maxBody {
+		return masked
+	}
+	end := maxBody
+	for end > 0 && !utf8.RuneStart(masked[end]) {
+		end-- // never cut a character in half
+	}
+	return masked[:end]
 }
 
 // requestURI is how evidence shows a path sent to the target: with the

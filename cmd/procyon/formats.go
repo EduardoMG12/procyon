@@ -76,6 +76,12 @@ func parseOutput(value string) (output, error) {
 func openOutputs(outs outputs) ([]*os.File, error) {
 	files := make([]*os.File, 0, len(outs))
 	for _, o := range outs {
+		// A committed symlink named like a report would make Procyon write
+		// through it, over whatever it points at.
+		if info, err := os.Lstat(o.path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			closeAll(files)
+			return nil, fmt.Errorf("--output %s=%s: a symbolic link; give the report's own path", o.format, o.path)
+		}
 		file, err := os.Create(o.path)
 		if err != nil {
 			closeAll(files)
