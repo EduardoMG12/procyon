@@ -37,3 +37,4 @@ What each caller got: ✅ allowed · 🚫 denied · ❌ finding · 🌐 public �
 | `DELETE /orders/{id}` | – | ❌ 204 | 🚫 401 |
 | `GET /reports/{id}` | ⏭️ | ⏭️ | ⏭️ |
 | `GET /users/{id}` | ✅ 200 | 💤 | 💤 |
+| `GET /a\|b` | ✅ 200 | – | – |

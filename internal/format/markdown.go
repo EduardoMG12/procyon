@@ -95,7 +95,8 @@ func matrix(b *strings.Builder, rows []report.MatrixRow) {
 		"What each caller got: ✅ allowed · 🚫 denied · ❌ finding · 🌐 public · ⏭️ skipped (see notes) · 💤 unchanged since the base spec · – not tested\n\n" +
 		"| Operation | A | B (A's objects) | Anonymous |\n|---|---|---|---|\n")
 	for _, row := range rows {
-		fmt.Fprintf(b, "| %s | %s | %s | %s |\n", code(row.Operation), cell(row.A), cell(row.B), cell(row.Anonymous))
+		// A | splits a table cell even inside a code span: escape it.
+		fmt.Fprintf(b, "| %s | %s | %s | %s |\n", strings.ReplaceAll(code(row.Operation), "|", `\|`), cell(row.A), cell(row.B), cell(row.Anonymous))
 	}
 }
 

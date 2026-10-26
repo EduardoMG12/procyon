@@ -21,6 +21,28 @@ type jsonReport struct {
 	Findings []jsonFinding `json:"findings"`
 	Ignored  []jsonIgnored `json:"ignored"`
 	Notes    []jsonNote    `json:"notes"`
+	Matrix   []jsonRow     `json:"matrix,omitempty"`
+}
+
+// jsonRow is one operation of procyon test's authorization matrix; a
+// caller not called on it is absent.
+type jsonRow struct {
+	Operation string    `json:"operation"`
+	A         *jsonCell `json:"a,omitempty"`
+	B         *jsonCell `json:"b,omitempty"`
+	Anonymous *jsonCell `json:"anonymous,omitempty"`
+}
+
+type jsonCell struct {
+	Outcome string `json:"outcome"`
+	Status  int    `json:"status,omitempty"`
+}
+
+func toJSONCell(c report.Cell) *jsonCell {
+	if c.Outcome == report.NotCalled {
+		return nil
+	}
+	return &jsonCell{string(c.Outcome), c.Status}
 }
 
 type jsonSummary struct {
@@ -104,6 +126,9 @@ func JSON(w io.Writer, rep report.Report) error {
 	out.Summary.Ignored = len(rep.Ignored)
 	for _, n := range rep.Notes {
 		out.Notes = append(out.Notes, jsonNote{jsonLoc(n.Location), n.Message})
+	}
+	for _, row := range rep.Matrix {
+		out.Matrix = append(out.Matrix, jsonRow{row.Operation, toJSONCell(row.A), toJSONCell(row.B), toJSONCell(row.Anonymous)})
 	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
