@@ -22,6 +22,9 @@ type harvest struct {
 	// path they came from: what the account's GET /me showed and the other
 	// account's did not (its username). Set after discovery.
 	identity map[string]string
+	// seen holds every value any response showed, for saw: a set, so
+	// asking costs the same with 10 values or 100 000.
+	seen map[string]bool
 }
 
 // object is one JSON object of a response: its scalar fields, by
@@ -29,7 +32,7 @@ type harvest struct {
 type object map[string]string
 
 func newHarvest(declared map[string][]string) *harvest {
-	h := &harvest{byPath: map[string][]object{}, single: map[string]bool{}, declared: map[string][]string{}}
+	h := &harvest{byPath: map[string][]object{}, single: map[string]bool{}, declared: map[string][]string{}, seen: map[string]bool{}}
 	// Sorted, so order_id and orderId both declared give the same values
 	// on every run.
 	for _, name := range sortedKeys(declared) {
@@ -53,7 +56,12 @@ func (h *harvest) add(path string, body []byte) {
 	}
 	_, isObject := v.(map[string]any)
 	h.single[path] = isObject
-	objects(v, func(o object) { h.byPath[path] = append(h.byPath[path], o) })
+	objects(v, func(o object) {
+		h.byPath[path] = append(h.byPath[path], o)
+		for _, value := range o {
+			h.seen[value] = true
+		}
+	})
 }
 
 // objects calls fn for every JSON object in v, breadth first: an object
@@ -181,14 +189,5 @@ func (h *harvest) fill(path string) (filled, error) {
 
 // saw reports whether any response recorded in h showed value.
 func (h *harvest) saw(value string) bool {
-	for _, objs := range h.byPath {
-		for _, o := range objs {
-			for _, v := range o {
-				if v == value {
-					return true
-				}
-			}
-		}
-	}
-	return false
+	return h.seen[value]
 }

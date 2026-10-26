@@ -39,14 +39,23 @@ func valuesIn(body []byte) []string {
 
 // mentionsAny reports whether a JSON body holds one of values in any field.
 func mentionsAny(body []byte, values []string) bool {
+	wanted := setOf(values)
 	for _, v := range valuesIn(body) {
-		for _, want := range values {
-			if v == want {
-				return true
-			}
+		if wanted[v] {
+			return true
 		}
 	}
 	return false
+}
+
+// setOf is values as a set: membership in constant time, where a list
+// would be searched for every value of a large answer.
+func setOf(values []string) map[string]bool {
+	set := make(map[string]bool, len(values))
+	for _, v := range values {
+		set[v] = true
+	}
+	return set
 }
 
 // hasAnyFieldOf reports whether a JSON object body has at least one
