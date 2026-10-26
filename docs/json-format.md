@@ -1,6 +1,7 @@
 # JSON format
 
-`procyon lint --format json spec.yaml` prints the whole report as JSON, and
+`procyon lint --format json spec.yaml` (or `procyon test --format json`)
+prints the whole report as JSON, and
 `--output json=report.json` writes it to a file alongside the terminal
 output. The exit code is the same whatever the format.
 
@@ -51,9 +52,10 @@ version; removing or renaming one bumps it. Scripts should check
 | `summary` | Findings per severity, and how many were ignored |
 | `findings` | What is wrong, most serious first is **not** guaranteed: they are in file, line, column order |
 | `findings[].operation` | `"GET /orders"`; absent for findings about no operation (a scheme, a server) |
-| `findings[].evidence` | Runtime findings only (`procyon test`): the requests that prove it, in order, each `{caller, method, url, status, body, sent}`. `caller` is `"A"`, `"B"` or `"anonymous"`, `url` the path and query sent, `body` the start of the response, `sent` the start of the request body (absent when there was none). Tokens are masked as `****`. Absent for lint findings |
+| `findings[].evidence` | Runtime findings only (`procyon test`): the requests that prove it, in order, each `{caller, method, url, status, body, sent}`. `caller` is `"A"`, `"B"` or `"anonymous"`, `url` the path and query sent, `status` the HTTP status (`0` when the server never answered, as PRC103 reports), `body` the start of the response, `sent` the start of the request body (absent when there was none). Tokens are masked as `****`. Absent for lint findings |
 | `ignored` | Findings an `x-procyon-ignore` matched, with its `reason` and optional `expires` |
-| `notes` | Expired or unused ignores; they never fail the run |
+| `notes` | What the run could not do or check, and why: expired or unused ignores, and for `procyon test` the operations not tested and the reason (no ID for A's object, TLS not checked on http, redirects). They never fail the run |
+| `matrix` | `procyon test` only (absent for lint): one row per operation, `{operation, a, b, anonymous}`, each caller `{outcome, status}` and absent when not called. `outcome` is `allowed`, `denied`, `finding`, `public`, `skipped` or `unchanged`; `status` is absent when there was no answer |
 
 `file` always uses forward slashes, on every system. `findings`, `ignored`
 and `notes` are always arrays, empty rather than missing.

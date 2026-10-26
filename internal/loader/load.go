@@ -6,6 +6,7 @@
 package loader
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -207,7 +208,9 @@ func readSpec(path string) ([]byte, error) {
 	if int64(len(data)) > maxSpecSize {
 		return nil, fmt.Errorf("%s: larger than %d MiB", path, maxSpecSize>>20)
 	}
-	return data, nil
+	// Some Windows editors start a file with a byte order mark; YAML skips
+	// it, JSON refuses it.
+	return bytes.TrimPrefix(data, []byte("\xef\xbb\xbf")), nil
 }
 
 // unwrapPath drops the operation and path that os errors repeat, since the

@@ -2,6 +2,8 @@ package loader
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -141,3 +143,15 @@ func TestExampleBodyFromPropertyExamples(t *testing.T) {
 // anyRule loads specs whatever rules their ignores name: which rules exist
 // is internal/lint's business, tested there.
 var anyRule = Options{KnownRule: func(string) bool { return true }}
+
+// A JSON spec saved with a byte order mark loads, like a YAML one.
+func TestLoadSkipsAByteOrderMark(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "openapi.json")
+	spec := `{"openapi": "3.0.3", "info": {"title": "t", "version": "1"}, "paths": {"/a": {"get": {"responses": {"200": {"description": "ok"}}}}}}`
+	if err := os.WriteFile(path, append([]byte("\xef\xbb\xbf"), spec...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path, Options{}); err != nil {
+		t.Errorf("Load: %v", err)
+	}
+}
