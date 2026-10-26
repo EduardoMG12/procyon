@@ -3,6 +3,7 @@ package lint
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/goccy/go-yaml"
+	"github.com/goccy/go-yaml/ast"
 	"github.com/goccy/go-yaml/parser"
 )
 
@@ -81,28 +83,64 @@ func load(path string, opts Options) (*openapi3.T, *specFiles, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	// Valid JSON needs no YAML syntax check, which takes seconds on a large
+	// spec. If anything fails later, the check runs after all, so the error
+	// a user sees is the same with or without this shortcut (goccy refuses
+	// duplicate keys, which encoding/json accepts).
+	if json.Valid(data) {
+		doc, files, err := loadParsed(path, opts, data, jsonSwaggerVersion(data))
+		if err != nil {
+			if _, syntaxErr := checkSyntax(path, data); syntaxErr != nil {
+				return nil, nil, syntaxErr
+			}
+		}
+		return doc, files, err
+	}
+	file, err := checkSyntax(path, data)
+	if err != nil {
+		return nil, nil, err
+	}
+	return loadParsed(path, opts, data, swaggerVersion(file))
+}
 
-	// kin-openapi's own syntax errors are off by a line for some YAML
-	// mistakes and mix a JSON and a YAML message. goccy/go-yaml reports the
-	// exact line and column, and reads JSON too (JSON is valid YAML).
-	if _, err := parser.ParseBytes(data, 0); err != nil {
+// checkSyntax parses the spec as YAML. kin-openapi's own syntax errors are
+// off by a line for some YAML mistakes and mix a JSON and a YAML message.
+// goccy/go-yaml reports the exact line and column, and reads JSON too (JSON
+// is valid YAML).
+func checkSyntax(path string, data []byte) (*ast.File, error) {
+	file, err := parser.ParseBytes(data, 0)
+	if err != nil {
 		var syntaxErr *yaml.SyntaxError
 		if errors.As(err, &syntaxErr) && syntaxErr.Token != nil {
 			pos := syntaxErr.Token.Position
-			return nil, nil, fmt.Errorf("%s:%d:%d: %s", path, pos.Line, pos.Column, syntaxErr.Message)
+			return nil, fmt.Errorf("%s:%d:%d: %s", path, pos.Line, pos.Column, syntaxErr.Message)
 		}
-		return nil, nil, fmt.Errorf("%s: %w", path, err)
+		return nil, fmt.Errorf("%s: %w", path, err)
 	}
+	return file, nil
+}
 
+// jsonSwaggerVersion is swaggerVersion for a JSON spec.
+func jsonSwaggerVersion(data []byte) any {
+	var version struct {
+		Swagger any `json:"swagger"` // a string, or a number when 2.0 is unquoted
+	}
+	if json.Unmarshal(data, &version) != nil {
+		return nil
+	}
+	return version.Swagger
+}
+
+// loadParsed loads a spec whose syntax is known to be right; swagger is its
+// top-level swagger value, or nil for OpenAPI 3.
+func loadParsed(path string, opts Options, data []byte, swagger any) (*openapi3.T, *specFiles, error) {
+	var err error
 	// Swagger 2.0 is converted to OpenAPI 3 and linted like any spec;
 	// locations are mapped back to the original file (see fromSwagger).
 	toLoad := data
-	var version struct {
-		Swagger any `yaml:"swagger"` // a string, or a number when 2.0 is unquoted
-	}
 	var back func(position) (position, bool)
-	if err := yaml.Unmarshal(data, &version); err == nil && version.Swagger != nil {
-		if v := fmt.Sprint(version.Swagger); v != "2" && !strings.HasPrefix(v, "2.") {
+	if swagger != nil {
+		if v := fmt.Sprint(swagger); v != "2" && !strings.HasPrefix(v, "2.") {
 			return nil, nil, fmt.Errorf("%s: swagger %q is not a version Procyon knows; use Swagger 2.0 or OpenAPI 3", path, v)
 		}
 		if toLoad, back, err = fromSwagger(data); err != nil {
@@ -142,6 +180,38 @@ func load(path string, opts Options) (*openapi3.T, *specFiles, error) {
 		return nil, nil, err
 	}
 	return doc, files, nil
+}
+
+// swaggerVersion is the value of the document's top-level swagger key (a
+// string, or a number when 2.0 is unquoted), or nil when there is none. It
+// reads it from the syntax tree the syntax check already built: decoding
+// the whole document only for this key cost seconds on large specs.
+func swaggerVersion(file *ast.File) any {
+	if len(file.Docs) == 0 {
+		return nil
+	}
+	var pairs []*ast.MappingValueNode
+	switch body := file.Docs[0].Body.(type) {
+	case *ast.MappingNode:
+		pairs = body.Values
+	case *ast.MappingValueNode:
+		pairs = []*ast.MappingValueNode{body}
+	}
+	for _, pair := range pairs {
+		key := pair.Key.String()
+		if str, quoted := pair.Key.(*ast.StringNode); quoted {
+			key = str.Value // "swagger" in JSON, without its quotes
+		}
+		if key != "swagger" {
+			continue
+		}
+		var v any
+		if yaml.NodeToValue(pair.Value, &v) != nil {
+			return nil
+		}
+		return v
+	}
+	return nil
 }
 
 // splitLines splits a file into lines without their line endings, LF or
