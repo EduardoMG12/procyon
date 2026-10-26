@@ -86,12 +86,14 @@ func Run(ctx context.Context, specPath string, opts Options) (report.Report, err
 		return report.Report{}, err
 	}
 	timeout := cmp.Or(opts.Timeout, defaultTimeout)
-	r := &runner{client: newClient(target, timeout, cmp.Or(opts.Budget, defaultBudget)), target: target}
+	r := &runner{client: newClient(timeout, cmp.Or(opts.Budget, defaultBudget)), target: target}
 	res := &results{root: report.Location{File: specPath, Line: 1, Column: 1}}
 
 	// TLS first: a server that speaks only an old protocol is reported
 	// before anything else can fail on it.
-	res.tls(ctx, target, timeout)
+	if err := res.tls(ctx, r.client, target, timeout); err != nil {
+		return report.Report{}, err
+	}
 	a, b, err := r.signIn(ctx, spec, opts)
 	if err != nil {
 		return report.Report{}, err
@@ -128,6 +130,13 @@ func Run(ctx context.Context, specPath string, opts Options) (report.Report, err
 	}
 
 	res.note(res.root, baseNote)
+	if r.redirects > 0 {
+		// A redirect is judged as what the API answered: never followed,
+		// never a 2xx. Many of them usually mean the spec's paths and the
+		// server's disagree (a trailing slash), and nothing was tested.
+		res.note(res.root, fmt.Sprintf("%d answers were redirects (first: %s); Procyon does not follow redirects, "+
+			"so those calls were judged on the redirect itself: check that the spec's paths match the server's", r.redirects, r.firstRedirect))
+	}
 	if s.unchanged > 0 {
 		res.note(res.root, fmt.Sprintf("%d of %d operations unchanged since %s, not tested", s.unchanged, len(ops), opts.BaseSpec))
 	}
@@ -167,18 +176,25 @@ func (res *results) note(where report.Location, message string) {
 }
 
 // tls checks an https target's TLS (PRC105), or notes that an http one
-// has none to check.
-func (res *results) tls(ctx context.Context, target *url.URL, timeout time.Duration) {
+// has none to check, and pins the key it saw for the rest of the run.
+// Without a handshake there is no key to pin, so the run stops: carrying
+// on unpinned would let someone who blocked the check step in later.
+func (res *results) tls(ctx context.Context, c *client, target *url.URL, timeout time.Duration) error {
 	if target.Scheme != "https" {
 		res.note(res.root, "TLS not checked: the target is plain http "+
 			"(a disposable copy usually is; TLS belongs to the production proxy). PRC105 runs on https targets.")
-		return
+		return nil
 	}
-	problems, note := checkTLS(ctx, target, timeout)
+	problems, note, key := checkTLS(ctx, target, timeout)
+	if key == nil {
+		return fmt.Errorf("%s: %s", target.Host, note)
+	}
+	c.pin = key
 	if len(problems) > 0 {
 		res.findings = append(res.findings, weakTLS(res.root, target, problems))
 	}
 	res.note(res.root, note)
+	return nil
 }
 
 // skipSet is test.skip as a set. An entry that names no operation is a
