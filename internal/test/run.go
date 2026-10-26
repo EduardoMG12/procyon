@@ -58,8 +58,129 @@ const (
 	minTelling = 4
 )
 
-// Run tests the API at opts.BaseURL against the spec at specPath.
+// Run tests the API at opts.BaseURL against the spec at specPath, in this
+// order:
+//
+//  1. load the spec, and the base spec for --base-spec (loadSpecs);
+//  2. check the target is loopback or private, and its TLS (checkTLS);
+//  3. sign the test accounts in (signIn);
+//  4. read as A and as B to find their objects (discoverAccounts);
+//  5. test every read and write: anonymously, then B on A's objects
+//     (testOperation);
+//  6. send A's writes malformed bodies (malformedPass);
+//  7. test every delete, unless the server stopped answering in 6.
+//
+// Deletes come last so a destructive request never removes what a later
+// one needs, and malformed bodies come after B's writes so an accepted one
+// never hides what B could do to A's object.
 func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error) {
+	if err := needAccounts(opts); err != nil {
+		return lint.Report{}, err
+	}
+	spec, changed, baseNote, err := loadSpecs(specPath, opts)
+	if err != nil {
+		return lint.Report{}, err
+	}
+	target, err := checkTarget(ctx, opts.BaseURL, lookupHost)
+	if err != nil {
+		return lint.Report{}, err
+	}
+	timeout := cmp.Or(opts.Timeout, defaultTimeout)
+	r := &runner{client: newClient(target, timeout, cmp.Or(opts.Budget, defaultBudget)), target: target}
+	res := &results{root: lint.Location{File: specPath, Line: 1, Column: 1}}
+
+	// TLS first: a server that speaks only an old protocol is reported
+	// before anything else can fail on it.
+	res.tls(ctx, target, timeout)
+	a, b, err := r.signIn(ctx, spec, opts)
+	if err != nil {
+		return lint.Report{}, err
+	}
+	ops := inTestOrder(spec.Operations())
+	r.skip = res.skipSet(ops, opts.Skip)
+	ofA, ofB, err := r.discoverAccounts(ctx, ops, a, b, opts.IDs)
+	if err != nil {
+		return lint.Report{}, err
+	}
+
+	s := &session{runner: r, res: res, ofA: ofA, ofB: ofB, a: a, b: b, changed: changed, readers: readers(ops)}
+	firstDelete := slices.IndexFunc(ops, func(op lint.Operation) bool { return op.Method == http.MethodDelete })
+	if firstDelete < 0 {
+		firstDelete = len(ops)
+	}
+	for _, op := range ops[:firstDelete] {
+		if err := s.testOperation(ctx, op); err != nil {
+			return lint.Report{}, err
+		}
+	}
+	noAnswer, err := s.malformedPass(ctx)
+	if err != nil {
+		return lint.Report{}, err
+	}
+	for _, op := range ops[firstDelete:] {
+		if noAnswer {
+			s.skipAfterHang(op)
+			continue
+		}
+		if err := s.testOperation(ctx, op); err != nil {
+			return lint.Report{}, err
+		}
+	}
+
+	res.note(res.root, baseNote)
+	if s.unchanged > 0 {
+		res.note(res.root, fmt.Sprintf("%d of %d operations unchanged since %s, not tested", s.unchanged, len(ops), opts.BaseSpec))
+	}
+	report := spec.Finish(res.findings, res.notes, lint.Options{FailOn: opts.FailOn})
+	report.Matrix = res.matrix
+	return report, nil
+}
+
+// results collects what a run reports.
+type results struct {
+	root     lint.Location // the spec's first line, for notes about the whole run
+	findings []lint.Finding
+	notes    []lint.Note
+	matrix   []lint.MatrixRow
+}
+
+// note adds a note, unless message is empty.
+func (res *results) note(where lint.Location, message string) {
+	if message != "" {
+		res.notes = append(res.notes, lint.Note{Location: where, Message: message})
+	}
+}
+
+// tls checks an https target's TLS (PRC105), or notes that an http one
+// has none to check.
+func (res *results) tls(ctx context.Context, target *url.URL, timeout time.Duration) {
+	if target.Scheme != "https" {
+		res.note(res.root, "TLS not checked: the target is plain http "+
+			"(a disposable copy usually is; TLS belongs to the production proxy). PRC105 runs on https targets.")
+		return
+	}
+	problems, note := checkTLS(ctx, target, timeout)
+	if len(problems) > 0 {
+		res.findings = append(res.findings, weakTLS(res.root, target, problems))
+	}
+	res.note(res.root, note)
+}
+
+// skipSet is test.skip as a set. An entry that names no operation is a
+// note: a typo must not quietly call what was meant to be skipped.
+func (res *results) skipSet(ops []lint.Operation, skip []string) map[string]bool {
+	set := map[string]bool{}
+	for _, name := range skip {
+		if !slices.ContainsFunc(ops, func(op lint.Operation) bool { return op.Key() == name }) {
+			res.note(res.root, fmt.Sprintf("test.skip lists %q, which is no operation of the spec", name))
+		}
+		set[name] = true
+	}
+	return set
+}
+
+// needAccounts checks both test accounts have a token or a login.
+func needAccounts(opts Options) error {
 	var missing []string
 	if opts.TokenA == "" && opts.LoginA == nil {
 		missing = append(missing, EnvTokenA+" (account A)")
@@ -67,229 +188,217 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 	if opts.TokenB == "" && opts.LoginB == nil {
 		missing = append(missing, EnvTokenB+" (account B)")
 	}
-	if len(missing) > 0 {
-		return lint.Report{}, fmt.Errorf("set %s: the token of a test account seeded in the API "+
-			"(the bare token: Procyon adds \"Bearer \" when the spec asks for it), "+
-			"or declare how it logs in under test.accounts in .procyon.yaml", strings.Join(missing, " and "))
-	}
-	spec, err := lint.Load(specPath, lint.Options{RefRoot: opts.RefRoot})
-	if err != nil {
-		return lint.Report{}, err
-	}
-	var changed map[string]bool // nil: test everything
-	var baseNote string
-	if opts.BaseSpec != "" {
-		// A base that does not load (it was broken on main, and this change
-		// may be the fix) means testing everything, not failing the run.
-		if base, err := lint.Load(opts.BaseSpec, lint.Options{RefRoot: opts.RefRoot}); err != nil {
-			baseNote = fmt.Sprintf("--base-spec not used, every operation is tested: %v", err)
-		} else {
-			changed, baseNote = spec.Changed(base)
-		}
-	}
-	target, err := checkTarget(ctx, opts.BaseURL, lookupHost)
-	if err != nil {
-		return lint.Report{}, err
-	}
-	timeout := cmp.Or(opts.Timeout, defaultTimeout)
-	c := newClient(target, timeout, cmp.Or(opts.Budget, defaultBudget))
-
-	// TLS first: a server that speaks only an old protocol is reported
-	// before anything else can fail on it.
-	var findings []lint.Finding
-	var notes []lint.Note
-	root := lint.Location{File: specPath, Line: 1, Column: 1}
-	if target.Scheme == "https" {
-		problems, note := checkTLS(ctx, target, timeout)
-		if len(problems) > 0 {
-			findings = append(findings, weakTLS(root, target, problems))
-		}
-		if note != "" {
-			notes = append(notes, lint.Note{Location: root, Message: note})
-		}
-	} else {
-		notes = append(notes, lint.Note{Location: root, Message: "TLS not checked: the target is plain http " +
-			"(a disposable copy usually is; TLS belongs to the production proxy). PRC105 runs on https targets."})
-	}
-	r := &runner{client: c, target: target, tokens: []string{opts.TokenA, opts.TokenB}}
-	// A token from the environment wins over a login.
-	for _, account := range []struct {
-		name  string
-		token *string
-		login *Login
-	}{{"A", &opts.TokenA, opts.LoginA}, {"B", &opts.TokenB, opts.LoginB}} {
-		if *account.token != "" {
-			continue
-		}
-		if *account.token, err = r.login(ctx, spec, account.name, account.login); err != nil {
-			return lint.Report{}, err
-		}
-		r.tokens = append(r.tokens, *account.token)
-	}
-
-	ops := inTestOrder(spec.Operations())
-	r.skip = map[string]bool{}
-	for _, name := range opts.Skip {
-		if !slices.ContainsFunc(ops, func(op lint.Operation) bool { return op.Key() == name }) {
-			// A typo must not quietly call what was meant to be skipped.
-			notes = append(notes, lint.Note{Location: root, Message: fmt.Sprintf("test.skip lists %q, which is no operation of the spec", name)})
-		}
-		r.skip[name] = true
-	}
-	a := caller{name: "A", token: opts.TokenA}
-	ofA, err := r.discover(ctx, ops, a, newHarvest(opts.IDs), false)
-	if err != nil {
-		return lint.Report{}, err
-	}
-	// What B's own reads show is B's, or shared with B: finding such a value
-	// in a response to B proves nothing.
-	b := caller{name: "B", token: opts.TokenB}
-	ofB, err := r.discover(ctx, ops, b, newHarvest(nil), true)
-	if err != nil {
-		return lint.Report{}, err
-	}
-	ofA.identity, ofB.identity = identityMarks(ofA, ofB), identityMarks(ofB, ofA)
-
-	// readers are the GETs by path: how A checks whether B changed or
-	// deleted A's object.
-	readers := map[string]lint.Operation{}
-	for _, op := range ops {
-		if op.Method == http.MethodGet {
-			readers[op.Path] = op
-		}
-	}
-
-	var matrix []lint.MatrixRow
-	// Malformed requests (PRC103, PRC104) run as A in their own pass, after
-	// every write's B check and before the deletes: an accepted mutation
-	// changes A's object, which must not hide what B can do to it.
-	var toBreak []filledOp
-	broken, hung := false, false
-	breakAll := func() error {
-		if broken {
-			return nil
-		}
-		broken = true
-		for i, f := range toBreak {
-			bad, note, noAnswer, err := r.malformed(ctx, f.op, f.path, a)
-			if err != nil {
-				return err
-			}
-			findings = append(findings, bad...)
-			if note != "" {
-				notes = append(notes, lint.Note{Location: f.op.Location, Message: f.op.Key() + ": " + note})
-			}
-			if noAnswer {
-				// A body that hangs the server (a regular expression that
-				// backtracks) may keep it busy for minutes: whatever comes
-				// next would only time out too.
-				hung = true
-				for _, rest := range toBreak[i+1:] {
-					notes = append(notes, lint.Note{Location: rest.op.Location, Message: rest.op.Key() +
-						": malformed input not tested: the server stopped answering after an earlier malformed request"})
-				}
-				break
-			}
-		}
+	if len(missing) == 0 {
 		return nil
 	}
-	unchanged := 0
+	return fmt.Errorf("set %s: the token of a test account seeded in the API "+
+		"(the bare token: Procyon adds \"Bearer \" when the spec asks for it), "+
+		"or declare how it logs in under test.accounts in .procyon.yaml", strings.Join(missing, " and "))
+}
+
+// loadSpecs loads the spec and, for --base-spec, which of its operations
+// changed (nil: test everything). A base that does not load (it was broken
+// on main, and this change may be the fix) means testing everything, with
+// a note, not failing the run.
+func loadSpecs(specPath string, opts Options) (spec *lint.Spec, changed map[string]bool, note string, err error) {
+	spec, err = lint.Load(specPath, lint.Options{RefRoot: opts.RefRoot})
+	if err != nil || opts.BaseSpec == "" {
+		return spec, nil, "", err
+	}
+	base, err := lint.Load(opts.BaseSpec, lint.Options{RefRoot: opts.RefRoot})
+	if err != nil {
+		return spec, nil, fmt.Sprintf("--base-spec not used, every operation is tested: %v", err), nil
+	}
+	changed, note = spec.Changed(base)
+	return spec, changed, note, nil
+}
+
+// signIn returns the two test accounts with their tokens: from the
+// environment, which wins, or from their declared login.
+func (r *runner) signIn(ctx context.Context, spec *lint.Spec, opts Options) (a, b caller, err error) {
+	a = caller{name: "A", token: opts.TokenA}
+	b = caller{name: "B", token: opts.TokenB}
+	for _, account := range []struct {
+		who   *caller
+		login *Login
+	}{{&a, opts.LoginA}, {&b, opts.LoginB}} {
+		if account.who.token == "" {
+			if account.who.token, err = r.login(ctx, spec, account.who.name, account.login); err != nil {
+				return a, b, err
+			}
+		}
+		r.tokens = append(r.tokens, account.who.token)
+	}
+	return a, b, nil
+}
+
+// discoverAccounts reads as A, then as B, and marks which values are each
+// one's own (identityMarks). B reads only paths with nothing in them: what
+// B is shown without naming an object, so a value B "saw" never comes from
+// reading A's objects, which is the very thing being tested.
+func (r *runner) discoverAccounts(ctx context.Context, ops []lint.Operation, a, b caller, ids map[string][]string) (ofA, ofB *discovery, err error) {
+	if ofA, err = r.discover(ctx, ops, a, newHarvest(ids), false); err != nil {
+		return nil, nil, err
+	}
+	if ofB, err = r.discover(ctx, ops, b, newHarvest(nil), true); err != nil {
+		return nil, nil, err
+	}
+	ofA.identity, ofB.identity = identityMarks(ofA, ofB), identityMarks(ofB, ofA)
+	return ofA, ofB, nil
+}
+
+// readers are the GETs by path: how A checks whether B changed or deleted
+// A's object.
+func readers(ops []lint.Operation) map[string]lint.Operation {
+	byPath := map[string]lint.Operation{}
 	for _, op := range ops {
-		key := op.Key()
-		skipped := lint.Cell{Outcome: lint.Skipped}
-		if op.Method == http.MethodDelete {
-			if err := breakAll(); err != nil {
-				return lint.Report{}, err
-			}
+		if op.Method == http.MethodGet {
+			byPath[op.Path] = op
 		}
-		switch {
-		case r.skip[key]:
-			notes = append(notes, lint.Note{Location: op.Location, Message: key + " not called: listed under test.skip"})
-			matrix = append(matrix, lint.MatrixRow{Operation: key, A: skipped, B: skipped, Anonymous: skipped})
-			continue
-		case hung:
-			notes = append(notes, lint.Note{Location: op.Location, Message: key + " not tested: the server stopped answering after a malformed request"})
-			matrix = append(matrix, lint.MatrixRow{Operation: key, A: ofA.cells[key], B: skipped, Anonymous: skipped})
-			continue
+	}
+	return byPath
+}
+
+// session is one run's testing phase: what discovery found, and what is
+// left for the malformed pass.
+type session struct {
+	*runner
+	res      *results
+	ofA, ofB *discovery
+	a, b     caller
+	changed  map[string]bool // nil: every operation is tested
+	readers  map[string]lint.Operation
+	// toBreak are the writes the malformed pass will send bad bodies to,
+	// with their path filled with A's object.
+	toBreak   []filledOp
+	unchanged int
+}
+
+var skipped = lint.Cell{Outcome: lint.Skipped}
+
+// testOperation tests one operation: anonymously (PRC101), then as B on
+// A's object (PRC102), and queues a write for the malformed pass. Each ends
+// as a row of the matrix.
+func (s *session) testOperation(ctx context.Context, op lint.Operation) error {
+	key := op.Key()
+	row := lint.MatrixRow{Operation: key, A: s.ofA.cells[key]}
+	switch {
+	case s.skip[key]:
+		s.res.note(op.Location, key+" not called: listed under test.skip")
+		s.res.matrix = append(s.res.matrix, lint.MatrixRow{Operation: key, A: skipped, B: skipped, Anonymous: skipped})
+		return nil
+	case s.changed != nil && !s.changed[key]:
+		// Still read as A during discovery, to find IDs for the changed
+		// operations; just not tested.
+		s.unchanged++
+		row.B, row.Anonymous = lint.Cell{Outcome: lint.Unchanged}, lint.Cell{Outcome: lint.Unchanged}
+		s.res.matrix = append(s.res.matrix, row)
+		return nil
+	}
+	f, err := s.ofA.fill(op.Path)
+	if err != nil {
+		s.res.note(op.Location, fmt.Sprintf("%s not tested: %v in A's responses; declare one under test.ids in .procyon.yaml", key, err))
+		s.res.matrix = append(s.res.matrix, lint.MatrixRow{Operation: key, A: skipped, B: skipped, Anonymous: skipped})
+		return nil
+	}
+	if row.Anonymous, err = s.anonymous(ctx, op, f.path); err != nil {
+		return err
+	}
+	s.queueMalformed(op, f.path)
+	if len(f.values) > 0 { // an object in the path: one of A's to reach
+		if row.B, err = s.asB(ctx, op, f); err != nil {
+			return err
 		}
-		row := lint.MatrixRow{Operation: key, A: ofA.cells[key]}
-		// Unchanged operations are still read as A above, to find IDs for
-		// the changed ones; they are just not tested.
-		if changed != nil && !changed[key] {
-			unchanged++
-			row.B, row.Anonymous = lint.Cell{Outcome: lint.Unchanged}, lint.Cell{Outcome: lint.Unchanged}
-			matrix = append(matrix, row)
-			continue
-		}
-		f, err := ofA.fill(op.Path)
+	}
+	s.res.matrix = append(s.res.matrix, row)
+	return nil
+}
+
+// anonymous calls op with no credentials. Only an operation the spec
+// protects can be reached by mistake (PRC101); one it leaves open is
+// PRC001's business. Public operations are not called.
+func (s *session) anonymous(ctx context.Context, op lint.Operation, path string) (lint.Cell, error) {
+	if op.Public {
+		return lint.Cell{Outcome: lint.Public}, nil
+	}
+	exchange, err := s.send(ctx, op, path, anonymous)
+	if err != nil {
+		return lint.Cell{}, err
+	}
+	reached := success(exchange) && op.NeedsAuth
+	if reached {
+		s.res.findings = append(s.res.findings, anonymousAccess(op, exchange))
+	}
+	return cellOf(exchange, reached), nil
+}
+
+// asB tests B on A's object in the path (PRC102).
+func (s *session) asB(ctx context.Context, op lint.Operation, f filled) (lint.Cell, error) {
+	if !f.own && len(unseen(f.values, s.ofB.harvest)) == 0 {
+		// Every user is shown these IDs (a public list of every book), and
+		// nothing says which object is A's: B reaching it proves nothing.
+		s.res.note(op.Location, op.Key()+": not tested as B: every user is shown this object's ID and nothing marks it as A's; "+
+			"declare one of A's under test.ids in .procyon.yaml")
+		return skipped, nil
+	}
+	finding, note, cell, err := s.otherAccount(ctx, op, f, s.ofA, s.ofB, s.readers, s.a, s.b)
+	if err != nil {
+		return lint.Cell{}, err
+	}
+	if finding != nil {
+		s.res.findings = append(s.res.findings, *finding)
+	}
+	if note != "" {
+		s.res.note(op.Location, op.Key()+": "+note)
+	}
+	return cell, nil
+}
+
+// queueMalformed keeps a non-public write for the malformed pass, or notes
+// why it cannot be sent malformed bodies.
+func (s *session) queueMalformed(op lint.Operation, path string) {
+	if op.Method == http.MethodGet || op.Method == http.MethodDelete || op.Public {
+		return
+	}
+	switch {
+	case op.Body != nil:
+		s.toBreak = append(s.toBreak, filledOp{op, path})
+	case op.NeedsBody:
+		s.res.note(op.Location, op.Key()+": malformed input not tested: it needs a request body and the spec gives no example")
+	}
+}
+
+// malformedPass sends malformed bodies to the queued writes, as A
+// (PRC103, PRC104). noAnswer is true when one got no answer at all: a body
+// that hangs the server (a regular expression that backtracks) may keep it
+// busy for minutes, so nothing more is sent.
+func (s *session) malformedPass(ctx context.Context) (noAnswer bool, err error) {
+	for i, f := range s.toBreak {
+		bad, note, noAnswer, err := s.malformed(ctx, f.op, f.path, s.a)
 		if err != nil {
-			notes = append(notes, lint.Note{Location: op.Location, Message: fmt.Sprintf(
-				"%s not tested: %v in A's responses; declare one under test.ids in .procyon.yaml", key, err)})
-			matrix = append(matrix, lint.MatrixRow{Operation: key, A: skipped, B: skipped, Anonymous: skipped})
-			continue
+			return false, err
 		}
-		row.Anonymous = lint.Cell{Outcome: lint.Public}
-		if !op.Public {
-			exchange, err := r.send(ctx, op, f.path, anonymous)
-			if err != nil {
-				return lint.Report{}, err
-			}
-			// Only an operation the spec protects can be reached by
-			// mistake; one it leaves open is PRC001's business.
-			reached := success(exchange) && op.NeedsAuth
-			row.Anonymous = cellOf(exchange, reached)
-			if reached {
-				findings = append(findings, anonymousAccess(op, exchange))
-			}
-		}
-		if op.Method != http.MethodGet && op.Method != http.MethodDelete && !op.Public {
-			if op.Body != nil {
-				toBreak = append(toBreak, filledOp{op, f.path})
-			} else if op.NeedsBody {
-				notes = append(notes, lint.Note{Location: op.Location, Message: key +
-					": malformed input not tested: it needs a request body and the spec gives no example"})
-			}
-		}
-		if len(f.values) == 0 {
-			matrix = append(matrix, row)
-			continue // no object in the path: nothing of A's to reach
-		}
-		var finding *lint.Finding
-		var note string
-		if !f.own && len(unseen(f.values, ofB.harvest)) == 0 {
-			// Every user is shown these IDs (a public list of every book),
-			// and nothing says which object is A's: B reaching it proves
-			// nothing.
-			note = "not tested as B: every user is shown this object's ID and nothing marks it as A's; " +
-				"declare one of A's under test.ids in .procyon.yaml"
-			row.B = skipped
-		} else {
-			finding, note, row.B, err = r.otherAccount(ctx, op, f, ofA, ofB, readers, a, b)
-			if err != nil {
-				return lint.Report{}, err
-			}
-		}
-		matrix = append(matrix, row)
-		if finding != nil {
-			findings = append(findings, *finding)
-		}
+		s.res.findings = append(s.res.findings, bad...)
 		if note != "" {
-			notes = append(notes, lint.Note{Location: op.Location, Message: key + ": " + note})
+			s.res.note(f.op.Location, f.op.Key()+": "+note)
+		}
+		if noAnswer {
+			for _, rest := range s.toBreak[i+1:] {
+				s.res.note(rest.op.Location, rest.op.Key()+
+					": malformed input not tested: the server stopped answering after an earlier malformed request")
+			}
+			return true, nil
 		}
 	}
-	if err := breakAll(); err != nil {
-		return lint.Report{}, err
-	}
-	if baseNote != "" {
-		notes = append(notes, lint.Note{Location: root, Message: baseNote})
-	}
-	if unchanged > 0 {
-		notes = append(notes, lint.Note{Location: root, Message: fmt.Sprintf(
-			"%d of %d operations unchanged since %s, not tested", unchanged, len(ops), opts.BaseSpec)})
-	}
-	report := spec.Finish(findings, notes, lint.Options{FailOn: opts.FailOn})
-	report.Matrix = matrix
-	return report, nil
+	return false, nil
+}
+
+// skipAfterHang notes an operation left untested because the server
+// stopped answering.
+func (s *session) skipAfterHang(op lint.Operation) {
+	key := op.Key()
+	s.res.note(op.Location, key+" not tested: the server stopped answering after a malformed request")
+	s.res.matrix = append(s.res.matrix, lint.MatrixRow{Operation: key, A: s.ofA.cells[key], B: skipped, Anonymous: skipped})
 }
 
 // cellOf is the matrix cell of a call: a finding when reached, otherwise
