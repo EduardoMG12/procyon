@@ -43,3 +43,41 @@ jobs:
           found PRC103 "PUT /users/v1/{username}/email"  # RegexDOS
       - if: always()
         run: docker rm -f vampi
+
+  crapi:
+    runs-on: ubuntu-latest
+    env:
+      CRAPI: https://raw.githubusercontent.com/OWASP/crAPI/b5fc307f3e5f875809b095b771108ef342a33724/deploy/docker
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go build -o procyon ./cmd/procyon
+      - name: Start crAPI
+        working-directory: testdata/benchmark/crapi
+        run: |
+          curl -sfLO "$CRAPI/docker-compose.yml"
+          curl -sfLO "$CRAPI/.env"
+          docker compose -p crapi up -d --wait
+          ./setup.sh
+      - name: procyon test
+        working-directory: testdata/benchmark/crapi
+        run: |
+          set +e
+          ../../../procyon test ../../corpus/crapi/spec.json --base-url http://127.0.0.1:8888 \
+            --format json --output markdown=procyon.md > report.json
+          code=$?
+          set -e
+          cat procyon.md >> "$GITHUB_STEP_SUMMARY"
+          test "$code" = 1
+      - name: The known vulnerabilities are found
+        working-directory: testdata/benchmark/crapi
+        run: |
+          found() { jq -e --arg r "$1" --arg o "$2" '.findings | any(.rule.id == $r and .operation == $o)' report.json > /dev/null; }
+          found PRC102 "GET /workshop/api/shop/orders/{order_id}"  # another user's order
+          found PRC101 "GET /workshop/api/shop/orders/{order_id}"  # the same, with no account
+      - if: always()
+        working-directory: testdata/benchmark/crapi
+        run: docker compose -p crapi down -v
+
