@@ -18,16 +18,18 @@ problem · **✗ v0.2** needs the running API · **✗ spec** not visible in the
 ([benchmark.yml](../.github/workflows/benchmark.yml), with
 [this setup](../testdata/benchmark/crapi/)). The test accounts start with
 nothing of their own; each creates a post, an order and a product first.
-It finds that **an anonymous caller and another account both read A's
-order, with A's email and phone** (PRC101 and PRC102 on `GET
+It finds that **another account reads A's vehicle location** (challenge 1;
+PRC102 on `GET /identity/api/v2/vehicle/{vehicleId}/location`), that **an
+anonymous caller and another account both read A's order, with A's email
+and phone** (PRC101 and PRC102 on `GET
 /workshop/api/shop/orders/{order_id}`), and that several bodies the spec
-forbids are accepted (PRC104). The challenges below that need a vehicle
-(1, 2: its location and mechanic report) are not reached yet: adding one
-takes a code crAPI sends by e-mail.
+forbids are accepted (PRC104). The setup gives each account its vehicle
+with the code crAPI e-mails it, and declares A's vehicle ID: crAPI calls
+it `uuid` in its list, which the spec does not tie to `{vehicleId}`.
 
 | Challenge | Result | Finding |
 |---|---|---|
-| 1, 2. Another user's vehicle / mechanic report (BOLA) | ✗ v0.2 | Authenticated, so nothing in the spec says the server skips the owner check |
+| 1, 2. Another user's vehicle / mechanic report (BOLA) | ✗ lint · ✓ test (1) | Lint: authenticated, so nothing in the spec says the server skips the owner check. Test: PRC102, B reads A's vehicle location |
 | 3. Reset another user's password (OTP brute force) | ~ | PRC001 on the OTP checks, which are meant to be public; the missing rate limit is runtime |
 | 4, 5. Other users' data, internal video property | ✗ spec | Returned to logged-in users; the fields look ordinary |
 | 6. Layer 7 DoS through contact_mechanic | ✓ | PRC008: `number_of_repeats` has no maximum |
