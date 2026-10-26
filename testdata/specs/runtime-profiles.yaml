@@ -1,0 +1,30 @@
+openapi: 3.0.3
+info:
+  title: Profiles whose email the server validates
+  version: "1"
+security:
+  - bearer: []
+components:
+  securitySchemes:
+    bearer: {type: http, scheme: bearer}
+paths:
+  /profiles:
+    get:
+      responses: {"200": {description: The caller's profiles}}
+  /profiles/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string}}
+    get:
+      responses: {"200": {description: A profile}}
+    put:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: {type: string}
+            example:
+              email: someone@example.com
+      responses: {"200": {description: Changed}}

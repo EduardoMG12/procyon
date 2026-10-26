@@ -100,7 +100,7 @@ func Run(ctx context.Context, specPath string, opts Options) (report.Report, err
 	}
 	ops := inTestOrder(spec.Operations())
 	r.skip = res.skipSet(ops, opts.Skip)
-	ofA, ofB, err := r.discoverAccounts(ctx, ops, a, b, opts.IDs)
+	ofA, ofB, created, err := r.discoverAccounts(ctx, ops, a, b, opts.IDs)
 	if err != nil {
 		return report.Report{}, err
 	}
@@ -129,6 +129,9 @@ func Run(ctx context.Context, specPath string, opts Options) (report.Report, err
 		}
 	}
 
+	if len(created) > 0 {
+		res.note(res.root, "the test accounts created objects of their own to be tested with ("+strings.Join(created, ", ")+")")
+	}
 	res.note(res.root, baseNote)
 	if r.redirects > 0 {
 		// A redirect is judged as what the API answered: never followed,

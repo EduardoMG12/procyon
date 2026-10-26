@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -43,7 +44,7 @@ func TestRunFindsThePlantedVulnerabilities(t *testing.T) {
 		t.Error("a critical finding did not fail the run")
 	}
 	bola := rep.Findings[slices.Index(got, "PRC102 GET /notes/{id}")].Evidence
-	if len(bola) != 1 || bola[0].Caller != "B" || !strings.HasSuffix(bola[0].URL, "/notes/1") ||
+	if len(bola) != 1 || bola[0].Caller != "B" || !strings.HasSuffix(bola[0].URL, "/notes/1") || // a seeded note, before the one A created
 		strings.Contains(bola[0].URL+bola[0].Body, vulnapi.TokenB) {
 		t.Errorf("PRC102 evidence = %+v, want B's GET /notes/1, with no token", bola)
 	}
@@ -60,9 +61,11 @@ func TestRunFindsNothingInTheFixedTwin(t *testing.T) {
 		t.Errorf("fixed API: findings %q, failed %v; want none", got, rep.Failed)
 	}
 	// A's GET /notes showed note IDs, so every operation on /notes/{id} was
-	// called: the only note is that a plain http target has no TLS to check.
-	if len(rep.Notes) != 1 || !strings.HasPrefix(rep.Notes[0].Message, "TLS not checked") {
-		t.Errorf("notes = %v, want only the TLS one", rep.Notes)
+	// called: the only notes are that a plain http target has no TLS to
+	// check, and that each account created a note of its own.
+	if len(rep.Notes) != 2 || !strings.HasPrefix(rep.Notes[0].Message, "TLS not checked") ||
+		rep.Notes[1].Message != "the test accounts created objects of their own to be tested with (A: POST /notes, B: POST /notes)" {
+		t.Errorf("notes = %v, want the TLS one and the created objects", rep.Notes)
 	}
 }
 
@@ -155,7 +158,8 @@ func TestPRC102WritesAreConfirmedByA(t *testing.T) {
 	for _, f := range findingsOf(rep, "PRC102") {
 		t.Errorf("PRC102 on %s, want none: A's note never changed", f.Operation)
 	}
-	if want := []string{"PUT /notes/1", "DELETE /notes/1"}; !slices.Equal(sentByB, want) {
+	// B first creates its own note, then writes to A's.
+	if want := []string{"POST /notes", "PUT /notes/1", "DELETE /notes/1"}; !slices.Equal(sentByB, want) {
 		t.Errorf("B sent %q, want %q", sentByB, want)
 	}
 }
@@ -266,7 +270,7 @@ func TestRunOverHTTPS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rep.Findings) != 0 || len(rep.Notes) != 0 {
+	if len(rep.Findings) != 0 || len(rep.Notes) != 1 || !strings.HasPrefix(rep.Notes[0].Message, "the test accounts created") {
 		t.Errorf("findings %v, notes %v; want none", rep.Findings, rep.Notes)
 	}
 }
@@ -410,5 +414,76 @@ func TestWriteWithoutAnExampleGetsANote(t *testing.T) {
 		if !slices.ContainsFunc(rep.Notes, func(n report.Note) bool { return strings.HasPrefix(n.Message, want) }) {
 			t.Errorf("no note %q in %v", want, rep.Notes)
 		}
+	}
+}
+
+// An environment that seeds no objects: each account creates one of its
+// own through the collection's POST, so B is still tested on A's.
+func TestAccountsCreateTheirOwnObjects(t *testing.T) {
+	var mu sync.Mutex
+	owners := map[string]string{} // note ID → owner
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := userOf(r)
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case user == "":
+			w.WriteHeader(http.StatusUnauthorized)
+		case r.Method == "POST" && r.URL.Path == "/notes":
+			id := fmt.Sprint(len(owners) + 1)
+			owners[id] = user
+			fmt.Fprintf(w, `{"id": %q, "owner": %q}`, id, user)
+		case r.URL.Path == "/notes": // each user lists their own
+			var list []string
+			for id, owner := range owners {
+				if owner == user {
+					list = append(list, fmt.Sprintf(`{"id": %q, "owner": %q}`, id, owner))
+				}
+			}
+			fmt.Fprintf(w, "[%s]", strings.Join(list, ","))
+		case strings.HasPrefix(r.URL.Path, "/notes/") && r.Method == "GET": // anyone reads any note: the BOLA
+			id := strings.TrimPrefix(r.URL.Path, "/notes/")
+			fmt.Fprintf(w, `{"id": %q, "owner": %q, "secret": "only for %s"}`, id, owners[id], owners[id])
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	rep := runOn(t, vulnapiSpec, handler, Options{})
+	if !slices.Contains(findingKeys(rep), "PRC102 GET /notes/{id}") {
+		t.Errorf("findings %q, want PRC102 on GET /notes/{id} with the note A created", findingKeys(rep))
+	}
+}
+
+// B's changed write is refused by a server that validates the field it
+// changed (an email): B then sends the example as it is, and the hole is
+// still found.
+func TestBWritesTheExampleWhenTheChangedOneIsRefused(t *testing.T) {
+	var mu sync.Mutex
+	email := "alice@example.com"
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := userOf(r)
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case user == "":
+			w.WriteHeader(http.StatusUnauthorized)
+		case r.Method == "GET" && r.URL.Path == "/profiles" && user == "alice":
+			w.Write([]byte(`[{"id": "1", "owner": "alice"}]`))
+		case r.Method == "GET" && r.URL.Path == "/profiles":
+			w.Write([]byte(`[{"id": "2", "owner": "bob"}]`))
+		case r.Method == "GET":
+			fmt.Fprintf(w, `{"id": "1", "owner": "alice", "email": %q}`, email)
+		case r.Method == "PUT": // anyone can change any profile: the BOLA
+			var in struct{ Email string }
+			if json.NewDecoder(r.Body).Decode(&in) != nil || !strings.HasSuffix(in.Email, ".com") {
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				return
+			}
+			email = in.Email
+		}
+	})
+	rep := runOn(t, "../../testdata/specs/runtime-profiles.yaml", handler, Options{})
+	if !slices.Contains(findingKeys(rep), "PRC102 PUT /profiles/{id}") {
+		t.Errorf("findings %q, want PRC102 on PUT /profiles/{id}", findingKeys(rep))
 	}
 }
