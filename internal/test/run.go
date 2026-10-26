@@ -6,9 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
-	"net/netip"
 	"net/url"
 	"reflect"
 	"slices"
@@ -26,9 +24,9 @@ type Options struct {
 	// FailOn and RefRoot work as in a lint.
 	FailOn  lint.Severity
 	RefRoot string
-	// Timeout is how long one request may take. Zero means 10 seconds.
+	// Timeout is how long one request may take. Zero means defaultTimeout.
 	Timeout time.Duration
-	// Budget is the most requests a run sends. Zero means 1000.
+	// Budget is the most requests a run sends. Zero means defaultBudget.
 	Budget int
 	// TokenA and TokenB are the test accounts' tokens (PROCYON_USER_A_TOKEN,
 	// PROCYON_USER_B_TOKEN). B must not be allowed to touch A's objects.
@@ -46,21 +44,28 @@ type Options struct {
 	BaseSpec string
 }
 
-// maxBody is how much of a response body evidence keeps; maxResponse is
-// how much of it Procyon reads, to find IDs in.
 const (
+	defaultTimeout = 10 * time.Second
+	defaultBudget  = 1000
+
+	// maxBody is how much of a body evidence keeps; maxResponse is how much
+	// of a response Procyon reads, to find IDs in.
 	maxBody     = 200
 	maxResponse = 1 << 20
+
+	// minTelling is the shortest value that tells one object from another:
+	// "ok", "1" or "yes" could be in anyone's.
+	minTelling = 4
 )
 
 // Run tests the API at opts.BaseURL against the spec at specPath.
 func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error) {
 	var missing []string
 	if opts.TokenA == "" && opts.LoginA == nil {
-		missing = append(missing, envTokenA+" (account A)")
+		missing = append(missing, EnvTokenA+" (account A)")
 	}
 	if opts.TokenB == "" && opts.LoginB == nil {
-		missing = append(missing, envTokenB+" (account B)")
+		missing = append(missing, EnvTokenB+" (account B)")
 	}
 	if len(missing) > 0 {
 		return lint.Report{}, fmt.Errorf("set %s: the token of a test account seeded in the API "+
@@ -86,7 +91,8 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 	if err != nil {
 		return lint.Report{}, err
 	}
-	c := newClient(target, cmp.Or(opts.Timeout, 10*time.Second), cmp.Or(opts.Budget, 1000))
+	timeout := cmp.Or(opts.Timeout, defaultTimeout)
+	c := newClient(target, timeout, cmp.Or(opts.Budget, defaultBudget))
 
 	// TLS first: a server that speaks only an old protocol is reported
 	// before anything else can fail on it.
@@ -94,7 +100,7 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 	var notes []lint.Note
 	root := lint.Location{File: specPath, Line: 1, Column: 1}
 	if target.Scheme == "https" {
-		problems, note := checkTLS(ctx, target, cmp.Or(opts.Timeout, 10*time.Second))
+		problems, note := checkTLS(ctx, target, timeout)
 		if len(problems) > 0 {
 			findings = append(findings, weakTLS(root, target, problems))
 		}
@@ -124,7 +130,7 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 	ops := inTestOrder(spec.Operations())
 	r.skip = map[string]bool{}
 	for _, name := range opts.Skip {
-		if !slices.ContainsFunc(ops, func(op lint.Operation) bool { return op.Method+" "+op.Path == name }) {
+		if !slices.ContainsFunc(ops, func(op lint.Operation) bool { return op.Key() == name }) {
 			// A typo must not quietly call what was meant to be skipped.
 			notes = append(notes, lint.Note{Location: root, Message: fmt.Sprintf("test.skip lists %q, which is no operation of the spec", name)})
 		}
@@ -142,7 +148,7 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 	if err != nil {
 		return lint.Report{}, err
 	}
-	ofA.identity, ofB.identity = identity(ofA, ofB), identity(ofB, ofA)
+	ofA.identity, ofB.identity = identityMarks(ofA, ofB), identityMarks(ofB, ofA)
 
 	// readers are the GETs by path: how A checks whether B changed or
 	// deleted A's object.
@@ -165,21 +171,21 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 		}
 		broken = true
 		for i, f := range toBreak {
-			bad, note, stopped, err := r.malformed(ctx, f.op, f.path, a)
+			bad, note, noAnswer, err := r.malformed(ctx, f.op, f.path, a)
 			if err != nil {
 				return err
 			}
 			findings = append(findings, bad...)
 			if note != "" {
-				notes = append(notes, lint.Note{Location: f.op.Location, Message: f.op.Method + " " + f.op.Path + ": " + note})
+				notes = append(notes, lint.Note{Location: f.op.Location, Message: f.op.Key() + ": " + note})
 			}
-			if stopped {
+			if noAnswer {
 				// A body that hangs the server (a regular expression that
 				// backtracks) may keep it busy for minutes: whatever comes
 				// next would only time out too.
 				hung = true
 				for _, rest := range toBreak[i+1:] {
-					notes = append(notes, lint.Note{Location: rest.op.Location, Message: rest.op.Method + " " + rest.op.Path +
+					notes = append(notes, lint.Note{Location: rest.op.Location, Message: rest.op.Key() +
 						": malformed input not tested: the server stopped answering after an earlier malformed request"})
 				}
 				break
@@ -189,7 +195,7 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 	}
 	unchanged := 0
 	for _, op := range ops {
-		key := op.Method + " " + op.Path
+		key := op.Key()
 		skipped := lint.Cell{Outcome: lint.Skipped}
 		if op.Method == http.MethodDelete {
 			if err := breakAll(); err != nil {
@@ -319,7 +325,7 @@ func anonymousAccess(op lint.Operation, exchange lint.Exchange) lint.Finding {
 	return lint.Finding{
 		Rule:      lint.RuntimeRule("PRC101"),
 		Location:  op.Location,
-		Operation: op.Method + " " + op.Path,
+		Operation: op.Key(),
 		Why: fmt.Sprintf("A request with no credentials got %d: anyone who can reach the API can call this operation, "+
 			"though the spec says it needs authentication.", exchange.Status),
 		Fix: "Make the server answer 401 to requests without valid credentials on this operation. " +
@@ -434,7 +440,7 @@ func (r *runner) otherAccount(ctx context.Context, op lint.Operation, f filled,
 	return &lint.Finding{
 		Rule:      lint.RuntimeRule("PRC102"),
 		Location:  op.Location,
-		Operation: op.Method + " " + op.Path,
+		Operation: op.Key(),
 		Why: fmt.Sprintf("Test account B called this operation on an object of test account A and got %d: "+
 			"any user can %s other users' objects by changing the ID in the path.", exchange.Status, what),
 		Fix: "On the server, check that the object belongs to the caller (or that the caller may " + what +
@@ -474,7 +480,7 @@ func sharedUnseen(toB, toA []byte, ofB *harvest, pathValues []string) []string {
 	var shared []string
 	if v, ok := decode(toB); ok {
 		walk(v, func(value string) {
-			telling := len(value) >= 4 && value != "true" && value != "false" && !slices.Contains(pathValues, value)
+			telling := len(value) >= minTelling && value != "true" && value != "false" && !slices.Contains(pathValues, value)
 			if telling && slices.Contains(inA, value) && !ofB.saw(value) && !slices.Contains(shared, value) {
 				shared = append(shared, value)
 			}
@@ -483,14 +489,14 @@ func sharedUnseen(toB, toA []byte, ofB *harvest, pathValues []string) []string {
 	return shared
 }
 
-// identity lists the values that mark one account's own objects, by the
+// identityMarks lists the values that mark one account's own objects, by the
 // path they came from: for each read both accounts made that answers one
 // object (GET /me, not a list), the fields where the account's answer
 // differs from the other's. A list is never used: a counter or a signed URL
 // in every item would mark every item. A short value counts only in a field
 // named like an identity (id, user, name, email, login): "17" as userId, but
 // not "1" as a count.
-func identity(mine, theirs *discovery) map[string]string {
+func identityMarks(mine, theirs *discovery) map[string]string {
 	marks := map[string]string{}
 	for _, path := range sortedKeys(mine.byPath) {
 		if !mine.single[path] || !theirs.single[path] {
@@ -504,7 +510,7 @@ func identity(mine, theirs *discovery) map[string]string {
 				v := own[field]
 				idLike := strings.HasSuffix(field, "id") || strings.Contains(field, "user") || strings.Contains(field, "name") ||
 					strings.Contains(field, "email") || strings.Contains(field, "login")
-				if v != other[field] && v != "" && v != "true" && v != "false" && (len(v) >= 4 || idLike) {
+				if v != other[field] && v != "" && v != "true" && v != "false" && (len(v) >= minTelling || idLike) {
 					if _, seen := marks[v]; !seen {
 						marks[v] = path
 					}
@@ -618,22 +624,31 @@ func (r *runner) sendFull(ctx context.Context, op lint.Operation, path string, w
 	if err != nil {
 		return lint.Exchange{}, nil, fmt.Errorf("%s %s: reading the response: %w", op.Method, op.Path, err)
 	}
-	// Masked before it is cut: a token across the cut would otherwise
-	// leave its first characters unmasked.
-	excerpt := mask(string(got), r.tokens...)
-	excerpt = excerpt[:min(len(excerpt), maxBody)]
 	exchange := lint.Exchange{
 		Caller: who.name,
 		Method: op.Method,
 		URL:    mask(req.URL.RequestURI(), r.tokens...),
 		Status: resp.StatusCode,
-		Body:   excerpt,
+		Body:   r.excerpt(string(got)),
 	}
 	if body != nil {
-		sent := mask(string(op.Body), r.tokens...)
-		exchange.Sent = sent[:min(len(sent), maxBody)]
+		exchange.Sent = r.excerpt(string(op.Body))
 	}
 	return exchange, got, nil
+}
+
+// excerpt is the start of a body for evidence, every token masked. Masked
+// before it is cut: a token across the cut would otherwise leave its first
+// characters unmasked.
+func (r *runner) excerpt(body string) string {
+	masked := mask(body, r.tokens...)
+	return masked[:min(len(masked), maxBody)]
+}
+
+// requestURI is how evidence shows a path sent to the target: with the
+// target's own base path, as sendFull records it.
+func (r *runner) requestURI(path string) string {
+	return mask(strings.TrimSuffix(r.target.Path, "/")+path, r.tokens...)
 }
 
 // discover calls who's reads (GET operations) and records what their
@@ -655,7 +670,7 @@ func (r *runner) discover(ctx context.Context, ops []lint.Operation, who caller,
 	for progress := true; progress; {
 		progress = false
 		for i, op := range ops {
-			if done[i] || op.Method != http.MethodGet || (topLevel && strings.Contains(op.Path, "{")) || r.skip[op.Method+" "+op.Path] {
+			if done[i] || op.Method != http.MethodGet || (topLevel && strings.Contains(op.Path, "{")) || r.skip[op.Key()] {
 				continue
 			}
 			f, err := h.fill(op.Path)
@@ -668,7 +683,7 @@ func (r *runner) discover(ctx context.Context, ops []lint.Operation, who caller,
 			if err != nil {
 				return nil, err
 			}
-			key := op.Method + " " + op.Path
+			key := op.Key()
 			d.cells[key] = cellOf(exchange, false)
 			if success(exchange) {
 				h.add(op.Path, body)
@@ -684,8 +699,4 @@ type discovery struct {
 	*harvest
 	cells  map[string]lint.Cell // what each read got, by operation, for the matrix
 	bodies map[string][]byte    // each successful read's response body, by the path sent
-}
-
-func lookupHost(ctx context.Context, host string) ([]netip.Addr, error) {
-	return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
 }

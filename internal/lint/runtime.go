@@ -68,7 +68,7 @@ type Exchange struct {
 	Caller string // "anonymous", "A" or "B"
 	Method string
 	URL    string // the path and query, as sent: "/notes/1"
-	Status int
+	Status int    // 0 when the request got no answer within the timeout
 	Body   string // the start of the response body
 	Sent   string // the start of the request body, when there was one
 }

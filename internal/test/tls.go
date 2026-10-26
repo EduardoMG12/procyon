@@ -67,8 +67,11 @@ func checkTLS(ctx context.Context, target *url.URL, timeout time.Duration) (prob
 		problems = append(problems, tlsProblem{"accepts the weak cipher suite " + name, "negotiated " + name})
 	}
 	state, err := handshake(&tls.Config{MinVersion: tls.VersionTLS10})
-	if err != nil || len(state.PeerCertificates) == 0 {
+	if err != nil {
 		return problems, fmt.Sprintf("TLS not fully checked: no handshake with %s (%v)", addr, err)
+	}
+	if len(state.PeerCertificates) == 0 {
+		return problems, fmt.Sprintf("TLS not fully checked: %s presented no certificate", addr)
 	}
 	leaf := state.PeerCertificates[0]
 	if !publiclySigned(state.PeerCertificates) {
@@ -119,7 +122,7 @@ func weakTLS(where lint.Location, target *url.URL, problems []tlsProblem) lint.F
 	var evidence []lint.Exchange
 	for _, p := range problems {
 		whats = append(whats, p.what)
-		evidence = append(evidence, lint.Exchange{Caller: "anonymous", Method: "TLS", URL: target.Host, Body: p.proof})
+		evidence = append(evidence, lint.Exchange{Caller: anonymous.name, Method: "TLS", URL: target.Host, Body: p.proof})
 	}
 	return lint.Finding{
 		Rule:     lint.RuntimeRule("PRC105"),

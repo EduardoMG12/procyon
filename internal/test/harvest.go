@@ -52,7 +52,8 @@ func (h *harvest) add(path string, body []byte) {
 	if !ok {
 		return
 	}
-	_, h.single[path] = v.(map[string]any)
+	_, isObject := v.(map[string]any)
+	h.single[path] = isObject
 	objects(v, func(o object) { h.byPath[path] = append(h.byPath[path], o) })
 }
 

@@ -54,6 +54,11 @@ type Field struct {
 	MaxLength *uint64 // when "string" is one of the types
 }
 
+// Key names the operation as reports do: "GET /notes/{id}".
+func (o Operation) Key() string {
+	return o.Method + " " + o.Path
+}
+
 // Credential is where a token goes in a request.
 type Credential struct {
 	In     string // "header", "query" or "cookie"

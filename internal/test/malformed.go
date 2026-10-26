@@ -66,24 +66,46 @@ func mutations(example []byte, fields []lint.Field) []mutation {
 			break
 		}
 	}
-	long := -1
-	for i, f := range fields {
-		if f.MaxLength != nil && *f.MaxLength < 1<<16 {
-			n := int(*f.MaxLength) + 1
-			add(fmt.Sprintf("%s of %d characters (maxLength %d)", f.Name, n, *f.MaxLength),
-				func(b map[string]any) { b[f.Name] = strings.Repeat("a", n) })
-			long = -2
-			break
-		}
-		if long == -1 && f.MaxLength == nil && slices.Equal(f.Types, []string{"string"}) {
-			long = i
-		}
-	}
-	if long >= 0 {
-		f := fields[long]
-		add(f.Name+" of 100000 characters", func(b map[string]any) { b[f.Name] = strings.Repeat("a", 100000) })
+	if f, ok := firstWithMaxLength(fields); ok {
+		n := int(*f.MaxLength) + 1
+		add(fmt.Sprintf("%s of %d characters (maxLength %d)", f.Name, n, *f.MaxLength),
+			func(b map[string]any) { b[f.Name] = strings.Repeat("a", n) })
+	} else if f, ok := firstUnboundedString(fields); ok {
+		add(fmt.Sprintf("%s of %d characters", f.Name, veryLong),
+			func(b map[string]any) { b[f.Name] = strings.Repeat("a", veryLong) })
 	}
 	return out
+}
+
+const (
+	// maxLengthTested is the largest maxLength Procyon goes one past: a
+	// string longer than this is a body few servers accept for any reason.
+	maxLengthTested = 1 << 16
+	// veryLong is the string sent where the spec sets no maxLength: long
+	// enough to hit size limits and backtracking regular expressions.
+	veryLong = 100_000
+)
+
+// firstWithMaxLength is the first string field with a maxLength Procyon
+// tests.
+func firstWithMaxLength(fields []lint.Field) (lint.Field, bool) {
+	for _, f := range fields {
+		if f.MaxLength != nil && *f.MaxLength < maxLengthTested {
+			return f, true
+		}
+	}
+	return lint.Field{}, false
+}
+
+// firstUnboundedString is the first field that is only a string, with no
+// maxLength.
+func firstUnboundedString(fields []lint.Field) (lint.Field, bool) {
+	for _, f := range fields {
+		if f.MaxLength == nil && slices.Equal(f.Types, []string{"string"}) {
+			return f, true
+		}
+	}
+	return lint.Field{}, false
 }
 
 // wrongTypeTarget is the first required field whose types are known, else
@@ -144,9 +166,8 @@ func (r *runner) malformed(ctx context.Context, op lint.Operation, path string, 
 			// the server busy (a regular expression that backtracks, a
 			// loop) takes it down for everyone.
 			crashed = append(crashed, m.what+": no answer within the timeout")
-			sent := mask(string(m.body), r.tokens...)
-			crashEvidence = append(crashEvidence, lint.Exchange{Caller: a.name, Method: op.Method, URL: path,
-				Sent: sent[:min(len(sent), maxBody)], Body: "(no answer)"})
+			crashEvidence = append(crashEvidence, lint.Exchange{Caller: a.name, Method: op.Method, URL: r.requestURI(path),
+				Sent: r.excerpt(string(m.body))}) // Status 0: no answer
 			hung = true
 			break // the next mutation would only wait out the timeout too
 		}
@@ -160,7 +181,7 @@ func (r *runner) malformed(ctx context.Context, op lint.Operation, path string, 
 			accepted, acceptEvidence = append(accepted, m.what), append(acceptEvidence, exchange)
 		}
 	}
-	name := op.Method + " " + op.Path
+	name := op.Key()
 	if len(crashed) > 0 {
 		findings = append(findings, lint.Finding{
 			Rule: lint.RuntimeRule("PRC103"), Location: op.Location, Operation: name,
