@@ -2,7 +2,7 @@
 
 What Procyon finds in APIs built to be insecure, against the
 vulnerabilities their authors document: `procyon lint` (v0.1) from their
-specs, and, for VAmPI so far, `procyon test` (v0.2) against the running API.
+specs, and `procyon test` (v0.2) against the running VAmPI and crAPI.
 It shows what a spec linter can and cannot see, and what runtime tests add.
 
 The specs are in [`testdata/corpus/`](../testdata/corpus/). Every hit below is
