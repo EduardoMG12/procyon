@@ -155,17 +155,6 @@ func (t *terminal) evidence(exchanges []lint.Exchange) {
 	}
 }
 
-// exchangeLine is "B: GET /notes/1 → 200".
-func exchangeLine(e lint.Exchange) string {
-	return fmt.Sprintf("%s: %s %s → %d", e.Caller, e.Method, e.URL, e.Status)
-}
-
-// flatten joins a body's lines and spaces, so an excerpt never breaks the
-// layout.
-func flatten(s string) string {
-	return strings.Join(strings.Fields(s), " ")
-}
-
 // ignored lists the findings an x-procyon-ignore matched, each with its
 // reason: exceptions stay visible on every run.
 func (t *terminal) ignored(ignored []lint.IgnoredFinding) {

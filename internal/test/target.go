@@ -31,6 +31,10 @@ func allowed(addr netip.Addr) bool {
 // tests pass a fake one.
 type lookupFunc func(ctx context.Context, host string) ([]netip.Addr, error)
 
+func lookupHost(ctx context.Context, host string) ([]netip.Addr, error) {
+	return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+}
+
 // checkTarget parses a --base-url and refuses it unless it is http or https
 // and every address its host resolves to is allowed. There is no way to skip
 // this: Procyon never tests a system that is not a disposable copy.

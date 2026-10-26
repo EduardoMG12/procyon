@@ -4,9 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -28,14 +28,15 @@ func (s *Spec) Changed(base *Spec) (changed map[string]bool, note string) {
 		})
 		return changed, "the spec is split across files, which --base-spec cannot compare yet: every operation is tested"
 	}
-	before := newFingerprints(base.doc)
+	inBase := newFingerprints(base.doc)
+	before := map[string]string{} // operation → its fingerprint in base
 	forEachOperation(base.doc, func(method, path string, op *openapi3.Operation) {
-		before.byOp[method+" "+path] = before.of(path, op)
+		before[method+" "+path] = inBase.of(path, op)
 	})
 	after := newFingerprints(s.doc)
 	forEachOperation(s.doc, func(method, path string, op *openapi3.Operation) {
 		key := method + " " + path
-		if old, ok := before.byOp[key]; !ok || old != after.of(path, op) {
+		if old, ok := before[key]; !ok || old != after.of(path, op) {
 			changed[key] = true
 		}
 	})
@@ -49,15 +50,14 @@ func (s *Spec) Changed(base *Spec) (changed map[string]bool, note string) {
 // sharing, and recursive schemas need nothing special: a node is visited
 // once.
 type fingerprints struct {
-	doc  *openapi3.T
-	root any                 // the whole document as plain JSON, for local $refs
-	hash map[string]string   // $ref → hash of its node, once computed
-	out  map[string][]string // $ref → the $refs inside its node, once found
-	byOp map[string]string
+	doc    *openapi3.T
+	root   any                 // the whole document as plain JSON, for local $refs
+	hash   map[string]string   // $ref → hash of its node, once computed
+	refsOf map[string][]string // $ref → the $refs inside its node, once found
 }
 
 func newFingerprints(doc *openapi3.T) *fingerprints {
-	return &fingerprints{doc: doc, root: generic(doc), hash: map[string]string{}, out: map[string][]string{}, byOp: map[string]string{}}
+	return &fingerprints{doc: doc, root: generic(doc), hash: map[string]string{}, refsOf: map[string][]string{}}
 }
 
 // of is the fingerprint of one operation.
@@ -93,10 +93,10 @@ func (f *fingerprints) of(path string, op *openapi3.Operation) string {
 		}
 		seen[ref] = true
 		refs = append(refs, ref)
-		next, ok := f.out[ref]
+		next, ok := f.refsOf[ref]
 		if !ok {
 			next = refsIn(f.node(ref))
-			f.out[ref] = next
+			f.refsOf[ref] = next
 		}
 		queue = append(queue, next...)
 	}
@@ -125,8 +125,8 @@ func (f *fingerprints) node(ref string) any {
 		case map[string]any:
 			v = node[part]
 		case []any:
-			var i int
-			if _, err := fmt.Sscan(part, &i); err != nil || i < 0 || i >= len(node) {
+			i, err := strconv.Atoi(part) // strict, like the pointer in internal/test/login.go
+			if err != nil || i < 0 || i >= len(node) {
 				return nil
 			}
 			v = node[i]
@@ -150,23 +150,23 @@ func (f *fingerprints) hashOf(ref string) string {
 // refsIn lists every $ref string in a plain JSON value.
 func refsIn(v any) []string {
 	var refs []string
-	var walk func(any)
-	walk = func(v any) {
+	var collect func(any)
+	collect = func(v any) {
 		switch v := v.(type) {
 		case map[string]any:
 			if ref, ok := v["$ref"].(string); ok {
 				refs = append(refs, ref)
 			}
 			for _, field := range v {
-				walk(field)
+				collect(field)
 			}
 		case []any:
 			for _, item := range v {
-				walk(item)
+				collect(item)
 			}
 		}
 	}
-	walk(v)
+	collect(v)
 	return refs
 }
 

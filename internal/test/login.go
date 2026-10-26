@@ -54,7 +54,7 @@ func (r *runner) login(ctx context.Context, spec *lint.Spec, who string, l *Logi
 	}
 	expanded, secrets, err := expand(l.Body)
 	if err != nil {
-		return fail("%v", err)
+		return "", fmt.Errorf("login of test account %s: %w", who, err)
 	}
 	// The password is masked like a token, in case the API echoes it.
 	r.tokens = append(r.tokens, secrets...)
@@ -66,7 +66,7 @@ func (r *runner) login(ctx context.Context, spec *lint.Spec, who string, l *Logi
 	signIn.Body, signIn.Credential = body, nil
 	exchange, got, err := r.sendFull(ctx, signIn, op.Path, anonymous)
 	if err != nil {
-		return fail("%v", err)
+		return "", fmt.Errorf("login of test account %s: %w", who, err)
 	}
 	if !success(exchange) {
 		return fail("%s answered %d", l.Operation, exchange.Status)
@@ -93,8 +93,8 @@ var envVar = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 func expand(v any) (any, []string, error) {
 	var secrets []string
 	var missing string
-	var walk func(any) any
-	walk = func(v any) any {
+	var expandValue func(any) any
+	expandValue = func(v any) any {
 		switch v := v.(type) {
 		case string:
 			return envVar.ReplaceAllStringFunc(v, func(m string) string {
@@ -111,19 +111,19 @@ func expand(v any) (any, []string, error) {
 		case map[string]any:
 			out := map[string]any{}
 			for k, field := range v {
-				out[k] = walk(field)
+				out[k] = expandValue(field)
 			}
 			return out
 		case []any:
 			out := make([]any, len(v))
 			for i, item := range v {
-				out[i] = walk(item)
+				out[i] = expandValue(item)
 			}
 			return out
 		}
 		return v
 	}
-	out := walk(v)
+	out := expandValue(v)
 	if missing != "" {
 		return nil, nil, fmt.Errorf("${%s} is not set", missing)
 	}

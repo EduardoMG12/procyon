@@ -94,8 +94,13 @@ func testCommand() command {
 				var down func() error
 				baseURL, down, err = test.Up(ctx, test.Compose{File: composeFile, Service: service, Port: port})
 				defer func() {
-					if downErr := down(); downErr != nil && err == nil {
+					downErr := down()
+					switch {
+					case downErr == nil:
+					case err == nil:
 						err = fmt.Errorf("the tests ran, but the environment was left running: %w", downErr)
+					default: // both: the user must hear the stack may still be up
+						err = errors.Join(err, fmt.Errorf("and the environment may be left running: %w", downErr))
 					}
 				}()
 				if err != nil {
@@ -104,7 +109,7 @@ func testCommand() command {
 			}
 			return test.Run(ctx, spec, test.Options{
 				BaseURL: baseURL, FailOn: failOn, RefRoot: refRoot,
-				TokenA: os.Getenv("PROCYON_USER_A_TOKEN"), TokenB: os.Getenv("PROCYON_USER_B_TOKEN"),
+				TokenA: os.Getenv(test.EnvTokenA), TokenB: os.Getenv(test.EnvTokenB),
 				IDs:    cfg.Test.IDs,
 				LoginA: cfg.Test.Accounts.A.Login, LoginB: cfg.Test.Accounts.B.Login,
 				BaseSpec: baseSpec,
@@ -250,9 +255,12 @@ const usage = `Usage:
                               in the spec's directory (for monorepos). Can also
                               be set as ref-root in .procyon.yaml.
   procyon test [flags] (--compose <file> --service <name> --port <port> | --base-url <url>) <spec>
-                        Call a running, disposable copy of the API and report
-                        what it let an anonymous caller do. Takes the same
-                        flags as lint.
+                        Call a running, disposable copy of the API as two test
+                        accounts and anonymously, and report what each could
+                        do, how it handles malformed input, and its TLS.
+                        Takes the same flags as lint. Accounts, IDs and
+                        operations to skip can be set under test: in
+                        .procyon.yaml (docs/configuration.md).
 
     --compose <file>          Start a disposable copy of the API with docker
                               compose, test it, and always tear it down.

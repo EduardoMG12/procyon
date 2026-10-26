@@ -10,8 +10,8 @@ import (
 
 // The environment variables that hold the test accounts' tokens.
 const (
-	envTokenA = "PROCYON_USER_A_TOKEN"
-	envTokenB = "PROCYON_USER_B_TOKEN"
+	EnvTokenA = "PROCYON_USER_A_TOKEN"
+	EnvTokenB = "PROCYON_USER_B_TOKEN"
 )
 
 // caller is who sends a request: a test account with its token, or the

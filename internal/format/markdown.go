@@ -99,10 +99,13 @@ func matrix(b *strings.Builder, rows []lint.MatrixRow) {
 	}
 }
 
+// icons draw the matrix's outcomes; NotCalled has none and is drawn "–".
+var icons = map[lint.Outcome]string{
+	lint.Allowed: "✅", lint.Denied: "🚫", lint.Reached: "❌", lint.Public: "🌐", lint.Skipped: "⏭️", lint.Unchanged: "💤",
+}
+
 func cell(c lint.Cell) string {
-	icon := map[lint.Outcome]string{
-		lint.Allowed: "✅", lint.Denied: "🚫", lint.Reached: "❌", lint.Public: "🌐", lint.Skipped: "⏭️", lint.Unchanged: "💤",
-	}[c.Outcome]
+	icon := icons[c.Outcome]
 	if icon == "" {
 		return "–"
 	}
