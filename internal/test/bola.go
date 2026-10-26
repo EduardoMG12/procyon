@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"slices"
 
+	"github.com/EduardoMG12/procyon/internal/loader"
+
 	"github.com/EduardoMG12/procyon/internal/lint"
 	"github.com/EduardoMG12/procyon/internal/report"
 )
@@ -26,7 +28,7 @@ func cannotTell(note string) verdict {
 // otherAccount calls op as B with A's object in the path (f) and tells
 // whether B reached it (PRC102): readAsB for a GET, writeAsB for anything
 // else.
-func (s *session) otherAccount(ctx context.Context, op lint.Operation, f filled) (verdict, error) {
+func (s *session) otherAccount(ctx context.Context, op loader.Operation, f filled) (verdict, error) {
 	if op.Method == http.MethodGet {
 		return s.readAsB(ctx, op, f)
 	}
@@ -36,7 +38,7 @@ func (s *session) otherAccount(ctx context.Context, op lint.Operation, f filled)
 // readAsB is reached when B's 2xx answer holds values A's answer for the
 // same object also held, that B's own reads never showed and B's own
 // object does not hold: A's data, not something every user sees.
-func (s *session) readAsB(ctx context.Context, op lint.Operation, f filled) (verdict, error) {
+func (s *session) readAsB(ctx context.Context, op loader.Operation, f filled) (verdict, error) {
 	toA := s.ofA.bodies[f.path]
 	if toA == nil {
 		// Discovery read another object (A's own was not known yet): A
@@ -66,7 +68,7 @@ func (s *session) readAsB(ctx context.Context, op lint.Operation, f filled) (ver
 // withoutBsOwn drops the values B's own object on the same operation also
 // holds ("active", a type, a year): they are not A's data. It only can when
 // Procyon knows which object is B's (B's identity marks one).
-func (s *session) withoutBsOwn(ctx context.Context, op lint.Operation, asked string, shared []string) ([]string, error) {
+func (s *session) withoutBsOwn(ctx context.Context, op loader.Operation, asked string, shared []string) ([]string, error) {
 	own, err := s.ofB.fill(op.Path)
 	if err != nil || !own.own || own.path == asked {
 		return shared, nil
@@ -83,7 +85,7 @@ func (s *session) withoutBsOwn(ctx context.Context, op lint.Operation, asked str
 // write or delete, sees it changed or gone. Without a GET on the same path,
 // a write counts when its 2xx answer holds A's path values, and a delete
 // cannot be told.
-func (s *session) writeAsB(ctx context.Context, op lint.Operation, f filled) (verdict, error) {
+func (s *session) writeAsB(ctx context.Context, op loader.Operation, f filled) (verdict, error) {
 	if op.NeedsBody && op.Body == nil {
 		return cannotTell("not tested as B: it needs a request body and the spec gives no example"), nil
 	}
@@ -130,7 +132,7 @@ func (s *session) writeAsB(ctx context.Context, op lint.Operation, f filled) (ve
 // readBefore is A's read of its object before B's write or delete. Its note
 // says why the write could not be judged: A cannot read it, the read does
 // not show what the write sets, or the object already holds it.
-func (s *session) readBefore(ctx context.Context, op, reader lint.Operation, path string) (note string, err error) {
+func (s *session) readBefore(ctx context.Context, op, reader loader.Operation, path string) (note string, err error) {
 	exchange, body, err := s.sendFull(ctx, reader, path, s.a)
 	switch {
 	case err != nil || !success(exchange):
@@ -148,7 +150,7 @@ func (s *session) readBefore(ctx context.Context, op, reader lint.Operation, pat
 // unreadableWrite judges a write with no GET on the same path: only B's
 // own answer can tell, when it holds A's path values. Otherwise a 2xx is a
 // note, never a pass.
-func (s *session) unreadableWrite(ctx context.Context, op lint.Operation, f filled) (verdict, error) {
+func (s *session) unreadableWrite(ctx context.Context, op loader.Operation, f filled) (verdict, error) {
 	exchange, body, err := s.sendFull(ctx, op, f.path, s.b)
 	if err != nil || !success(exchange) {
 		return verdict{cell: cellOf(exchange, false)}, err
@@ -165,7 +167,7 @@ func (s *session) unreadableWrite(ctx context.Context, op lint.Operation, f fill
 
 // bolaFinding is a PRC102 finding: what B did to A's object, and the
 // requests that prove it.
-func bolaFinding(op lint.Operation, exchange report.Exchange, evidence []report.Exchange) *report.Finding {
+func bolaFinding(op loader.Operation, exchange report.Exchange, evidence []report.Exchange) *report.Finding {
 	var what string
 	switch op.Method {
 	case http.MethodGet:

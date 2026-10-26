@@ -7,7 +7,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/loader"
 )
 
 func TestHarvestFillsPathParameters(t *testing.T) {
@@ -55,7 +55,7 @@ func TestDiscoverFollowsDependencies(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	ops := []lint.Operation{ // a later read unlocks an earlier one
+	ops := []loader.Operation{ // a later read unlocks an earlier one
 		{Method: "GET", Path: "/owners/{ownerId}"},
 		{Method: "GET", Path: "/projects/{id}"},
 		{Method: "GET", Path: "/projects"},

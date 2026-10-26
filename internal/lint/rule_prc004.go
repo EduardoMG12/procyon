@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/loader"
+
 	"github.com/EduardoMG12/procyon/internal/report"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -30,7 +32,7 @@ func checkPRC004(doc *openapi3.T) []report.Finding {
 			return
 		}
 		findings = append(findings, report.Finding{
-			Location:  locateField(server.Origin, "url"),
+			Location:  loader.LocateField(server.Origin, "url"),
 			Operation: operation,
 			Element:   server,
 			Why:       "Requests to this server travel unencrypted, credentials and tokens included: anyone on the network path can read or change them.",
@@ -47,7 +49,7 @@ func checkPRC004(doc *openapi3.T) []report.Finding {
 			}
 		}
 	}
-	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
+	loader.ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		if op.Servers != nil {
 			for _, server := range *op.Servers {
 				flag(server, method+" "+path)

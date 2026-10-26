@@ -1,4 +1,4 @@
-package lint
+package loader
 
 import (
 	"os"
@@ -29,7 +29,7 @@ func TestRefsHaveATotalBudget(t *testing.T) {
 	if err := os.WriteFile(path, []byte(spec), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Run(path, Options{})
+	_, err := Load(path, anyRule)
 	if err == nil || !strings.Contains(err.Error(), "in total") {
 		t.Fatalf("Run = %v, want an error about the total read through $refs", err)
 	}
@@ -43,7 +43,7 @@ func TestSpecHasASizeLimit(t *testing.T) {
 	if err := os.WriteFile(path, []byte("openapi: 3.0.3\ninfo: {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Run(path, Options{})
+	_, err := Load(path, anyRule)
 	if err == nil || !strings.Contains(err.Error(), "larger than") {
 		t.Fatalf("Run = %v, want an error about the spec's size", err)
 	}
@@ -69,7 +69,7 @@ func TestTheNumberOfRefsIsCapped(t *testing.T) {
 	if err := os.WriteFile(path, []byte(spec), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Run(path, Options{})
+	_, err := Load(path, anyRule)
 	if err == nil || !strings.Contains(err.Error(), "more than 2 $refs") {
 		t.Fatalf("Run = %v, want an error about the number of $refs", err)
 	}

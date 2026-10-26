@@ -1,5 +1,9 @@
-// Package lint checks a spec for security problems in the API's design.
-package lint
+// Package loader reads a spec (OpenAPI 3.0, 3.1 or Swagger 2.0, in YAML
+// or JSON, split across local files or not) with the file, line and column
+// of every element, refuses what it must not read, and answers the
+// questions lint rules and runtime tests both ask about it: its
+// operations, their security, their parameters, its ignores.
+package loader
 
 import (
 	"context"
@@ -11,9 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
-
-	"github.com/EduardoMG12/procyon/internal/report"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/goccy/go-yaml"
@@ -21,52 +22,16 @@ import (
 	"github.com/goccy/go-yaml/parser"
 )
 
-// Options control a run.
+// Options control how a spec is loaded.
 type Options struct {
-	// FailOn is the fail threshold: the lowest severity that fails the run.
-	// Zero means the default, High.
-	FailOn report.Severity
 	// RefRoot is the directory $refs may read files from. Empty means the
 	// spec's own directory. A monorepo whose specs share files from a
 	// sibling folder sets it to the repository root. It must contain the
 	// spec, and it may not be the file system's root or the home directory.
 	RefRoot string
-	// Today decides whether an ignore has expired. Zero means now.
-	Today time.Time
-}
-
-// Run lints the spec at path.
-func Run(path string, opts Options) (report.Report, error) {
-	doc, files, err := load(path, opts)
-	if err != nil {
-		return report.Report{}, err
-	}
-	asGiven := files.asGiven
-	ignores, err := parseIgnores(doc, asGiven, files.back != nil)
-	if err != nil {
-		return report.Report{}, err
-	}
-	// Identical findings are one finding: a converted Swagger 2.0 spec copies
-	// an element once per media type. Findings that differ only in their
-	// operation or reason stay apart, so an ignore on one operation never
-	// hides another's.
-	seen := map[string]bool{}
-	var findings []report.Finding
-	for _, rule := range rules {
-		for _, f := range rule.check(doc) {
-			f.Rule = rule.Rule
-			f.Location = asGiven(f.Location)
-			key := fmt.Sprintf("%s %s:%d:%d %s %s", rule.ID, f.Location.File, f.Location.Line, f.Location.Column, f.Operation, f.Why)
-			if seen[key] {
-				continue
-			}
-			seen[key] = true
-			findings = append(findings, f)
-		}
-	}
-	rep := report.New(findings, nil, ignoresOf(ignores, Rules()), report.Options{FailOn: opts.FailOn, Today: opts.Today})
-	rep.Sources = files.lines
-	return rep, nil
+	// KnownRule reports whether a rule ID exists, so an x-procyon-ignore of
+	// a misspelled rule is an error. The rules live in internal/lint.
+	KnownRule func(id string) bool
 }
 
 // load reads the spec at path, recording the file, line and column of every

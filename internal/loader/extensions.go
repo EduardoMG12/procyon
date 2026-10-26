@@ -1,4 +1,4 @@
-package lint
+package loader
 
 import (
 	"fmt"
@@ -13,8 +13,8 @@ import (
 // authentication. Its value is the reason, which is mandatory.
 const publicKey = "x-procyon-public"
 
-// publicReason returns why an operation is public, or "" when it is not.
-func publicReason(op *openapi3.Operation) string {
+// PublicReason returns why an operation is public, or "" when it is not.
+func PublicReason(op *openapi3.Operation) string {
 	reason, _ := op.Extensions[publicKey].(string)
 	return strings.TrimSpace(reason)
 }
@@ -23,12 +23,12 @@ func publicReason(op *openapi3.Operation) string {
 // never silently change what Procyon reports, so it stops the run instead.
 func checkExtensions(doc *openapi3.T, asGiven func(report.Location) report.Location) error {
 	var first error
-	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
+	ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		if _, marked := op.Extensions[publicKey]; !marked || first != nil {
 			return
 		}
-		if publicReason(op) == "" {
-			loc := asGiven(locate(op.Origin))
+		if PublicReason(op) == "" {
+			loc := asGiven(Locate(op.Origin))
 			first = fmt.Errorf(`%s:%d:%d: %s %s: %s needs a reason, e.g. %s: "Load balancer health check"`,
 				loc.File, loc.Line, loc.Column, method, path, publicKey, publicKey)
 		}

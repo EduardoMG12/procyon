@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/loader"
+
 	"github.com/EduardoMG12/procyon/internal/words"
 
 	"github.com/EduardoMG12/procyon/internal/report"
@@ -37,7 +39,7 @@ var identifierWords = []string{
 // read every object: the classic broken object level authorization.
 func checkPRC007(doc *openapi3.T) []report.Finding {
 	var findings []report.Finding
-	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
+	loader.ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		if !reachableAnonymously(doc, path, op) {
 			return
 		}
@@ -46,7 +48,7 @@ func checkPRC007(doc *openapi3.T) []report.Finding {
 			return
 		}
 		findings = append(findings, report.Finding{
-			Location:  locate(op.Origin),
+			Location:  loader.Locate(op.Origin),
 			Operation: method + " " + path,
 			Why: fmt.Sprintf("This operation needs no authentication and picks an object by {%s}. "+
 				"Nobody can check whose object it is, so anyone can try identifiers one after another and reach every object.", param),

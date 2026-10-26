@@ -4,22 +4,22 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/loader"
 )
 
 func TestAuthorize(t *testing.T) {
 	tests := []struct {
-		cred *lint.Credential
+		cred *loader.Credential
 		want func(*http.Request) string
 		is   string
 	}{
-		{&lint.Credential{In: "header", Name: "Authorization", Prefix: "Bearer "},
+		{&loader.Credential{In: "header", Name: "Authorization", Prefix: "Bearer "},
 			func(r *http.Request) string { return r.Header.Get("Authorization") }, "Bearer t0k3n"},
-		{&lint.Credential{In: "header", Name: "X-API-Key"},
+		{&loader.Credential{In: "header", Name: "X-API-Key"},
 			func(r *http.Request) string { return r.Header.Get("X-API-Key") }, "t0k3n"},
-		{&lint.Credential{In: "query", Name: "api_key"},
+		{&loader.Credential{In: "query", Name: "api_key"},
 			func(r *http.Request) string { return r.URL.Query().Get("api_key") }, "t0k3n"},
-		{&lint.Credential{In: "cookie", Name: "session"},
+		{&loader.Credential{In: "cookie", Name: "session"},
 			func(r *http.Request) string { c, _ := r.Cookie("session"); return c.Value }, "t0k3n"},
 	}
 	for _, tt := range tests {
@@ -32,7 +32,7 @@ func TestAuthorize(t *testing.T) {
 	// No credential, or the anonymous caller: the request is left alone.
 	req, _ := http.NewRequest("GET", "http://127.0.0.1/notes", nil)
 	authorize(req, nil, "t0k3n")
-	authorize(req, &lint.Credential{In: "header", Name: "Authorization"}, "")
+	authorize(req, &loader.Credential{In: "header", Name: "Authorization"}, "")
 	if len(req.Header) != 0 {
 		t.Errorf("headers = %v, want none", req.Header)
 	}

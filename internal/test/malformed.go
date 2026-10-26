@@ -11,6 +11,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/loader"
+
 	"github.com/EduardoMG12/procyon/internal/lint"
 	"github.com/EduardoMG12/procyon/internal/report"
 )
@@ -34,7 +36,7 @@ type mutation struct {
 // Fields are in name order. A mutation that comes out equal to the example
 // is dropped: it would prove nothing. An example that is not a JSON object
 // gives none.
-func mutations(example []byte, fields []lint.Field) []mutation {
+func mutations(example []byte, fields []loader.Field) []mutation {
 	v, ok := decode(example)
 	base, isObject := v.(map[string]any)
 	if !ok || !isObject || len(fields) == 0 {
@@ -89,29 +91,29 @@ const (
 
 // firstWithMaxLength is the first string field with a maxLength Procyon
 // tests.
-func firstWithMaxLength(fields []lint.Field) (lint.Field, bool) {
+func firstWithMaxLength(fields []loader.Field) (loader.Field, bool) {
 	for _, f := range fields {
 		if f.MaxLength != nil && *f.MaxLength < maxLengthTested {
 			return f, true
 		}
 	}
-	return lint.Field{}, false
+	return loader.Field{}, false
 }
 
 // firstUnboundedString is the first field that is only a string, with no
 // maxLength.
-func firstUnboundedString(fields []lint.Field) (lint.Field, bool) {
+func firstUnboundedString(fields []loader.Field) (loader.Field, bool) {
 	for _, f := range fields {
 		if f.MaxLength == nil && slices.Equal(f.Types, []string{"string"}) {
 			return f, true
 		}
 	}
-	return lint.Field{}, false
+	return loader.Field{}, false
 }
 
 // wrongTypeTarget is the first required field whose types are known, else
 // the first field whose types are known.
-func wrongTypeTarget(fields []lint.Field) (lint.Field, bool) {
+func wrongTypeTarget(fields []loader.Field) (loader.Field, bool) {
 	for _, required := range []bool{true, false} {
 		for _, f := range fields {
 			if len(f.Types) > 0 && (f.Required || !required) {
@@ -119,7 +121,7 @@ func wrongTypeTarget(fields []lint.Field) (lint.Field, bool) {
 			}
 		}
 	}
-	return lint.Field{}, false
+	return loader.Field{}, false
 }
 
 // wrongValue is a value whose JSON type is none of types: a number, else
@@ -141,7 +143,7 @@ func wrongValue(types []string) (any, string) {
 //
 // hung is true when a request got no answer at all: the server may stay
 // busy, so the caller stops sending.
-func (r *runner) malformed(ctx context.Context, op lint.Operation, path string, a caller) (findings []report.Finding, note string, hung bool, err error) {
+func (r *runner) malformed(ctx context.Context, op loader.Operation, path string, a caller) (findings []report.Finding, note string, hung bool, err error) {
 	muts := mutations(op.Body, op.Fields)
 	if len(muts) == 0 {
 		return nil, "", false, nil

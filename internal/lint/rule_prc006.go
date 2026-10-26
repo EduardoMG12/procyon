@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/EduardoMG12/procyon/internal/loader"
+
 	"github.com/EduardoMG12/procyon/internal/words"
 
 	"github.com/EduardoMG12/procyon/internal/report"
@@ -28,7 +30,7 @@ var prc006 = lintRule{
 // checked: a login or sign-up returns the caller's own data.
 func checkPRC006(doc *openapi3.T) []report.Finding {
 	var found onePerPlace
-	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
+	loader.ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		if method != http.MethodGet || !reachableAnonymously(doc, path, op) {
 			return
 		}
@@ -66,5 +68,5 @@ func textual(s *openapi3.Schema) bool {
 // credentials. Marking an operation public (x-procyon-public) does not
 // change that: it only says it is meant to be so.
 func reachableAnonymously(doc *openapi3.T, path string, op *openapi3.Operation) bool {
-	return unauthenticated(doc, path, op)
+	return loader.Unauthenticated(doc, path, op)
 }

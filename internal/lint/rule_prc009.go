@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/loader"
+
 	"github.com/EduardoMG12/procyon/internal/words"
 
 	"github.com/EduardoMG12/procyon/internal/report"
@@ -36,7 +38,7 @@ var prc009 = lintRule{
 // its enum holds only low values (guestRole: viewer | commenter).
 func checkPRC009(doc *openapi3.T) []report.Finding {
 	var found onePerPlace
-	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
+	loader.ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		if op.RequestBody == nil || op.RequestBody.Value == nil {
 			return
 		}

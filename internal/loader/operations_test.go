@@ -1,16 +1,14 @@
-package lint
+package loader
 
 import (
 	"fmt"
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/EduardoMG12/procyon/internal/report"
 )
 
 func TestLoadListsOperationsInOrder(t *testing.T) {
-	spec, err := Load("../vulnapi/openapi.yaml", Options{})
+	spec, err := Load("../vulnapi/openapi.yaml", anyRule)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,44 +44,14 @@ func TestLoadListsOperationsInOrder(t *testing.T) {
 
 func TestLoadRefusesWhatRunRefuses(t *testing.T) {
 	for _, name := range []string{"invalid-yaml.yaml", "ignore-no-reason.yaml", "ref-remote.yaml"} {
-		if _, err := Load("../../testdata/specs/"+name, Options{}); err == nil {
+		if _, err := Load("../../testdata/specs/"+name, anyRule); err == nil {
 			t.Errorf("Load(%s) succeeded, want the error Run gives", name)
 		}
 	}
 }
 
-// Each kind of run applies the ignores of its own rules and never calls the
-// other kind's unused.
-func TestIgnoresOfLintAndRuntimeRulesStayApart(t *testing.T) {
-	path := "../../testdata/specs/runtime-ignores.yaml"
-	rep, err := Run(path, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(rep.Ignored) != 1 || rep.Ignored[0].Finding.Rule.ID != "PRC001" || len(rep.Notes) != 0 {
-		t.Errorf("lint: ignored %v, notes %v; want PRC001 ignored and no notes", rep.Ignored, rep.Notes)
-	}
-
-	spec, err := Load(path, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	op := spec.Operations()[0]
-	finding := report.Finding{Rule: RuntimeRule("PRC101"), Location: op.Location, Operation: op.Method + " " + op.Path}
-	rep = spec.Finish([]report.Finding{finding}, nil, Options{})
-	if len(rep.Findings) != 0 || len(rep.Ignored) != 1 || len(rep.Notes) != 0 || rep.Failed {
-		t.Errorf("runtime: findings %v, ignored %v, notes %v, failed %v; want PRC101 ignored, no notes, not failed",
-			rep.Findings, rep.Ignored, rep.Notes, rep.Failed)
-	}
-
-	rep = spec.Finish([]report.Finding{{Rule: RuntimeRule("PRC101"), Operation: "GET /other"}}, nil, Options{})
-	if len(rep.Findings) != 1 || !rep.Failed {
-		t.Errorf("an unignored critical finding: findings %v, failed %v; want it kept and the run failed", rep.Findings, rep.Failed)
-	}
-}
-
 func TestOperationCredentials(t *testing.T) {
-	spec, err := Load("../../testdata/specs/runtime-credentials.yaml", Options{})
+	spec, err := Load("../../testdata/specs/runtime-credentials.yaml", anyRule)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +78,7 @@ func TestOperationCredentials(t *testing.T) {
 }
 
 func TestOperationExampleBodies(t *testing.T) {
-	spec, err := Load("../vulnapi/openapi.yaml", Options{})
+	spec, err := Load("../vulnapi/openapi.yaml", anyRule)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +96,7 @@ func TestOperationExampleBodies(t *testing.T) {
 }
 
 func TestOperationBodyFields(t *testing.T) {
-	spec, err := Load("../vulnapi/openapi.yaml", Options{})
+	spec, err := Load("../vulnapi/openapi.yaml", anyRule)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,21 +119,8 @@ func TestOperationBodyFields(t *testing.T) {
 	}
 }
 
-// A runtime finding about no operation (PRC105) is covered by an ignore at
-// the spec's root.
-func TestRootIgnoreCoversARuntimeFindingAboutTheSpec(t *testing.T) {
-	spec, err := Load("../../testdata/specs/runtime-root-ignore.yaml", Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	rep := spec.Finish([]report.Finding{{Rule: RuntimeRule("PRC105"), Location: report.Location{Line: 1, Column: 1}}}, nil, Options{})
-	if len(rep.Findings) != 0 || len(rep.Ignored) != 1 {
-		t.Errorf("findings %v, ignored %v; want PRC105 ignored", rep.Findings, rep.Ignored)
-	}
-}
-
 func TestExampleBodyFromPropertyExamples(t *testing.T) {
-	spec, err := Load("../../testdata/specs/runtime-vampi-like.yaml", Options{})
+	spec, err := Load("../../testdata/specs/runtime-vampi-like.yaml", anyRule)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,3 +137,7 @@ func TestExampleBodyFromPropertyExamples(t *testing.T) {
 		}
 	}
 }
+
+// anyRule loads specs whatever rules their ignores name: which rules exist
+// is internal/lint's business, tested there.
+var anyRule = Options{KnownRule: func(string) bool { return true }}

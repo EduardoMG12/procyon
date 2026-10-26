@@ -1,4 +1,4 @@
-package lint
+package loader
 
 import (
 	"encoding/json"

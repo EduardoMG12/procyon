@@ -1,4 +1,4 @@
-package lint
+package loader
 
 import (
 	"crypto/sha256"
@@ -23,18 +23,18 @@ import (
 func (s *Spec) Changed(base *Spec) (changed map[string]bool, note string) {
 	changed = map[string]bool{}
 	if len(s.files.lines) > 1 || len(base.files.lines) > 1 {
-		forEachOperation(s.doc, func(method, path string, op *openapi3.Operation) {
+		ForEachOperation(s.doc, func(method, path string, op *openapi3.Operation) {
 			changed[method+" "+path] = true
 		})
 		return changed, "the spec is split across files, which --base-spec cannot compare yet: every operation is tested"
 	}
 	inBase := newFingerprints(base.doc)
 	before := map[string]string{} // operation → its fingerprint in base
-	forEachOperation(base.doc, func(method, path string, op *openapi3.Operation) {
+	ForEachOperation(base.doc, func(method, path string, op *openapi3.Operation) {
 		before[method+" "+path] = inBase.of(path, op)
 	})
 	after := newFingerprints(s.doc)
-	forEachOperation(s.doc, func(method, path string, op *openapi3.Operation) {
+	ForEachOperation(s.doc, func(method, path string, op *openapi3.Operation) {
 		key := method + " " + path
 		if old, ok := before[key]; !ok || old != after.of(path, op) {
 			changed[key] = true
