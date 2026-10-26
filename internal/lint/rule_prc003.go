@@ -3,6 +3,8 @@ package lint
 import (
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/loader"
+
 	"github.com/EduardoMG12/procyon/internal/report"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -21,7 +23,7 @@ var prc003 = lintRule{
 // checkPRC003 reports API keys sent in the query string and HTTP Basic.
 func checkPRC003(doc *openapi3.T) []report.Finding {
 	var findings []report.Finding
-	forEachScheme(doc, func(name string, scheme *openapi3.SecurityScheme) {
+	loader.ForEachScheme(doc, func(name string, scheme *openapi3.SecurityScheme) {
 		var why, fix string
 		switch {
 		case strings.EqualFold(scheme.Type, "apiKey") && strings.EqualFold(scheme.In, "query"):
@@ -33,21 +35,7 @@ func checkPRC003(doc *openapi3.T) []report.Finding {
 		default:
 			return
 		}
-		findings = append(findings, report.Finding{Location: locate(scheme.Origin), Why: why, Fix: fix, Element: scheme})
+		findings = append(findings, report.Finding{Location: loader.Locate(scheme.Origin), Why: why, Fix: fix, Element: scheme})
 	})
 	return findings
-}
-
-// forEachScheme calls fn once for every defined security scheme. An alias
-// ($ref to another scheme) is skipped: it is the same scheme, and its
-// finding belongs where the scheme is written.
-func forEachScheme(doc *openapi3.T, fn func(name string, scheme *openapi3.SecurityScheme)) {
-	if doc.Components == nil {
-		return
-	}
-	for name, ref := range doc.Components.SecuritySchemes {
-		if ref != nil && ref.Ref == "" && ref.Value != nil {
-			fn(name, ref.Value)
-		}
-	}
 }

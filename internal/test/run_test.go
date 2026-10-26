@@ -11,7 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/loader"
+
 	"github.com/EduardoMG12/procyon/internal/report"
 	"github.com/EduardoMG12/procyon/internal/vulnapi"
 )
@@ -73,7 +74,7 @@ func TestRunRefusesAPublicTarget(t *testing.T) {
 }
 
 func TestInTestOrder(t *testing.T) {
-	ops := []lint.Operation{
+	ops := []loader.Operation{
 		{Method: "DELETE", Path: "/a"}, {Method: "GET", Path: "/a"}, {Method: "POST", Path: "/a"},
 		{Method: "GET", Path: "/b"}, {Method: "PUT", Path: "/b"},
 		{Method: "DELETE", Path: "/a/{id}"}, {Method: "DELETE", Path: "/a/{id}/notes/{noteId}"},
@@ -204,7 +205,7 @@ func TestEvidenceNeverHoldsPartOfAToken(t *testing.T) {
 	}
 	token := "secret-token-value"
 	r := &runner{client: newClient(target, time.Second, 10), target: target, tokens: []string{token}}
-	op := lint.Operation{Method: "GET", Path: "/me", Credential: &lint.Credential{In: "header", Name: "Authorization", Prefix: "Bearer "}}
+	op := loader.Operation{Method: "GET", Path: "/me", Credential: &loader.Credential{In: "header", Name: "Authorization", Prefix: "Bearer "}}
 	exchange, err := r.send(context.Background(), op, "/me", caller{name: "A", token: token})
 	if err != nil {
 		t.Fatal(err)

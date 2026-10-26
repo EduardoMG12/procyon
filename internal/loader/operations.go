@@ -1,4 +1,4 @@
-package lint
+package loader
 
 import (
 	"encoding/json"
@@ -68,31 +68,47 @@ type Credential struct {
 	Prefix string // "Bearer " for bearer tokens, "" for API keys
 }
 
-// Load reads and validates the spec at path, like Run, without linting it.
+// Load reads and validates the spec at path, and parses its ignores: a
+// typo in one stops the run.
 func Load(path string, opts Options) (*Spec, error) {
 	doc, files, err := load(path, opts)
 	if err != nil {
 		return nil, err
 	}
-	// A typo in an ignore stops `procyon test` too.
-	ignores, err := parseIgnores(doc, files.asGiven, files.back != nil)
+	ignores, err := parseIgnores(doc, files.asGiven, files.back != nil, opts.KnownRule)
 	if err != nil {
 		return nil, err
 	}
 	return &Spec{doc: doc, files: files, ignores: ignores}, nil
 }
 
+// Doc is the spec as kin-openapi loaded it, for lint rules.
+func (s *Spec) Doc() *openapi3.T {
+	return s.doc
+}
+
+// AsGiven turns a location as kin-openapi records it into one in the file
+// as the user gave it (the original Swagger 2.0 file, a path with spaces).
+func (s *Spec) AsGiven(loc report.Location) report.Location {
+	return s.files.asGiven(loc)
+}
+
+// Ignores are the spec's x-procyon-ignore entries.
+func (s *Spec) Ignores() []report.Ignore {
+	return s.ignores
+}
+
 // Operations returns every operation, sorted by path and then method, so
 // the order is the same on every run.
 func (s *Spec) Operations() []Operation {
 	var ops []Operation
-	forEachOperation(s.doc, func(method, path string, op *openapi3.Operation) {
+	ForEachOperation(s.doc, func(method, path string, op *openapi3.Operation) {
 		ops = append(ops, Operation{
 			Method:     method,
 			Path:       path,
-			Location:   s.files.asGiven(locate(op.Origin)),
-			Public:     publicReason(op) != "",
-			NeedsAuth:  !unauthenticated(s.doc, path, op),
+			Location:   s.files.asGiven(Locate(op.Origin)),
+			Public:     PublicReason(op) != "",
+			NeedsAuth:  !Unauthenticated(s.doc, path, op),
 			Credential: credentialOf(s.doc, path, op),
 			Body:       exampleBody(op),
 			NeedsBody:  op.RequestBody != nil && op.RequestBody.Value != nil && op.RequestBody.Value.Required,
@@ -111,8 +127,8 @@ func (s *Spec) Sources() map[string][]string {
 // parameter (see credentialParameter) wins, then the first security
 // requirement made of one scheme Procyon can fill.
 func credentialOf(doc *openapi3.T, path string, op *openapi3.Operation) *Credential {
-	if name := credentialParameter(doc, path, op); name != "" {
-		for _, p := range operationParameters(doc, path, op) {
+	if name := CredentialParameter(doc, path, op); name != "" {
+		for _, p := range OperationParameters(doc, path, op) {
 			if p.Name == name {
 				return &Credential{In: p.In, Name: p.Name}
 			}

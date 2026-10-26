@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/loader"
 )
 
 // Login is how a test account signs in, declared in .procyon.yaml:
@@ -31,13 +31,13 @@ type Login struct {
 // login signs who in and returns its token. It goes through the same
 // client as every other request, so it is subject to the same target
 // checks, timeout and budget.
-func (r *runner) login(ctx context.Context, spec *lint.Spec, who string, l *Login) (string, error) {
+func (r *runner) login(ctx context.Context, spec *loader.Spec, who string, l *Login) (string, error) {
 	fail := func(format string, args ...any) (string, error) {
 		return "", fmt.Errorf("login of test account %s: %s", who, fmt.Sprintf(format, args...))
 	}
 	method, path, _ := strings.Cut(strings.TrimSpace(l.Operation), " ")
 	method = strings.ToUpper(method)
-	var op *lint.Operation
+	var op *loader.Operation
 	for _, o := range spec.Operations() {
 		if o.Method == method && o.Path == strings.TrimSpace(path) {
 			op = &o

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/EduardoMG12/procyon/internal/loader"
+
 	"github.com/EduardoMG12/procyon/internal/lint"
 	"github.com/EduardoMG12/procyon/internal/report"
 )
@@ -104,7 +106,7 @@ func Run(ctx context.Context, specPath string, opts Options) (report.Report, err
 	}
 
 	s := &session{runner: r, res: res, ofA: ofA, ofB: ofB, a: a, b: b, changed: changed, readers: readers(ops)}
-	firstDelete := slices.IndexFunc(ops, func(op lint.Operation) bool { return op.Method == http.MethodDelete })
+	firstDelete := slices.IndexFunc(ops, func(op loader.Operation) bool { return op.Method == http.MethodDelete })
 	if firstDelete < 0 {
 		firstDelete = len(ops)
 	}
@@ -131,9 +133,24 @@ func Run(ctx context.Context, specPath string, opts Options) (report.Report, err
 	if s.unchanged > 0 {
 		res.note(res.root, fmt.Sprintf("%d of %d operations unchanged since %s, not tested", s.unchanged, len(ops), opts.BaseSpec))
 	}
-	rep := spec.Finish(res.findings, res.notes, lint.Options{FailOn: opts.FailOn})
+	rep := finish(spec, res.findings, res.notes, opts.FailOn)
 	rep.Matrix = res.matrix
 	return rep, nil
+}
+
+// finish turns a run's findings and notes into its report, the way a lint
+// does: sorted, the spec's ignores of runtime rules applied, the fail
+// threshold checked. A finding about no operation (PRC105, the target's
+// TLS) is about the spec as a whole: an ignore at its root covers it.
+func finish(spec *loader.Spec, findings []report.Finding, notes []report.Note, failOn report.Severity) report.Report {
+	for i := range findings {
+		if findings[i].Operation == "" && findings[i].Element == nil {
+			findings[i].Element = spec.Doc()
+		}
+	}
+	rep := report.New(findings, notes, report.IgnoresOf(spec.Ignores(), lint.RuntimeRules()), report.Options{FailOn: failOn})
+	rep.Sources = spec.Sources()
+	return rep
 }
 
 // results collects what a run reports.
@@ -168,10 +185,10 @@ func (res *results) tls(ctx context.Context, target *url.URL, timeout time.Durat
 
 // skipSet is test.skip as a set. An entry that names no operation is a
 // note: a typo must not quietly call what was meant to be skipped.
-func (res *results) skipSet(ops []lint.Operation, skip []string) map[string]bool {
+func (res *results) skipSet(ops []loader.Operation, skip []string) map[string]bool {
 	set := map[string]bool{}
 	for _, name := range skip {
-		if !slices.ContainsFunc(ops, func(op lint.Operation) bool { return op.Key() == name }) {
+		if !slices.ContainsFunc(ops, func(op loader.Operation) bool { return op.Key() == name }) {
 			res.note(res.root, fmt.Sprintf("test.skip lists %q, which is no operation of the spec", name))
 		}
 		set[name] = true
@@ -200,12 +217,12 @@ func needAccounts(opts Options) error {
 // changed (nil: test everything). A base that does not load (it was broken
 // on main, and this change may be the fix) means testing everything, with
 // a note, not failing the run.
-func loadSpecs(specPath string, opts Options) (spec *lint.Spec, changed map[string]bool, note string, err error) {
-	spec, err = lint.Load(specPath, lint.Options{RefRoot: opts.RefRoot})
+func loadSpecs(specPath string, opts Options) (spec *loader.Spec, changed map[string]bool, note string, err error) {
+	spec, err = loader.Load(specPath, loader.Options{RefRoot: opts.RefRoot, KnownRule: lint.KnownRule})
 	if err != nil || opts.BaseSpec == "" {
 		return spec, nil, "", err
 	}
-	base, err := lint.Load(opts.BaseSpec, lint.Options{RefRoot: opts.RefRoot})
+	base, err := loader.Load(opts.BaseSpec, loader.Options{RefRoot: opts.RefRoot, KnownRule: lint.KnownRule})
 	if err != nil {
 		return spec, nil, fmt.Sprintf("--base-spec not used, every operation is tested: %v", err), nil
 	}
@@ -215,7 +232,7 @@ func loadSpecs(specPath string, opts Options) (spec *lint.Spec, changed map[stri
 
 // signIn returns the two test accounts with their tokens: from the
 // environment, which wins, or from their declared login.
-func (r *runner) signIn(ctx context.Context, spec *lint.Spec, opts Options) (a, b caller, err error) {
+func (r *runner) signIn(ctx context.Context, spec *loader.Spec, opts Options) (a, b caller, err error) {
 	a = caller{name: "A", token: opts.TokenA}
 	b = caller{name: "B", token: opts.TokenB}
 	for _, account := range []struct {
@@ -236,7 +253,7 @@ func (r *runner) signIn(ctx context.Context, spec *lint.Spec, opts Options) (a, 
 // one's own (identityMarks). B reads only paths with nothing in them: what
 // B is shown without naming an object, so a value B "saw" never comes from
 // reading A's objects, which is the very thing being tested.
-func (r *runner) discoverAccounts(ctx context.Context, ops []lint.Operation, a, b caller, ids map[string][]string) (ofA, ofB *discovery, err error) {
+func (r *runner) discoverAccounts(ctx context.Context, ops []loader.Operation, a, b caller, ids map[string][]string) (ofA, ofB *discovery, err error) {
 	if ofA, err = r.discover(ctx, ops, a, newHarvest(ids), false); err != nil {
 		return nil, nil, err
 	}
@@ -249,8 +266,8 @@ func (r *runner) discoverAccounts(ctx context.Context, ops []lint.Operation, a, 
 
 // readers are the GETs by path: how A checks whether B changed or deleted
 // A's object.
-func readers(ops []lint.Operation) map[string]lint.Operation {
-	byPath := map[string]lint.Operation{}
+func readers(ops []loader.Operation) map[string]loader.Operation {
+	byPath := map[string]loader.Operation{}
 	for _, op := range ops {
 		if op.Method == http.MethodGet {
 			byPath[op.Path] = op
@@ -267,7 +284,7 @@ type session struct {
 	ofA, ofB *discovery
 	a, b     caller
 	changed  map[string]bool // nil: every operation is tested
-	readers  map[string]lint.Operation
+	readers  map[string]loader.Operation
 	// toBreak are the writes the malformed pass will send bad bodies to,
 	// with their path filled with A's object.
 	toBreak   []filledOp
@@ -279,7 +296,7 @@ var skipped = report.Cell{Outcome: report.Skipped}
 // testOperation tests one operation: anonymously (PRC101), then as B on
 // A's object (PRC102), and queues a write for the malformed pass. Each ends
 // as a row of the matrix.
-func (s *session) testOperation(ctx context.Context, op lint.Operation) error {
+func (s *session) testOperation(ctx context.Context, op loader.Operation) error {
 	key := op.Key()
 	row := report.MatrixRow{Operation: key, A: s.ofA.cells[key]}
 	switch {
@@ -317,7 +334,7 @@ func (s *session) testOperation(ctx context.Context, op lint.Operation) error {
 // anonymous calls op with no credentials. Only an operation the spec
 // protects can be reached by mistake (PRC101); one it leaves open is
 // PRC001's business. Public operations are not called.
-func (s *session) anonymous(ctx context.Context, op lint.Operation, path string) (report.Cell, error) {
+func (s *session) anonymous(ctx context.Context, op loader.Operation, path string) (report.Cell, error) {
 	if op.Public {
 		return report.Cell{Outcome: report.Public}, nil
 	}
@@ -333,7 +350,7 @@ func (s *session) anonymous(ctx context.Context, op lint.Operation, path string)
 }
 
 // asB tests B on A's object in the path (PRC102).
-func (s *session) asB(ctx context.Context, op lint.Operation, f filled) (report.Cell, error) {
+func (s *session) asB(ctx context.Context, op loader.Operation, f filled) (report.Cell, error) {
 	if !f.own && len(unseen(f.values, s.ofB.harvest)) == 0 {
 		// Every user is shown these IDs (a public list of every book), and
 		// nothing says which object is A's: B reaching it proves nothing.
@@ -356,7 +373,7 @@ func (s *session) asB(ctx context.Context, op lint.Operation, f filled) (report.
 
 // queueMalformed keeps a non-public write for the malformed pass, or notes
 // why it cannot be sent malformed bodies.
-func (s *session) queueMalformed(op lint.Operation, path string) {
+func (s *session) queueMalformed(op loader.Operation, path string) {
 	if op.Method == http.MethodGet || op.Method == http.MethodDelete || op.Public {
 		return
 	}
@@ -395,7 +412,7 @@ func (s *session) malformedPass(ctx context.Context) (noAnswer bool, err error) 
 
 // skipAfterHang notes an operation left untested because the server
 // stopped answering.
-func (s *session) skipAfterHang(op lint.Operation) {
+func (s *session) skipAfterHang(op loader.Operation) {
 	key := op.Key()
 	s.res.note(op.Location, key+" not tested: the server stopped answering after a malformed request")
 	s.res.matrix = append(s.res.matrix, report.MatrixRow{Operation: key, A: s.ofA.cells[key], B: skipped, Anonymous: skipped})
@@ -425,12 +442,12 @@ func (e *requestError) Unwrap() error { return e.err }
 
 // filledOp is an operation with its path filled with A's values.
 type filledOp struct {
-	op   lint.Operation
+	op   loader.Operation
 	path string
 }
 
 // anonymousAccess is a PRC101 finding.
-func anonymousAccess(op lint.Operation, exchange report.Exchange) report.Finding {
+func anonymousAccess(op loader.Operation, exchange report.Exchange) report.Finding {
 	return report.Finding{
 		Rule:      lint.RuntimeRule("PRC101"),
 		Location:  op.Location,
@@ -484,7 +501,7 @@ func success(exchange report.Exchange) bool {
 // one needs. Within reads and writes the spec's order (by path, then method)
 // is kept; deletes go deepest path first. Every run sends the same requests
 // in the same order.
-func inTestOrder(ops []lint.Operation) []lint.Operation {
+func inTestOrder(ops []loader.Operation) []loader.Operation {
 	group := func(method string) int {
 		switch method {
 		case http.MethodGet, http.MethodHead, http.MethodOptions:
@@ -495,7 +512,7 @@ func inTestOrder(ops []lint.Operation) []lint.Operation {
 		return 1 // POST, PUT, PATCH and anything else changes something
 	}
 	ops = slices.Clone(ops)
-	slices.SortStableFunc(ops, func(a, b lint.Operation) int {
+	slices.SortStableFunc(ops, func(a, b loader.Operation) int {
 		if c := cmp.Compare(group(a.Method), group(b.Method)); c != 0 || group(a.Method) != 2 {
 			return c
 		}
@@ -517,13 +534,13 @@ type runner struct {
 // send calls one operation as who and records the exchange, with every
 // token masked. A request that cannot be sent at all (the API is down, the
 // budget is used up) stops the run: its findings would be incomplete.
-func (r *runner) send(ctx context.Context, op lint.Operation, path string, who caller) (report.Exchange, error) {
+func (r *runner) send(ctx context.Context, op loader.Operation, path string, who caller) (report.Exchange, error) {
 	exchange, _, err := r.sendFull(ctx, op, path, who)
 	return exchange, err
 }
 
 // sendFull is send, also returning the response body (up to maxResponse).
-func (r *runner) sendFull(ctx context.Context, op lint.Operation, path string, who caller) (report.Exchange, []byte, error) {
+func (r *runner) sendFull(ctx context.Context, op loader.Operation, path string, who caller) (report.Exchange, []byte, error) {
 	u := *r.target
 	u.Path = strings.TrimSuffix(r.target.Path, "/") + path
 	var body io.Reader
@@ -588,7 +605,7 @@ func (r *runner) requestURI(path string) string {
 // caller sees without naming an object. B's discovery is that, so a value B
 // "saw" never comes from reading A's objects, which is the very thing being
 // tested.
-func (r *runner) discover(ctx context.Context, ops []lint.Operation, who caller, h *harvest, topLevel bool) (*discovery, error) {
+func (r *runner) discover(ctx context.Context, ops []loader.Operation, who caller, h *harvest, topLevel bool) (*discovery, error) {
 	d := &discovery{harvest: h, cells: map[string]report.Cell{}, bodies: map[string][]byte{}}
 	done := make([]bool, len(ops))
 	for progress := true; progress; {

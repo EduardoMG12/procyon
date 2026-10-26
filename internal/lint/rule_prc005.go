@@ -7,6 +7,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/loader"
+	"github.com/EduardoMG12/procyon/internal/words"
+
 	"github.com/EduardoMG12/procyon/internal/report"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -31,7 +34,7 @@ var prc005 = lintRule{
 // for every operation that returns it (see onePerPlace).
 func checkPRC005(doc *openapi3.T) []report.Finding {
 	var found onePerPlace
-	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
+	loader.ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		lists := [][][]string{secretWords}
 		if method == http.MethodGet {
 			lists = append(lists, credentialWords)
@@ -123,16 +126,16 @@ func modifierOnly(s *openapi3.Schema) bool {
 // properties referring to one schema are two findings, each in its place.
 func propertyLocation(prop *openapi3.SchemaRef) report.Location {
 	if prop.Ref != "" {
-		if loc := locate(prop.Origin); loc.Line > 0 {
+		if loc := loader.Locate(prop.Origin); loc.Line > 0 {
 			return loc
 		}
 	}
-	return locate(prop.Value.Origin)
+	return loader.Locate(prop.Value.Origin)
 }
 
 func matchesAny(name string, lists [][][]string) bool {
 	for _, list := range lists {
-		if matches(name, list) {
+		if words.Matches(name, list) {
 			return true
 		}
 	}

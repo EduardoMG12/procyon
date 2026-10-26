@@ -1,4 +1,4 @@
-package lint
+package loader
 
 // Guards around kin-openapi's Swagger 2.0 converter: inputs it would hang,
 // blow up or crash on are refused with a clear error, and what it silently

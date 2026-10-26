@@ -27,7 +27,7 @@ func TestMatch(t *testing.T) {
 	describing, reference := []string{"policy"}, []string{"next"}
 	tests := map[string]bool{
 		"userPassword":       true,
-		"apiKeys":            true, // a plural
+		"apiKeys":            true,  // a plural
 		"passwordPolicy":     false, // describes the password
 		"nextPassword":       false, // refers to another one
 		"passwordsAreStored": true,

@@ -1,4 +1,4 @@
-package lint
+package loader
 
 import (
 	"fmt"
@@ -11,12 +11,12 @@ import (
 )
 
 func TestChanged(t *testing.T) {
-	spec, err := Load("../vulnapi/openapi.yaml", Options{})
+	spec, err := Load("../vulnapi/openapi.yaml", anyRule)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// The base has no /health, and NoteInput's title allowed 200 characters.
-	base, err := Load("../../testdata/specs/runtime-notes-base.yaml", Options{})
+	base, err := Load("../../testdata/specs/runtime-notes-base.yaml", anyRule)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestChangedIsLinearOnSharedSchemas(t *testing.T) {
 	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	spec, err := Load(path, Options{})
+	spec, err := Load(path, anyRule)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestChangedIsLinearOnSharedSchemas(t *testing.T) {
 }
 
 func TestChangedIsConservativeOnSplitSpecs(t *testing.T) {
-	spec, err := Load("../../testdata/specs/split/api.yaml", Options{})
+	spec, err := Load("../../testdata/specs/split/api.yaml", anyRule)
 	if err != nil {
 		t.Fatal(err)
 	}

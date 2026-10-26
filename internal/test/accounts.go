@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/loader"
 )
 
 // The environment variables that hold the test accounts' tokens.
@@ -25,7 +25,7 @@ var anonymous = caller{name: "anonymous"}
 
 // authorize puts token into req the way cred says. The token is the bare
 // value: Procyon adds the "Bearer " or "Basic " prefix the scheme needs.
-func authorize(req *http.Request, cred *lint.Credential, token string) {
+func authorize(req *http.Request, cred *loader.Credential, token string) {
 	if cred == nil || token == "" {
 		return
 	}

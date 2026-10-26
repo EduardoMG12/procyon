@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/loader"
+
 	"github.com/EduardoMG12/procyon/internal/words"
 
 	"github.com/EduardoMG12/procyon/internal/report"
@@ -42,18 +44,18 @@ var pagingParameters = []string{
 // list with no way to ask for a page.
 func checkPRC008(doc *openapi3.T) []report.Finding {
 	var found onePerPlace
-	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
+	loader.ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		add := func(loc report.Location, why, fix string) {
 			found.add(report.Finding{Location: loc, Operation: method + " " + path, Why: why, Fix: fix})
 		}
 		if method == http.MethodGet && returnsList(op) && !paged(doc, path, op) {
-			add(locate(op.Origin),
+			add(loader.Locate(op.Origin),
 				"This operation returns a whole list with no way to ask for one page, so one request can make the server read and send every record.",
 				"Add paging query parameters (limit and cursor, or page and per_page) and a maximum page size.")
 		}
-		for _, p := range operationParameters(doc, path, op) {
+		for _, p := range loader.OperationParameters(doc, path, op) {
 			if p.In == openapi3.ParameterInQuery && p.Schema != nil && unboundedCount(p.Name, p.Schema.Value, true) {
-				add(locate(p.Origin), unboundedCountWhy, unboundedCountFix)
+				add(loader.Locate(p.Origin), unboundedCountWhy, unboundedCountFix)
 			}
 		}
 		if op.RequestBody == nil || op.RequestBody.Value == nil {
@@ -67,7 +69,7 @@ func checkPRC008(doc *openapi3.T) []report.Finding {
 		roots := mediaSchemas(op.RequestBody.Value.Content)
 		for _, root := range roots {
 			if root != nil && root.Value != nil {
-				check(root.Value, locate(root.Value.Origin)) // the body itself is a list or a text
+				check(root.Value, loader.Locate(root.Value.Origin)) // the body itself is a list or a text
 			}
 		}
 		walkProperties(roots, func(name string, prop *openapi3.SchemaRef) bool {

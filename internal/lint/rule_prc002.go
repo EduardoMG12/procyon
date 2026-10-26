@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/loader"
+
 	"github.com/EduardoMG12/procyon/internal/report"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -29,7 +31,7 @@ func checkPRC002(doc *openapi3.T) []report.Finding {
 	flag := func(reqs openapi3.SecurityRequirements, origin *openapi3.Origin, operation string, about any) {
 		for _, name := range undefinedSchemes(doc, reqs) {
 			findings = append(findings, report.Finding{
-				Location:  locateField(origin, "security"),
+				Location:  loader.LocateField(origin, "security"),
 				Operation: operation,
 				Element:   about,
 				Why: fmt.Sprintf("The requirement names the scheme %q, which the spec never defines, "+
@@ -40,7 +42,7 @@ func checkPRC002(doc *openapi3.T) []report.Finding {
 		}
 	}
 	flag(doc.Security, doc.Origin, "", doc)
-	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
+	loader.ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		if op.Security != nil {
 			flag(*op.Security, op.Origin, method+" "+path, op)
 		}

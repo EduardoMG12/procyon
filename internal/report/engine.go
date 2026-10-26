@@ -55,6 +55,19 @@ func (ig Ignore) expired(today time.Time) bool {
 	return !today.Before(time.Date(y, m, d+1, 0, 0, 0, 0, today.Location()))
 }
 
+// IgnoresOf keeps the ignores of the given rules, so a lint never calls an
+// ignore of a runtime rule unused, and a runtime test never calls an ignore
+// of a lint rule unused.
+func IgnoresOf(ignores []Ignore, rules []Rule) []Ignore {
+	var kept []Ignore
+	for _, ig := range ignores {
+		if slices.ContainsFunc(rules, func(r Rule) bool { return r.ID == ig.Rule }) {
+			kept = append(kept, ig)
+		}
+	}
+	return kept
+}
+
 // Options control how findings become a report.
 type Options struct {
 	// FailOn is the fail threshold. Zero means High.

@@ -1,4 +1,4 @@
-package lint
+package loader
 
 import (
 	"fmt"
@@ -24,7 +24,7 @@ const ignoreKey = "x-procyon-ignore"
 // An ignore on a security scheme also covers its OAuth2 flows. In a spec
 // converted from Swagger 2.0, an ignore at the root also covers the servers
 // (built from schemes and host, which cannot carry extensions).
-func parseIgnores(doc *openapi3.T, asGiven func(report.Location) report.Location, swagger bool) ([]report.Ignore, error) {
+func parseIgnores(doc *openapi3.T, asGiven func(report.Location) report.Location, swagger bool, known func(string) bool) ([]report.Ignore, error) {
 	var ignores []report.Ignore
 	var firstErr error
 	// add parses the ignores written on one element.
@@ -32,7 +32,7 @@ func parseIgnores(doc *openapi3.T, asGiven func(report.Location) report.Location
 		if firstErr != nil {
 			return
 		}
-		more, err := parseIgnoreList(ext[ignoreKey], operation, asGiven(locateField(origin, ignoreKey)))
+		more, err := parseIgnoreList(ext[ignoreKey], operation, asGiven(LocateField(origin, ignoreKey)), known)
 		for i := range more {
 			more[i].Elements, more[i].Where = about, where
 		}
@@ -55,7 +55,7 @@ func parseIgnores(doc *openapi3.T, asGiven func(report.Location) report.Location
 			}
 		}
 	}
-	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
+	ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		add(op.Extensions, op.Origin, method+" "+path, "")
 		if op.Servers != nil {
 			for _, server := range *op.Servers {
@@ -63,7 +63,7 @@ func parseIgnores(doc *openapi3.T, asGiven func(report.Location) report.Location
 			}
 		}
 	})
-	forEachScheme(doc, func(name string, scheme *openapi3.SecurityScheme) {
+	ForEachScheme(doc, func(name string, scheme *openapi3.SecurityScheme) {
 		covered := []any{scheme}
 		var flows []*openapi3.OAuthFlow
 		if f := scheme.Flows; f != nil {
@@ -85,7 +85,7 @@ func parseIgnores(doc *openapi3.T, asGiven func(report.Location) report.Location
 	return ignores, firstErr
 }
 
-func parseIgnoreList(value any, operation string, loc report.Location) ([]report.Ignore, error) {
+func parseIgnoreList(value any, operation string, loc report.Location, known func(string) bool) ([]report.Ignore, error) {
 	// Errors name the operation when there is one; otherwise the location
 	// says where.
 	if value == nil {
@@ -115,7 +115,7 @@ func parseIgnoreList(value any, operation string, loc report.Location) ([]report
 		}
 		ig := report.Ignore{Operation: operation, Location: loc}
 		ig.Rule, _ = fields["rule"].(string)
-		if !knownRule(ig.Rule) {
+		if known == nil || !known(ig.Rule) {
 			return nil, fail("entry %d: unknown rule %q", i+1, ig.Rule)
 		}
 		ig.Reason, _ = fields["reason"].(string)
@@ -133,9 +133,4 @@ func parseIgnoreList(value any, operation string, loc report.Location) ([]report
 		ignores = append(ignores, ig)
 	}
 	return ignores, nil
-}
-
-func knownRule(id string) bool {
-	isID := func(r report.Rule) bool { return r.ID == id }
-	return slices.ContainsFunc(Rules(), isID) || slices.ContainsFunc(runtimeRules, isID)
 }

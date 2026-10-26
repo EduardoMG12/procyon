@@ -28,37 +28,6 @@ var (
 		{"token"}, {"apikey"}, {"api", "key"}, {"access", "key"},
 	}
 
-	// describingWords, right after a matched word, mean the field
-	// describes the secret instead of holding it: passwordPolicy,
-	// tokenExpiresAt, apiKeyId, senhaValidade. Only the next word counts:
-	// senhaEmTextoPlano still holds a password.
-	describingWords = []string{
-		"policy", "rules", "type", "format", "url", "uri", "endpoint",
-		"expires", "expiry", "expiration", "expired", "length", "count",
-		"hint", "required", "set", "changed", "updated", "created", "last",
-		"status", "id", "ids", "identifier", "name", "prefix", "suffix",
-		"arn", "label", "description", "date", "time",
-		"ref", "refs", "reference", "requestor", "risk", "score", "namespace",
-		"currency", "scanning", "link", "reset", "public",
-		"politica", "regras", "tipo", "validade", "expira", "expiracao", "nome",
-	}
-
-	// referenceWords, right before a matched word, make it something other
-	// than a credential: nextPageToken and syncToken are paging cursors,
-	// csrfToken is meant to be handed to the page.
-	referenceWords = []string{
-		"page", "next", "previous", "prev", "continuation", "sync", "cursor",
-		"pagination", "csrf", "xsrf",
-	}
-
-	// credentialParameterWords name a parameter that carries the caller's
-	// credential, when a spec sends it as a parameter rather than through a
-	// security scheme.
-	credentialParameterWords = [][]string{
-		{"authorization"}, {"access", "token"}, {"auth", "token"},
-		{"session", "token"}, {"apikey"}, {"api", "key"}, {"access", "key"},
-	}
-
 	// countWords name numbers that set how much work one request makes
 	// the server do: how many items, repeats or retries. words.Split cannot
 	// split an all-lowercase name, so pagesize and perpage are listed too.
@@ -110,8 +79,8 @@ var piiWords = [][]string{
 
 // piiDescribingWords, right after a personal-data word, mean the field is
 // about the data, not the data: emailTemplate, emailSettings,
-// emailVerifiedAt, addressFormat. On top of the general describingWords.
-var piiDescribingWords = append(slices.Clone(describingWords),
+// emailVerifiedAt, addressFormat. On top of the general words.Describing.
+var piiDescribingWords = append(slices.Clone(words.Describing),
 	"template", "templates", "settings", "config", "configuration", "verified",
 	"verification", "enabled", "notifications", "preferences", "provider",
 	"server", "host", "port", "domain",
@@ -120,14 +89,7 @@ var piiDescribingWords = append(slices.Clone(describingWords),
 // piiReferenceWords, right before a personal-data word, make it something
 // other than a person's data: supportEmail (the company's), walletAddress,
 // listenAddress, ipAddress.
-var piiReferenceWords = append(slices.Clone(referenceWords),
+var piiReferenceWords = append(slices.Clone(words.Reference),
 	"support", "sender", "noreply", "reply", "from", "wallet", "contract",
 	"listen", "ip", "mac", "server", "host", "bind", "remote", "local", "web",
 )
-
-// matches reports whether the field name holds one of the words in list:
-// the word appears whole (or as a plural), the word before it does not make
-// it a reference, and the word after it does not make it a description.
-func matches(name string, list [][]string) bool {
-	return words.Match(name, list, describingWords, referenceWords)
-}

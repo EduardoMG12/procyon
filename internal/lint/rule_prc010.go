@@ -5,6 +5,8 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/EduardoMG12/procyon/internal/loader"
+
 	"github.com/EduardoMG12/procyon/internal/words"
 
 	"github.com/EduardoMG12/procyon/internal/report"
@@ -33,18 +35,18 @@ var adminWords = []string{"admin", "internal", "debug", "management"}
 // PRC001's.
 func checkPRC010(doc *openapi3.T) []report.Finding {
 	regular := map[string]bool{}
-	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-		if !adminPath(path) && !unauthenticated(doc, path, op) {
+	loader.ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
+		if !adminPath(path) && !loader.Unauthenticated(doc, path, op) {
 			regular[authKey(doc, path, op)] = true
 		}
 	})
 	var findings []report.Finding
-	forEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-		if !adminPath(path) || unauthenticated(doc, path, op) || !regular[authKey(doc, path, op)] {
+	loader.ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
+		if !adminPath(path) || loader.Unauthenticated(doc, path, op) || !regular[authKey(doc, path, op)] {
 			return
 		}
 		findings = append(findings, report.Finding{
-			Location:  locate(op.Origin),
+			Location:  loader.Locate(op.Origin),
 			Operation: method + " " + path,
 			Why:       "This looks like an administrative operation, but it requires the same authentication as regular operations: any user who can call those may be able to call this.",
 			Fix:       "Give it a stricter requirement of its own, such as an admin-only OAuth2 scope or a separate scheme, and enforce it on the server.",
@@ -57,7 +59,7 @@ func checkPRC010(doc *openapi3.T) []report.Finding {
 // security requirements and the same credential parameter, if any.
 func authKey(doc *openapi3.T, path string, op *openapi3.Operation) string {
 	key := securityKey(effectiveSecurity(doc, op))
-	if name := credentialParameter(doc, path, op); name != "" {
+	if name := loader.CredentialParameter(doc, path, op); name != "" {
 		key += " parameter " + strings.ToLower(name)
 	}
 	return key
