@@ -55,10 +55,17 @@ const (
 
 // Run tests the API at opts.BaseURL against the spec at specPath.
 func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error) {
-	if (opts.TokenA == "" && opts.LoginA == nil) || (opts.TokenB == "" && opts.LoginB == nil) {
-		return lint.Report{}, fmt.Errorf("set %s and %s to the tokens of two test accounts seeded in the API "+
+	var missing []string
+	if opts.TokenA == "" && opts.LoginA == nil {
+		missing = append(missing, envTokenA+" (account A)")
+	}
+	if opts.TokenB == "" && opts.LoginB == nil {
+		missing = append(missing, envTokenB+" (account B)")
+	}
+	if len(missing) > 0 {
+		return lint.Report{}, fmt.Errorf("set %s: the token of a test account seeded in the API "+
 			"(the bare token: Procyon adds \"Bearer \" when the spec asks for it), "+
-			"or declare how they log in under test.accounts in .procyon.yaml", envTokenA, envTokenB)
+			"or declare how it logs in under test.accounts in .procyon.yaml", strings.Join(missing, " and "))
 	}
 	spec, err := lint.Load(specPath, lint.Options{RefRoot: opts.RefRoot})
 	if err != nil {
@@ -229,8 +236,13 @@ func Run(ctx context.Context, specPath string, opts Options) (lint.Report, error
 				findings = append(findings, anonymousAccess(op, exchange))
 			}
 		}
-		if op.Method != http.MethodGet && op.Method != http.MethodDelete && !op.Public && op.Body != nil {
-			toBreak = append(toBreak, filledOp{op, f.path})
+		if op.Method != http.MethodGet && op.Method != http.MethodDelete && !op.Public {
+			if op.Body != nil {
+				toBreak = append(toBreak, filledOp{op, f.path})
+			} else if op.NeedsBody {
+				notes = append(notes, lint.Note{Location: op.Location, Message: key +
+					": malformed input not tested: it needs a request body and the spec gives no example"})
+			}
 		}
 		if len(f.values) == 0 {
 			matrix = append(matrix, row)
