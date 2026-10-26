@@ -1,0 +1,12 @@
+test:
+  accounts:
+    a:
+      login:
+        operation: POST /identity/api/auth/login
+        body: {email: alice@procyon.test, password: Procyon-Test-1}
+        token: /token
+    b:
+      login:
+        operation: POST /identity/api/auth/login
+        body: {email: bob@procyon.test, password: Procyon-Test-1}
+        token: /token

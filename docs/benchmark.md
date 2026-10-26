@@ -14,6 +14,17 @@ problem · **✗ v0.2** needs the running API · **✗ spec** not visible in the
 
 ## crAPI (OWASP)
 
+`procyon test` also runs against crAPI's public images every week
+([benchmark.yml](../.github/workflows/benchmark.yml), with
+[this setup](../testdata/benchmark/crapi/)). The test accounts start with
+nothing of their own; each creates a post, an order and a product first.
+It finds that **an anonymous caller and another account both read A's
+order, with A's email and phone** (PRC101 and PRC102 on `GET
+/workshop/api/shop/orders/{order_id}`), and that several bodies the spec
+forbids are accepted (PRC104). The challenges below that need a vehicle
+(1, 2: its location and mechanic report) are not reached yet: adding one
+takes a code crAPI sends by e-mail.
+
 | Challenge | Result | Finding |
 |---|---|---|
 | 1, 2. Another user's vehicle / mechanic report (BOLA) | ✗ v0.2 | Authenticated, so nothing in the spec says the server skips the owner check |
