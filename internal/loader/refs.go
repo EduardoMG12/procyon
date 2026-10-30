@@ -106,19 +106,6 @@ func (f *specFiles) close() {
 	}
 }
 
-// read is kin-openapi's file reader for $refs, and the only way a $ref
-// reaches the file system. A spec may come from anyone (a pull request, a
-// vendor), so:
-//
-//  1. URLs are refused: linting never touches the network.
-//  2. The path is cleaned and must lie, as text, inside the root (the
-//     spec's directory, or Options.RefRoot) and contain no hidden file or
-//     directory (.git, .env). These checks touch nothing, so a $ref cannot
-//     probe the machine or reach a network share.
-//  3. The file is opened through os.Root with that same cleaned path, which
-//     refuses symlinks and ".." leading out of the root, and must be a
-//     regular file of reasonable size.
-//
 // localPath returns the file path a $ref location names, or false for a
 // URL. url.Parse reads a Windows drive letter as a scheme (c:/specs/a.yaml
 // has scheme "c"), so a one-letter scheme that this system takes for a
@@ -136,6 +123,18 @@ func localPath(location *url.URL) (string, bool) {
 	return "", false
 }
 
+// read is kin-openapi's file reader for $refs, and the only way a $ref
+// reaches the file system. A spec may come from anyone (a pull request, a
+// vendor), so:
+//
+//  1. URLs are refused: linting never touches the network.
+//  2. The path is cleaned and must lie, as text, inside the root (the
+//     spec's directory, or Options.RefRoot) and contain no hidden file or
+//     directory (.git, .env). These checks touch nothing, so a $ref cannot
+//     probe the machine or reach a network share.
+//  3. The file is opened through os.Root with that same cleaned path, which
+//     refuses symlinks and ".." leading out of the root, and must be a
+//     regular file of reasonable size.
 func (f *specFiles) read(_ *openapi3.Loader, location *url.URL) ([]byte, error) {
 	local, ok := localPath(location)
 	if !ok {
@@ -364,7 +363,7 @@ func homeDir() string {
 // path relative to parent.
 func within(parent, child string) (rel string, ok bool) {
 	rel, err := filepath.Rel(parent, child)
-	if err != nil || rel != "." && !filepath.IsLocal(rel) {
+	if err != nil || !filepath.IsLocal(rel) {
 		return "", false
 	}
 	return rel, true

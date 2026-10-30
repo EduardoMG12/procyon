@@ -20,54 +20,6 @@ import (
 	"github.com/goccy/go-yaml/parser"
 )
 
-// positionError is an input error about a place in the spec file; at is
-// zero when the place is unknown.
-type positionError struct {
-	at      position
-	message string
-}
-
-func (e *positionError) Error() string {
-	if e.at.line == 0 {
-		return e.message
-	}
-	return fmt.Sprintf("%d:%d: %s", e.at.line, e.at.column, e.message)
-}
-
-// formParameter finds the formData parameter called name of an operation,
-// like bodyParameter, and the key to point at in its list entry: "name",
-// or "$ref" when the entry refers to #/parameters.
-func formParameter(doc2 *openapi2.T, path, method, name string) (owner string, index int, key string) {
-	item := doc2.Paths[path]
-	if item == nil {
-		return "", -1, ""
-	}
-	find := func(params openapi2.Parameters) (int, string) {
-		for i, p := range params {
-			if p == nil {
-				continue
-			}
-			key := "name"
-			if p.Ref != "" {
-				p, key = doc2.Parameters[strings.TrimPrefix(p.Ref, "#/parameters/")], "$ref"
-			}
-			if p != nil && p.In == "formData" && p.Name == name {
-				return i, key
-			}
-		}
-		return -1, ""
-	}
-	if op := item.GetOperation(strings.ToUpper(method)); op != nil {
-		if i, key := find(op.Parameters); i >= 0 {
-			return "operation", i, key
-		}
-	}
-	if i, key := find(item.Parameters); i >= 0 {
-		return "path", i, key
-	}
-	return "", -1, ""
-}
-
 // operationServers gives each operation with its own schemes the servers
 // they mean, which the converter drops. Without a host there is no URL to
 // build, as for the spec's own schemes.

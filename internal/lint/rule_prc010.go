@@ -58,20 +58,11 @@ func checkPRC010(doc *openapi3.T) []report.Finding {
 // authKey is equal for operations that authenticate the same way: the same
 // security requirements and the same credential parameter, if any.
 func authKey(doc *openapi3.T, path string, op *openapi3.Operation) string {
-	key := securityKey(effectiveSecurity(doc, op))
+	key := securityKey(loader.EffectiveSecurity(doc, op))
 	if name := loader.CredentialParameter(doc, path, op); name != "" {
 		key += " parameter " + strings.ToLower(name)
 	}
 	return key
-}
-
-// effectiveSecurity is the requirement that applies to op: its own, or the
-// spec's default.
-func effectiveSecurity(doc *openapi3.T, op *openapi3.Operation) openapi3.SecurityRequirements {
-	if op.Security != nil {
-		return *op.Security
-	}
-	return doc.Security
 }
 
 // securityKey turns requirements into a string that is equal for equal

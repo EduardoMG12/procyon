@@ -62,10 +62,7 @@ func newFingerprints(doc *openapi3.T) *fingerprints {
 
 // of is the fingerprint of one operation.
 func (f *fingerprints) of(path string, op *openapi3.Operation) string {
-	security := f.doc.Security
-	if op.Security != nil {
-		security = *op.Security
-	}
+	security := EffectiveSecurity(f.doc, op)
 	var pathParams openapi3.Parameters
 	if item := f.doc.Paths.Value(path); item != nil {
 		pathParams = item.Parameters
@@ -120,7 +117,7 @@ func (f *fingerprints) node(ref string) any {
 		if unescaped, err := url.PathUnescape(part); err == nil {
 			part = unescaped
 		}
-		part = strings.NewReplacer("~1", "/", "~0", "~").Replace(part)
+		part = unescapePointer(part)
 		switch node := v.(type) {
 		case map[string]any:
 			v = node[part]

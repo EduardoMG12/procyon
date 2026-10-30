@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -18,6 +19,20 @@ import (
 
 // position is a line and column in a file.
 type position struct{ line, column int }
+
+// positionError is an input error about a place in the spec file; at is
+// zero when the place is unknown.
+type positionError struct {
+	at      position
+	message string
+}
+
+func (e *positionError) Error() string {
+	if e.at.line == 0 {
+		return e.message
+	}
+	return fmt.Sprintf("%d:%d: %s", e.at.line, e.at.column, e.message)
+}
 
 // fromSwagger converts a Swagger 2.0 spec to an OpenAPI 3 document (as
 // JSON text, which Procyon then loads like any spec) and returns how to
@@ -132,14 +147,18 @@ func fromSwagger(data []byte) (converted []byte, back func(position) (position, 
 	return converted, back, nil
 }
 
+// swaggerSections maps a section of an OpenAPI 3 document's components to
+// the Swagger 2.0 section that holds the same elements.
+var swaggerSections = map[string]string{"schemas": "definitions", "securitySchemes": "securityDefinitions",
+	"parameters": "parameters", "responses": "responses", "requestBodies": "parameters"}
+
 // swaggerPointer translates a JSON pointer in the converted OpenAPI 3
 // document to the pointer of the same element in the Swagger 2.0 one.
 func swaggerPointer(pointer string, doc2 *openapi2.T) string {
 	parts := strings.Split(pointer, "/")[1:]
 	switch {
 	case len(parts) >= 2 && parts[0] == "components":
-		renamed := map[string]string{"schemas": "definitions", "securitySchemes": "securityDefinitions",
-			"parameters": "parameters", "responses": "responses", "requestBodies": "parameters"}[parts[1]]
+		renamed := swaggerSections[parts[1]]
 		if renamed == "" {
 			return ""
 		}
@@ -195,26 +214,54 @@ func swaggerPointer(pointer string, doc2 *openapi2.T) string {
 }
 
 // bodyParameter finds the body parameter of an operation in the Swagger 2.0
-// document: on the operation ("operation") or on its path item ("path"),
-// with its index there, or -1.
+// document, as swaggerParameter does.
 func bodyParameter(doc2 *openapi2.T, path, method string) (owner string, index int) {
+	owner, index, _ = swaggerParameter(doc2, path, method, func(p *openapi2.Parameter) bool {
+		return p.In == "body"
+	})
+	return owner, index
+}
+
+// formParameter finds the formData parameter called name of an operation,
+// as swaggerParameter does, and the key to point at in its list entry:
+// "name", or "$ref" when the entry refers to #/parameters.
+func formParameter(doc2 *openapi2.T, path, method, name string) (owner string, index int, key string) {
+	owner, index, entry := swaggerParameter(doc2, path, method, func(p *openapi2.Parameter) bool {
+		if p.Ref != "" {
+			p = doc2.Parameters[strings.TrimPrefix(p.Ref, "#/parameters/")]
+		}
+		return p != nil && p.In == "formData" && p.Name == name
+	})
+	switch {
+	case index < 0:
+		return "", -1, ""
+	case entry.Ref != "":
+		return owner, index, "$ref"
+	}
+	return owner, index, "name"
+}
+
+// swaggerParameter finds the first parameter of an operation in the Swagger
+// 2.0 document that match accepts: on the operation ("operation"), else on
+// its path item ("path"). It returns where, the index there and the list
+// entry as written, or -1.
+func swaggerParameter(doc2 *openapi2.T, path, method string, match func(*openapi2.Parameter) bool) (owner string, index int, entry *openapi2.Parameter) {
 	item := doc2.Paths[path]
 	if item == nil {
-		return "", -1
+		return "", -1, nil
+	}
+	find := func(params openapi2.Parameters) int {
+		return slices.IndexFunc(params, func(p *openapi2.Parameter) bool { return p != nil && match(p) })
 	}
 	if op := item.GetOperation(strings.ToUpper(method)); op != nil {
-		for i, p := range op.Parameters {
-			if p != nil && p.In == "body" {
-				return "operation", i
-			}
+		if i := find(op.Parameters); i >= 0 {
+			return "operation", i, op.Parameters[i]
 		}
 	}
-	for i, p := range item.Parameters {
-		if p != nil && p.In == "body" {
-			return "path", i
-		}
+	if i := find(item.Parameters); i >= 0 {
+		return "path", i, item.Parameters[i]
 	}
-	return "", -1
+	return "", -1, nil
 }
 
 func parentPointer(pointer string) string {
@@ -288,12 +335,19 @@ func keyText(key ast.MapKeyNode) string {
 	return key.String()
 }
 
+// A JSON pointer writes a ~ in a key as ~0 and a / as ~1. A Replacer is
+// safe for concurrent use, so one of each serves every call.
+var (
+	pointerEscaper   = strings.NewReplacer("~", "~0", "/", "~1")
+	pointerUnescaper = strings.NewReplacer("~1", "/", "~0", "~")
+)
+
 func escapePointer(s string) string {
-	return strings.NewReplacer("~", "~0", "/", "~1").Replace(s)
+	return pointerEscaper.Replace(s)
 }
 
 func unescapePointer(s string) string {
-	return strings.NewReplacer("~1", "/", "~0", "~").Replace(s)
+	return pointerUnescaper.Replace(s)
 }
 
 // jsonKind names a JSON value kind as encoding/json reports it ("array").
