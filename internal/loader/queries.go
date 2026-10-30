@@ -1,7 +1,8 @@
 package loader
 
 import (
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/EduardoMG12/procyon/internal/report"
@@ -25,10 +26,7 @@ func Unauthenticated(doc *openapi3.T, path string, op *openapi3.Operation) bool 
 	if CredentialParameter(doc, path, op) != "" {
 		return false
 	}
-	reqs := doc.Security
-	if op.Security != nil {
-		reqs = *op.Security
-	}
+	reqs := EffectiveSecurity(doc, op)
 	if len(reqs) == 0 {
 		return true
 	}
@@ -38,6 +36,16 @@ func Unauthenticated(doc *openapi3.T, path string, op *openapi3.Operation) bool 
 		}
 	}
 	return false
+}
+
+// EffectiveSecurity is the security that applies to an operation: its own
+// requirements when it has any (even an explicit `security: []`), else the
+// spec's default.
+func EffectiveSecurity(doc *openapi3.T, op *openapi3.Operation) openapi3.SecurityRequirements {
+	if op.Security != nil {
+		return *op.Security
+	}
+	return doc.Security
 }
 
 // CredentialParameter returns the name of the parameter through which an
@@ -87,19 +95,9 @@ func ForEachOperation(doc *openapi3.T, fn func(method, path string, op *openapi3
 		return
 	}
 	paths := doc.Paths.Map()
-	keys := make([]string, 0, len(paths))
-	for path := range paths {
-		keys = append(keys, path)
-	}
-	sort.Strings(keys)
-	for _, path := range keys {
+	for _, path := range slices.Sorted(maps.Keys(paths)) {
 		ops := paths[path].Operations()
-		methods := make([]string, 0, len(ops))
-		for method := range ops {
-			methods = append(methods, method)
-		}
-		sort.Strings(methods)
-		for _, method := range methods {
+		for _, method := range slices.Sorted(maps.Keys(ops)) {
 			fn(strings.ToUpper(method), path, ops[method])
 		}
 	}

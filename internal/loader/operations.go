@@ -134,11 +134,7 @@ func credentialOf(doc *openapi3.T, path string, op *openapi3.Operation) *Credent
 			}
 		}
 	}
-	reqs := doc.Security
-	if op.Security != nil {
-		reqs = *op.Security
-	}
-	for _, req := range reqs {
+	for _, req := range EffectiveSecurity(doc, op) {
 		if len(req) != 1 || doc.Components == nil {
 			continue
 		}
@@ -168,14 +164,20 @@ func schemeCredential(scheme *openapi3.SecurityScheme) *Credential {
 	return nil
 }
 
+// jsonBody is the application/json media type of an operation's request
+// body, or nil when it has none.
+func jsonBody(op *openapi3.Operation) *openapi3.MediaType {
+	if op.RequestBody == nil || op.RequestBody.Value == nil {
+		return nil
+	}
+	return op.RequestBody.Value.Content.Get("application/json")
+}
+
 // exampleBody returns the JSON example of an operation's request body: the
 // media type's example, else its first named example (by name), else the
 // schema's example.
 func exampleBody(op *openapi3.Operation) []byte {
-	if op.RequestBody == nil || op.RequestBody.Value == nil {
-		return nil
-	}
-	media := op.RequestBody.Value.Content.Get("application/json")
+	media := jsonBody(op)
 	if media == nil {
 		return nil
 	}
@@ -227,10 +229,7 @@ func fromProperties(schema *openapi3.Schema) any {
 // bodyFields lists the top-level properties of an operation's JSON request
 // body, sorted by name.
 func bodyFields(op *openapi3.Operation) []Field {
-	if op.RequestBody == nil || op.RequestBody.Value == nil {
-		return nil
-	}
-	media := op.RequestBody.Value.Content.Get("application/json")
+	media := jsonBody(op)
 	if media == nil || media.Schema == nil || media.Schema.Value == nil {
 		return nil
 	}
