@@ -3,8 +3,6 @@ package format
 import (
 	"fmt"
 	"io"
-	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/EduardoMG12/procyon/internal/report"
@@ -20,26 +18,19 @@ func Markdown(w io.Writer, rep report.Report) error {
 	if rep.Failed {
 		verdict = "❌ failed"
 	}
-	count := map[report.Severity]int{}
-	for _, f := range rep.Findings {
-		count[f.Rule.Severity]++
-	}
+	count := severityCounts(rep.Findings)
 	fmt.Fprintf(&b, "## Procyon: %s\n\n| Severity | Findings |\n|---|---|\n", verdict)
 	for _, s := range []report.Severity{report.Critical, report.High, report.Medium, report.Low} {
 		fmt.Fprintf(&b, "| %s | %d |\n", s, count[s])
 	}
 	fmt.Fprintf(&b, "| ignored | %d |\n\nThe run fails at **%s** or above.\n", len(rep.Ignored), rep.FailOn)
 
-	findings := slices.Clone(rep.Findings)
-	// Most serious first, like the terminal; location order within each.
-	slices.SortStableFunc(findings, func(a, b report.Finding) int {
-		return int(b.Rule.Severity) - int(a.Rule.Severity)
-	})
+	findings := bySeverity(rep.Findings) // most serious first, like the terminal
 	if len(findings) > 0 {
 		b.WriteString("\n### Findings\n")
 	}
 	for _, f := range findings {
-		fmt.Fprintf(&b, "\n#### %s · %s · %s\n\n%s", strings.ToUpper(f.Rule.Severity.String()), f.Rule.ID, escape(f.Rule.Title), code(markdownLocation(f.Location)))
+		fmt.Fprintf(&b, "\n#### %s · %s · %s\n\n%s", strings.ToUpper(f.Rule.Severity.String()), f.Rule.ID, escape(f.Rule.Title), code(location(f.Location)))
 		if f.Operation != "" {
 			b.WriteString(" · " + code(f.Operation))
 		}
@@ -65,7 +56,7 @@ func Markdown(w io.Writer, rep report.Report) error {
 		b.WriteString("\n### Ignored\n\n")
 	}
 	for _, i := range rep.Ignored {
-		fmt.Fprintf(&b, "- **%s** %s", i.Finding.Rule.ID, code(markdownLocation(i.Finding.Location)))
+		fmt.Fprintf(&b, "- **%s** %s", i.Finding.Rule.ID, code(location(i.Finding.Location)))
 		if i.Finding.Operation != "" {
 			b.WriteString(" " + code(i.Finding.Operation))
 		}
@@ -79,7 +70,7 @@ func Markdown(w io.Writer, rep report.Report) error {
 		b.WriteString("\n### Notes\n\n")
 	}
 	for _, n := range rep.Notes {
-		fmt.Fprintf(&b, "- %s: %s\n", code(markdownLocation(n.Location)), escape(n.Message))
+		fmt.Fprintf(&b, "- %s: %s\n", code(location(n.Location)), escape(n.Message))
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
@@ -114,10 +105,6 @@ func cell(c report.Cell) string {
 		return fmt.Sprintf("%s %d", icon, c.Status)
 	}
 	return icon
-}
-
-func markdownLocation(l report.Location) string {
-	return fmt.Sprintf("%s:%d:%d", filepath.ToSlash(l.File), l.Line, l.Column)
 }
 
 // oneLine turns line breaks into spaces: a new line could end a list item

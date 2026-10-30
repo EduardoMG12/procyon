@@ -30,7 +30,9 @@ var prc006 = lintRule{
 func checkPRC006(doc *openapi3.T) []report.Finding {
 	var found onePerPlace
 	loader.ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-		if method != "GET" || !reachableAnonymously(doc, path, op) {
+		// Marking an operation public (x-procyon-public) does not change
+		// that anyone can call it: it only says it is meant to be so.
+		if method != "GET" || !loader.Unauthenticated(doc, path, op) {
 			return
 		}
 		forEachResponseProperty(op, func(name string, prop *openapi3.SchemaRef) {
@@ -61,11 +63,4 @@ func textual(s *openapi3.Schema) bool {
 		return true
 	}
 	return s.Type.Includes("array") && s.Items != nil && s.Items.Value != nil && s.Items.Value.Type.Includes("string")
-}
-
-// reachableAnonymously reports whether anyone can call op without
-// credentials. Marking an operation public (x-procyon-public) does not
-// change that: it only says it is meant to be so.
-func reachableAnonymously(doc *openapi3.T, path string, op *openapi3.Operation) bool {
-	return loader.Unauthenticated(doc, path, op)
 }

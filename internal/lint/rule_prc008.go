@@ -120,7 +120,7 @@ func unboundedCount(name string, s *openapi3.Schema, query bool) bool {
 	}
 	list := countWords
 	if query {
-		list = append(slices.Clone(countWords), countQueryWords...)
+		list = countOrQueryWords
 	}
 	return words.Match(name, list, countDescribingWords, countReferenceWords)
 }
@@ -151,16 +151,9 @@ func returnsList(op *openapi3.Operation) bool {
 // paged reports whether the operation, or its path, has a query parameter
 // that limits a page.
 func paged(doc *openapi3.T, path string, op *openapi3.Operation) bool {
-	params := slices.Clone(op.Parameters)
-	if item := doc.Paths.Value(path); item != nil {
-		params = append(params, item.Parameters...)
-	}
-	for _, p := range params {
-		if p == nil || p.Value == nil || p.Value.In != openapi3.ParameterInQuery {
-			continue
-		}
-		name := strings.TrimPrefix(strings.ToLower(p.Value.Name), "$")
-		if slices.Contains(pagingParameters, name) {
+	for _, p := range loader.OperationParameters(doc, path, op) {
+		name := strings.TrimPrefix(strings.ToLower(p.Name), "$")
+		if p.In == openapi3.ParameterInQuery && slices.Contains(pagingParameters, name) {
 			return true
 		}
 	}
