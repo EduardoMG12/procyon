@@ -47,7 +47,7 @@ func load(path string, opts Options) (*openapi3.T, *specFiles, error) {
 	// a user sees is the same with or without this shortcut (goccy refuses
 	// duplicate keys, which encoding/json accepts).
 	if json.Valid(data) {
-		doc, files, err := loadParsed(path, opts, data, jsonSwaggerVersion(data))
+		doc, files, err := loadParsed(path, opts, data, nil, jsonSwaggerVersion(data))
 		if err != nil {
 			if _, syntaxErr := checkSyntax(path, data); syntaxErr != nil {
 				return nil, nil, syntaxErr
@@ -59,7 +59,7 @@ func load(path string, opts Options) (*openapi3.T, *specFiles, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return loadParsed(path, opts, data, swaggerVersion(file))
+	return loadParsed(path, opts, data, file, swaggerVersion(file))
 }
 
 // checkSyntax parses the spec as YAML. kin-openapi's own syntax errors are
@@ -90,9 +90,10 @@ func jsonSwaggerVersion(data []byte) any {
 	return version.Swagger
 }
 
-// loadParsed loads a spec whose syntax is known to be right; swagger is its
-// top-level swagger value, or nil for OpenAPI 3.
-func loadParsed(path string, opts Options, data []byte, swagger any) (*openapi3.T, *specFiles, error) {
+// loadParsed loads a spec whose syntax is known to be right; file is its
+// syntax tree, or nil for JSON, and swagger its top-level swagger value, or
+// nil for OpenAPI 3.
+func loadParsed(path string, opts Options, data []byte, file *ast.File, swagger any) (*openapi3.T, *specFiles, error) {
 	var err error
 	// Swagger 2.0 is converted to OpenAPI 3 and linted like any spec;
 	// locations are mapped back to the original file (see fromSwagger).
@@ -102,7 +103,7 @@ func loadParsed(path string, opts Options, data []byte, swagger any) (*openapi3.
 		if v := fmt.Sprint(swagger); v != "2" && !strings.HasPrefix(v, "2.") {
 			return nil, nil, fmt.Errorf("%s: swagger %q is not a version Procyon knows; use Swagger 2.0 or OpenAPI 3", path, v)
 		}
-		if toLoad, back, err = fromSwagger(data); err != nil {
+		if toLoad, back, err = fromSwagger(data, file); err != nil {
 			if placed, ok := errors.AsType[*positionError](err); ok && placed.at.line > 0 {
 				return nil, nil, fmt.Errorf("%s:%w", path, err) // file:line:col: message
 			}

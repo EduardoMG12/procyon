@@ -37,6 +37,9 @@ func TestRules(t *testing.T) {
 		{"swagger-2.0-body.json", []string{"PRC009"}, []string{
 			"PRC009 swagger-2.0-body.json:18:17 POST /users",
 		}},
+		// Swagger 2.0 in JSON is read as JSON: "maximum": 1e3 is the number
+		// 1000 (YAML reads it as text), so the limit is bounded.
+		{"swagger-2.0-exponent.json", []string{"PRC008"}, []string{}},
 		// Swagger 2.0 edges: a global body parameter, a global response, a
 		// body declared on the path item and shared by two operations (one
 		// finding each, at the property; two media types add none), and ignores for

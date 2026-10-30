@@ -17,7 +17,6 @@ import (
 	"github.com/getkin/kin-openapi/openapi2"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/goccy/go-yaml/ast"
-	"github.com/goccy/go-yaml/parser"
 )
 
 // operationServers gives each operation with its own schemes the servers
@@ -49,15 +48,13 @@ func operationServers(doc2 *openapi2.T, doc3 *openapi3.T) {
 
 // swaggerNames rewrites the OpenAPI 3 names in a converter message to the
 // Swagger 2.0 ones the user wrote.
-func swaggerNames(message string) string {
-	return strings.NewReplacer(
-		"#/components/schemas/", "#/definitions/",
-		"#/components/parameters/", "#/parameters/",
-		"#/components/responses/", "#/responses/",
-		"#/components/requestBodies/", "#/parameters/",
-		"#/components/securitySchemes/", "#/securityDefinitions/",
-	).Replace(message)
-}
+var swaggerNames = strings.NewReplacer(
+	"#/components/schemas/", "#/definitions/",
+	"#/components/parameters/", "#/parameters/",
+	"#/components/responses/", "#/responses/",
+	"#/components/requestBodies/", "#/parameters/",
+	"#/components/securitySchemes/", "#/securityDefinitions/",
+)
 
 // pathItemRef returns the pointer of the first path item that is a $ref,
 // which the converter silently drops, or "".
@@ -105,16 +102,12 @@ func limitMediaTypes(node any) {
 // the bytes of their text (one long string costs its length, not 1).
 const maxAliasNodes = 1 << 20
 
-// limitAliases returns an error when the YAML aliases in data would expand
-// to more than maxAliasNodes.
+// limitAliases returns an error when the YAML aliases in a parsed file
+// would expand to more than maxAliasNodes.
 //
 // Each anchor's expanded size is computed once and reused by its aliases
 // (memoization), so counting never expands anything itself.
-func limitAliases(data []byte) error {
-	file, err := parser.ParseBytes(data, 0)
-	if err != nil {
-		return err
-	}
+func limitAliases(file *ast.File) error {
 	sizes := map[string]int{} // anchor name -> nodes it expands to
 	total := 0                // nodes added by aliases
 	var size func(node ast.Node) int
