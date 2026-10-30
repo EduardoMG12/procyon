@@ -9,10 +9,9 @@ import (
 
 // The total read through $refs is capped, not only each file, so many
 // files just under the per-file cap cannot exhaust memory. The limit is
-// lowered for the test; the behaviour goes through Run, the library's seam.
+// lowered for the test; the behaviour goes through Load, the package's seam.
 func TestRefsHaveATotalBudget(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	fakeHome(t)
 	defer func(old int64) { maxRefTotal = old }(maxRefTotal)
 	maxRefTotal = 100
 
@@ -31,7 +30,7 @@ func TestRefsHaveATotalBudget(t *testing.T) {
 	}
 	_, err := Load(path, anyRule)
 	if err == nil || !strings.Contains(err.Error(), "in total") {
-		t.Fatalf("Run = %v, want an error about the total read through $refs", err)
+		t.Fatalf("Load = %v, want an error about the total read through $refs", err)
 	}
 }
 
@@ -45,14 +44,13 @@ func TestSpecHasASizeLimit(t *testing.T) {
 	}
 	_, err := Load(path, anyRule)
 	if err == nil || !strings.Contains(err.Error(), "larger than") {
-		t.Fatalf("Run = %v, want an error about the spec's size", err)
+		t.Fatalf("Load = %v, want an error about the spec's size", err)
 	}
 }
 
 // The number of $refs resolved is capped: each may be parsed again.
 func TestTheNumberOfRefsIsCapped(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	fakeHome(t)
 	defer func(old int) { maxRefReads = old }(maxRefReads)
 	maxRefReads = 2
 
@@ -71,6 +69,6 @@ func TestTheNumberOfRefsIsCapped(t *testing.T) {
 	}
 	_, err := Load(path, anyRule)
 	if err == nil || !strings.Contains(err.Error(), "more than 2 $refs") {
-		t.Fatalf("Run = %v, want an error about the number of $refs", err)
+		t.Fatalf("Load = %v, want an error about the number of $refs", err)
 	}
 }

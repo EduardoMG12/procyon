@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/EduardoMG12/procyon/internal/format"
@@ -52,5 +53,32 @@ func TestJSON(t *testing.T) {
 	}
 	if !bytes.Equal(got.Bytes(), want) {
 		t.Errorf("output differs from %s\n--- got ---\n%s\n--- want ---\n%s", path, got.Bytes(), want)
+	}
+}
+
+// procyon test's matrix is in the JSON too; a caller not called is absent.
+func TestJSONAuthorizationMatrix(t *testing.T) {
+	rep := report.Report{FailOn: report.High, Matrix: []report.MatrixRow{
+		{Operation: "GET /notes/{id}", A: report.Cell{Outcome: report.Allowed, Status: 200}, B: report.Cell{Outcome: report.Reached, Status: 200}},
+	}}
+	var got bytes.Buffer
+	if err := format.JSON(&got, rep); err != nil {
+		t.Fatal(err)
+	}
+	want := `"matrix": [
+    {
+      "operation": "GET /notes/{id}",
+      "a": {
+        "outcome": "allowed",
+        "status": 200
+      },
+      "b": {
+        "outcome": "finding",
+        "status": 200
+      }
+    }
+  ]`
+	if !strings.Contains(got.String(), want) {
+		t.Errorf("JSON does not contain the matrix:\n%s", got.String())
 	}
 }
