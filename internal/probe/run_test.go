@@ -219,6 +219,26 @@ func TestEvidenceNeverHoldsPartOfAToken(t *testing.T) {
 	}
 }
 
+// A request that got no answer shows the same URL in evidence as one that
+// did, a base path with an escaped space included.
+func TestEvidenceURLWithAnEscapedBasePath(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer srv.Close()
+	target, err := checkTarget(context.Background(), srv.URL+"/my%20api/", lookupHost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &runner{client: newClient(time.Second, 10), target: target}
+	exchange, err := r.send(context.Background(), loader.Operation{Method: "GET", Path: "/notes/{id}"}, "/notes/a%20b", anonymous)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "/my%20api/notes/a%20b"
+	if exchange.URL != want || r.requestURI("/notes/a%20b") != want {
+		t.Errorf("answered %q, unanswered %q; want both %q", exchange.URL, r.requestURI("/notes/a%20b"), want)
+	}
+}
+
 func TestRunFillsTheAuthorizationMatrix(t *testing.T) {
 	rep, _ := runAgainst(t, false)
 	var got []string

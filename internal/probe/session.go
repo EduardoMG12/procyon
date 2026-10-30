@@ -28,6 +28,11 @@ type session struct {
 
 var skipped = report.Cell{Outcome: report.Skipped}
 
+// skippedRow is the matrix row of an operation nobody called.
+func skippedRow(key string) report.MatrixRow {
+	return report.MatrixRow{Operation: key, A: skipped, B: skipped, Anonymous: skipped}
+}
+
 // testOperation tests one operation: anonymously (PRC101), then as B on
 // A's object (PRC102), and queues a write for the malformed pass. Each ends
 // as a row of the matrix.
@@ -37,7 +42,7 @@ func (s *session) testOperation(ctx context.Context, op loader.Operation) error 
 	switch {
 	case s.skip[key]:
 		s.res.note(op.Location, key+" not called: listed under test.skip")
-		s.res.matrix = append(s.res.matrix, report.MatrixRow{Operation: key, A: skipped, B: skipped, Anonymous: skipped})
+		s.res.matrix = append(s.res.matrix, skippedRow(key))
 		return nil
 	case s.changed != nil && !s.changed[key]:
 		// Still read as A during discovery, to find IDs for the changed
@@ -50,7 +55,7 @@ func (s *session) testOperation(ctx context.Context, op loader.Operation) error 
 	f, err := s.ofA.fill(op.Path)
 	if err != nil {
 		s.res.note(op.Location, fmt.Sprintf("%s not tested: %v in A's responses; declare one under test.ids in .procyon.yaml", key, err))
-		s.res.matrix = append(s.res.matrix, report.MatrixRow{Operation: key, A: skipped, B: skipped, Anonymous: skipped})
+		s.res.matrix = append(s.res.matrix, skippedRow(key))
 		return nil
 	}
 	if row.Anonymous, err = s.anonymous(ctx, op, f.path); err != nil {
@@ -131,7 +136,7 @@ func (s *session) queueMalformed(op loader.Operation, path string) {
 func (s *session) malformedPass(ctx context.Context) (noAnswer bool, err error) {
 	s.broken = true
 	for i, f := range s.toBreak {
-		bad, note, noAnswer, err := s.malformed(ctx, f.op, f.path, s.a)
+		bad, note, hung, err := s.malformed(ctx, f.op, f.path, s.a)
 		if err != nil {
 			return false, err
 		}
@@ -139,7 +144,7 @@ func (s *session) malformedPass(ctx context.Context) (noAnswer bool, err error) 
 		if note != "" {
 			s.res.note(f.op.Location, f.op.Key()+": "+note)
 		}
-		if noAnswer {
+		if hung {
 			for _, rest := range s.toBreak[i+1:] {
 				s.res.note(rest.op.Location, rest.op.Key()+
 					": malformed input not tested: the server stopped answering after an earlier malformed request")

@@ -42,9 +42,12 @@ func newHarvest(declared map[string][]string) *harvest {
 	return h
 }
 
+// separators are what normalize drops from a name.
+var separators = strings.NewReplacer("_", "", "-", "")
+
 // normalize makes orderId, order_id, order-id and OrderID the same name.
 func normalize(name string) string {
-	return strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(name))
+	return strings.ToLower(separators.Replace(name))
 }
 
 // add records the objects of a JSON response body from path. A body that

@@ -46,11 +46,7 @@ func (r *runner) send(ctx context.Context, op loader.Operation, path string, who
 
 // sendFull is send, also returning the response body (up to maxResponse).
 func (r *runner) sendFull(ctx context.Context, op loader.Operation, path string, who caller) (report.Exchange, []byte, error) {
-	// path is already escaped (harvest.fill): set it as the raw path, or
-	// "Ana Maria" would go out as Ana%2520Maria.
-	u := *r.target
-	u.RawPath = strings.TrimSuffix(r.target.EscapedPath(), "/") + path
-	u.Path, _ = url.PathUnescape(u.RawPath)
+	u := r.urlFor(path)
 	var body io.Reader
 	if op.Method != http.MethodGet && op.Body != nil {
 		body = bytes.NewReader(op.Body)
@@ -108,8 +104,19 @@ func (r *runner) excerpt(body string) string {
 	return masked[:end]
 }
 
-// requestURI is how evidence shows a path sent to the target: with the
-// target's own base path, as sendFull records it.
+// urlFor is where path is sent: after the target's own base path. path is
+// already escaped (harvest.fill), so it is set as the raw path, or
+// "Ana Maria" would go out as Ana%2520Maria.
+func (r *runner) urlFor(path string) url.URL {
+	u := *r.target
+	u.RawPath = strings.TrimSuffix(r.target.EscapedPath(), "/") + path
+	u.Path, _ = url.PathUnescape(u.RawPath)
+	return u
+}
+
+// requestURI is how evidence shows a path that got no answer: the same
+// way sendFull records one that did.
 func (r *runner) requestURI(path string) string {
-	return mask(strings.TrimSuffix(r.target.Path, "/")+path, r.tokens...)
+	u := r.urlFor(path)
+	return mask(u.RequestURI(), r.tokens...)
 }
