@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -301,5 +302,87 @@ func TestRefRootCannotBeWidenedThroughASymlinkInTheSpecPath(t *testing.T) {
 			}
 		}
 		t.Fatal("Load returned no error")
+	}
+}
+
+// A spec inside a hidden directory (.github) can still use $refs next to
+// it, with or without RefRoot: only what comes after the spec's directory
+// is checked for hidden parts.
+func TestSpecInsideAHiddenDirectoryCanUseRefs(t *testing.T) {
+	fakeHome(t)
+	repo := t.TempDir()
+	writeFile(t, filepath.Join(repo, ".github", "orders.yaml"), pathItem)
+	spec := filepath.Join(repo, ".github", "api.yaml")
+	writeSpec(t, spec, "./orders.yaml")
+	for _, opts := range []Options{{}, {RefRoot: repo}} {
+		if _, err := Load(spec, opts); err != nil {
+			t.Errorf("Options%+v: %v", opts, err)
+		}
+	}
+}
+
+// A $ref to the root directory itself is a directory, not a hidden file.
+func TestRefToTheRootDirectoryIsNotAFile(t *testing.T) {
+	fakeHome(t)
+	dir := t.TempDir()
+	spec := filepath.Join(dir, "api.yaml")
+	writeSpec(t, spec, "./")
+	_, err := Load(spec, Options{})
+	if err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("Load = %v, want an error saying it is not a regular file", err)
+	}
+}
+
+// Short 8.3 names (GIT~1 for .git) exist on Windows, but also on FAT drives
+// and SMB shares mounted on Linux and macOS: refused everywhere.
+func TestRefsRefuseShortNamesOnEverySystem(t *testing.T) {
+	fakeHome(t)
+	dir := t.TempDir()
+	spec := filepath.Join(dir, "api.yaml")
+	writeSpec(t, spec, "./GIT~1/config")
+	_, err := Load(spec, Options{})
+	if err == nil || !strings.Contains(err.Error(), "short") {
+		t.Fatalf("Load = %v, want an error refusing a short name", err)
+	}
+}
+
+// Ordinary names with a tilde are fine; only short-name patterns (~1) are not.
+func TestTildeInOrdinaryNamesIsAllowed(t *testing.T) {
+	fakeHome(t)
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "user~old.yaml"), pathItem)
+	spec := filepath.Join(dir, "api.yaml")
+	writeSpec(t, spec, "./user~old.yaml")
+	if _, err := Load(spec, Options{}); err != nil {
+		t.Fatalf("Load = %v, want no error for user~old.yaml", err)
+	}
+}
+
+// Many fragment refs to one shared file are an ordinary layout: they must
+// not exhaust the budget, since the file is read once.
+func TestManyFragmentRefsToOneFileAreFine(t *testing.T) {
+	fakeHome(t)
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "common.yaml"), "components:\n  responses:\n    OK:\n      description: OK\n"+"      x-padding: \""+strings.Repeat("x", 400000)+"\"\n")
+	spec := "openapi: 3.0.3\ninfo:\n  title: Shop\n  version: 1.0.0\npaths:\n"
+	for i := 0; i < 200; i++ {
+		spec += "  /p" + strconv.Itoa(i) + ":\n    get:\n      responses:\n        \"200\":\n          $ref: \"./common.yaml#/components/responses/OK\"\n"
+	}
+	path := filepath.Join(dir, "api.yaml")
+	writeFile(t, path, spec)
+	if _, err := Load(path, Options{}); err != nil {
+		t.Fatalf("Load = %v, want no error", err)
+	}
+}
+
+// Only real 8.3 names are refused: order~2024.yaml is an ordinary name.
+func TestTildeFollowedByDigitsInLongNamesIsAllowed(t *testing.T) {
+	fakeHome(t)
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "order~2024.yaml"), pathItem)
+	spec := filepath.Join(dir, "api.yaml")
+	writeSpec(t, spec, "./order~2024.yaml")
+	if _, err := Load(spec, Options{}); err != nil {
+		t.Fatalf("Load = %v, want no error", err)
 	}
 }
