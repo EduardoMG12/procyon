@@ -23,6 +23,9 @@ import (
 // Ignored findings are results with an in-source suppression and its
 // reason, so GitHub shows them as dismissed instead of losing them. Notes
 // are tool notifications, not results.
+//
+// GitHub shows messages and suppression reasons to people, so they get
+// visible like the terminal; URIs are percent-encoded already.
 func SARIF(w io.Writer, rep report.Report, base string, rules []report.Rule) error {
 	uri := artifactURI(base)
 	index := map[string]int{}
@@ -53,7 +56,7 @@ func SARIF(w io.Writer, rep report.Report, base string, rules []report.Rule) err
 	}
 	for _, n := range rep.Notes {
 		run.Invocations[0].Notifications = append(run.Invocations[0].Notifications, sarifNotification{
-			Level: "note", Message: sarifText{n.Message}, Locations: []sarifLocation{sarifLoc(n.Location, uri)},
+			Level: "note", Message: sarifText{visible(n.Message)}, Locations: []sarifLocation{sarifLoc(n.Location, uri)},
 		})
 	}
 	for _, f := range rep.Findings {
@@ -61,7 +64,7 @@ func SARIF(w io.Writer, rep report.Report, base string, rules []report.Rule) err
 	}
 	for _, i := range rep.Ignored {
 		r := sarifFinding(i.Finding, index, uri)
-		r.Suppressions = []sarifSuppression{{Kind: "inSource", Justification: i.Reason}}
+		r.Suppressions = []sarifSuppression{{Kind: "inSource", Justification: visible(i.Reason)}}
 		run.Results = append(run.Results, r)
 	}
 	enc := json.NewEncoder(w)
@@ -90,7 +93,7 @@ func sarifFinding(f report.Finding, index map[string]int, uri func(string) strin
 		RuleID:    f.Rule.ID,
 		RuleIndex: index[f.Rule.ID],
 		Level:     sarifLevel(f.Rule.Severity),
-		Message:   sarifText{text},
+		Message:   sarifText{visible(text)},
 		Locations: []sarifLocation{sarifLoc(f.Location, uri)},
 	}
 }

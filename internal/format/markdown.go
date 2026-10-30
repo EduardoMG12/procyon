@@ -11,7 +11,8 @@ import (
 // Markdown writes a summary for a CI job page ($GITHUB_STEP_SUMMARY on
 // GitHub Actions): a table of counts, then findings, ignored findings and
 // notes. Text that comes from the spec (paths, operations, ignore reasons)
-// is escaped, so a spec cannot inject links, images or HTML into the page.
+// is escaped, so a spec cannot inject links, images or HTML into the page,
+// nor reorder it with bidi controls.
 func Markdown(w io.Writer, rep report.Report) error {
 	var b strings.Builder
 	verdict := "✅ passed"
@@ -124,15 +125,18 @@ var markdownEscaper = strings.NewReplacer(
 var autolinks = strings.NewReplacer("://", `:\/\/`, "www.", `www\.`, "WWW.", `WWW\.`, "@", `\@`)
 
 // escape makes text from the spec safe to place in Markdown as plain text.
+// Hidden characters are shown before the Markdown escaping, which then
+// keeps the backslash of \u202e as a backslash.
 func escape(text string) string {
-	return autolinks.Replace(markdownEscaper.Replace(oneLine.Replace(text)))
+	return autolinks.Replace(markdownEscaper.Replace(visible(oneLine.Replace(text))))
 }
 
 // code wraps text in a code span whose backtick fence is longer than any
 // run of backticks inside it, so the text can never close the span early.
-// Line breaks become spaces, since a code span cannot cross blocks.
+// Line breaks become spaces, since a code span cannot cross blocks, and
+// hidden characters are shown, as in the terminal.
 func code(text string) string {
-	text = oneLine.Replace(text)
+	text = visible(oneLine.Replace(text))
 	longest, run := 0, 0
 	for _, r := range text {
 		if r == '`' {

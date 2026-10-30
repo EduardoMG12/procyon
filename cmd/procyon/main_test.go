@@ -275,6 +275,40 @@ func TestNoColorWhenStdoutIsNotATerminal(t *testing.T) {
 	}
 }
 
+// A spec with a right-to-left override (U+202E) in a path and a zero-width
+// space (U+200B) in its file name and a property name: the terminal and
+// Markdown show both, so a CI log or a job summary cannot be reordered or
+// hide a character. The spec is written here, not kept in testdata, so the
+// repository never holds the raw characters.
+func TestHiddenCharactersFromASpecAreShown(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sh\u200bop.yaml")
+	hostile := "openapi: 3.0.3\ninfo: {title: t, version: \"1\"}\npaths:\n" +
+		"  /files/\u202egpj.exe:\n    post:\n      requestBody:\n        content:\n          application/json:\n" +
+		"            schema:\n              type: object\n              properties:\n" +
+		"                ad\u200bmin: {type: string}\n" +
+		"      responses:\n        \"200\": {description: ok}\n"
+	if err := os.WriteFile(path, []byte(hostile), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for format, shown := range map[string][]string{
+		"terminal": {`sh\u200bop.yaml:5:5  POST /files/\u202egpj.exe`, `ad\u200bmin: {type: string}`},
+		"markdown": {"`" + `POST /files/\u202egpj.exe` + "`", `sh\u200bop.yaml:5:5`},
+	} {
+		r := run(t, "lint", "--format", format, path)
+		if r.code != 1 {
+			t.Fatalf("%s: exit code = %d, want 1; stderr: %s", format, r.code, r.stderr)
+		}
+		if strings.ContainsAny(r.stdout, "\u202e\u200b") {
+			t.Errorf("%s: raw hidden characters reached stdout: %q", format, r.stdout)
+		}
+		for _, want := range shown {
+			if !strings.Contains(r.stdout, want) {
+				t.Errorf("%s: stdout does not show %s:\n%s", format, want, r.stdout)
+			}
+		}
+	}
+}
+
 func TestFormatJSONOnStdout(t *testing.T) {
 	r := run(t, "lint", "--format", "json", spec("prc001-no-auth.yaml"))
 	if r.code != 1 {

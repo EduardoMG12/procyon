@@ -59,3 +59,9 @@ version; removing or renaming one bumps it. Scripts should check
 
 `file` always uses forward slashes, on every system. `findings`, `ignored`
 and `notes` are always arrays, empty rather than missing.
+
+Strings are the spec's and the API's text exactly, but characters that act
+on a screen instead of showing (C1 controls, bidi controls such as U+202E,
+invisible ones such as U+200B) are written as `\u` escapes, so the file is
+safe to print in a terminal or a CI log. A JSON parser decodes them back to
+the same characters.
