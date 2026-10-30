@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -194,15 +193,17 @@ func swaggerPointer(pointer string, doc2 *openapi2.T) string {
 			}
 		}
 		// requestBody/content/<type>/schema/... -> parameters/<body>/schema/...
+		// requestBody, its $ref or its content -> parameters/<body>/name, or
+		// parameters/<body>/$ref when the entry refers to #/parameters
 		if rest[0] == "requestBody" {
-			owner, i := bodyParameter(doc2, unescapePointer(op[1]), op[2])
+			owner, i, key := bodyParameter(doc2, unescapePointer(op[1]), op[2])
 			if i < 0 {
 				return "/" + strings.Join(append(op, "parameters"), "/")
 			}
 			if owner == "path" {
 				op = op[:2] // declared on the path item, shared by its operations
 			}
-			tail := []string{}
+			tail := []string{key}
 			if len(rest) >= 4 {
 				tail = rest[3:]
 			}
@@ -215,53 +216,53 @@ func swaggerPointer(pointer string, doc2 *openapi2.T) string {
 
 // bodyParameter finds the body parameter of an operation in the Swagger 2.0
 // document, as swaggerParameter does.
-func bodyParameter(doc2 *openapi2.T, path, method string) (owner string, index int) {
-	owner, index, _ = swaggerParameter(doc2, path, method, func(p *openapi2.Parameter) bool {
+func bodyParameter(doc2 *openapi2.T, path, method string) (owner string, index int, key string) {
+	return swaggerParameter(doc2, path, method, func(p *openapi2.Parameter) bool {
 		return p.In == "body"
 	})
-	return owner, index
 }
 
 // formParameter finds the formData parameter called name of an operation,
-// as swaggerParameter does, and the key to point at in its list entry:
-// "name", or "$ref" when the entry refers to #/parameters.
+// as swaggerParameter does.
 func formParameter(doc2 *openapi2.T, path, method, name string) (owner string, index int, key string) {
-	owner, index, entry := swaggerParameter(doc2, path, method, func(p *openapi2.Parameter) bool {
-		if p.Ref != "" {
-			p = doc2.Parameters[strings.TrimPrefix(p.Ref, "#/parameters/")]
-		}
-		return p != nil && p.In == "formData" && p.Name == name
+	return swaggerParameter(doc2, path, method, func(p *openapi2.Parameter) bool {
+		return p.In == "formData" && p.Name == name
 	})
-	switch {
-	case index < 0:
-		return "", -1, ""
-	case entry.Ref != "":
-		return owner, index, "$ref"
-	}
-	return owner, index, "name"
 }
 
 // swaggerParameter finds the first parameter of an operation in the Swagger
 // 2.0 document that match accepts: on the operation ("operation"), else on
-// its path item ("path"). It returns where, the index there and the list
-// entry as written, or -1.
-func swaggerParameter(doc2 *openapi2.T, path, method string, match func(*openapi2.Parameter) bool) (owner string, index int, entry *openapi2.Parameter) {
+// its path item ("path"). A list entry that refers to #/parameters is
+// matched as the parameter it refers to. It returns where, the index there
+// and the key to point at in the entry: "$ref" when it refers to
+// #/parameters, else "name"; or -1.
+func swaggerParameter(doc2 *openapi2.T, path, method string, match func(*openapi2.Parameter) bool) (owner string, index int, key string) {
 	item := doc2.Paths[path]
 	if item == nil {
-		return "", -1, nil
+		return "", -1, ""
 	}
-	find := func(params openapi2.Parameters) int {
-		return slices.IndexFunc(params, func(p *openapi2.Parameter) bool { return p != nil && match(p) })
+	find := func(params openapi2.Parameters) (int, string) {
+		for i, p := range params {
+			key := "name"
+			if p != nil && p.Ref != "" {
+				p = doc2.Parameters[strings.TrimPrefix(p.Ref, "#/parameters/")]
+				key = "$ref"
+			}
+			if p != nil && match(p) {
+				return i, key
+			}
+		}
+		return -1, ""
 	}
 	if op := item.GetOperation(strings.ToUpper(method)); op != nil {
-		if i := find(op.Parameters); i >= 0 {
-			return "operation", i, op.Parameters[i]
+		if i, key := find(op.Parameters); i >= 0 {
+			return "operation", i, key
 		}
 	}
-	if i := find(item.Parameters); i >= 0 {
-		return "path", i, item.Parameters[i]
+	if i, key := find(item.Parameters); i >= 0 {
+		return "path", i, key
 	}
-	return "", -1, nil
+	return "", -1, ""
 }
 
 func parentPointer(pointer string) string {
