@@ -31,16 +31,17 @@ type config struct {
 		Skip []string `yaml:"skip"`
 		// Accounts declare how test accounts A and B log in.
 		Accounts struct {
-			A struct {
-				Login *probe.Login `yaml:"login"`
-			} `yaml:"a"`
-			B struct {
-				Login *probe.Login `yaml:"login"`
-			} `yaml:"b"`
+			A testAccount `yaml:"a"`
+			B testAccount `yaml:"b"`
 		} `yaml:"accounts"`
 	} `yaml:"test"`
 
 	outputs outputs // Output, parsed
+}
+
+// testAccount is how one test account logs in, under test.accounts.
+type testAccount struct {
+	Login *probe.Login `yaml:"login"`
 }
 
 // positionedError is implemented by goccy/go-yaml's syntax and decoding
