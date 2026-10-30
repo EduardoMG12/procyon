@@ -39,7 +39,7 @@ func checkPRC005(doc *openapi3.T) []report.Finding {
 			lists = append(lists, credentialWords)
 		}
 		forEachResponseProperty(op, func(name string, prop *openapi3.SchemaRef) {
-			if !holdsValue(prop.Value) || !matchesAny(name, lists) {
+			if !holdsValue(prop.Value, map[*openapi3.Schema]bool{}) || !matchesAny(name, lists) {
 				return // hasPassword (a flag), secretRef (an object): about the secret, not the secret
 			}
 			loc := propertyLocation(prop)
@@ -63,13 +63,20 @@ func checkPRC005(doc *openapi3.T) []report.Finding {
 // their own. A schema without a type counts unless it has properties or is
 // made only of parts that do not count (anyOf: [an object]), to stay on the
 // safe side.
-func holdsValue(s *openapi3.Schema) bool {
-	if s == nil || len(s.Enum) > 1 {
+//
+// seen holds the schemas already looked at, the visited set walkProperties
+// also keeps: a recursive schema (a map of maps) meets itself again, and
+// would otherwise be checked forever. A schema already seen adds nothing:
+// it is either still being checked further up, or was checked and holds no
+// value (a value found anywhere returns true at once).
+func holdsValue(s *openapi3.Schema, seen map[*openapi3.Schema]bool) bool {
+	if s == nil || seen[s] || len(s.Enum) > 1 {
 		return false
 	}
+	seen[s] = true
 	if s.Type == nil || len(s.Type.Slice()) == 0 {
 		if len(s.Properties) > 0 {
-			return wrapsValue(s)
+			return wrapsValue(s, seen)
 		}
 		// Parts that only modify the others (allOf: [{$ref}, {nullable: true}])
 		// say nothing about what the value is.
@@ -82,7 +89,7 @@ func holdsValue(s *openapi3.Schema) bool {
 		if len(parts) == 0 {
 			return true
 		}
-		return slices.ContainsFunc(parts, func(p *openapi3.SchemaRef) bool { return holdsValue(p.Value) })
+		return slices.ContainsFunc(parts, func(p *openapi3.SchemaRef) bool { return holdsValue(p.Value, seen) })
 	}
 	for _, t := range []string{"string", "integer", "number"} {
 		if s.Type.Includes(t) {
@@ -90,11 +97,11 @@ func holdsValue(s *openapi3.Schema) bool {
 		}
 	}
 	if s.Type.Includes("array") {
-		return s.Items != nil && holdsValue(s.Items.Value)
+		return s.Items != nil && holdsValue(s.Items.Value, seen)
 	}
 	if s.Type.Includes("object") {
-		return wrapsValue(s) ||
-			(s.AdditionalProperties.Schema != nil && holdsValue(s.AdditionalProperties.Schema.Value)) // a map of secrets
+		return wrapsValue(s, seen) ||
+			(s.AdditionalProperties.Schema != nil && holdsValue(s.AdditionalProperties.Schema.Value, seen)) // a map of secrets
 	}
 	return false
 }
@@ -104,9 +111,9 @@ var valueFields = []string{"value", "data", "plaintext", "content"}
 
 // wrapsValue reports whether an object wraps its value in a field such as
 // value or data: password: {value: "..."} holds a password.
-func wrapsValue(s *openapi3.Schema) bool {
+func wrapsValue(s *openapi3.Schema, seen map[*openapi3.Schema]bool) bool {
 	for name, prop := range s.Properties {
-		if slices.Contains(valueFields, strings.ToLower(name)) && prop != nil && holdsValue(prop.Value) {
+		if slices.Contains(valueFields, strings.ToLower(name)) && prop != nil && holdsValue(prop.Value, seen) {
 			return true
 		}
 	}

@@ -1,0 +1,55 @@
+openapi: 3.0.3
+info:
+  title: Documents
+  version: 1.0.0
+security:
+  - bearer: []
+paths:
+  /documents:
+    get:
+      responses:
+        "200":
+          description: Documents
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  password:
+                    $ref: "#/components/schemas/MapOfMaps"
+                  secret:
+                    $ref: "#/components/schemas/ListOfLists"
+                  token:
+                    $ref: "#/components/schemas/AllOfItself"
+                  apiKey:
+                    $ref: "#/components/schemas/WrapsItself"
+                  privateKey:
+                    $ref: "#/components/schemas/JsonValue"
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+  schemas:
+    MapOfMaps:
+      type: object
+      additionalProperties:
+        $ref: "#/components/schemas/MapOfMaps"
+    ListOfLists:
+      type: array
+      items:
+        $ref: "#/components/schemas/ListOfLists"
+    AllOfItself:
+      allOf:
+        - $ref: "#/components/schemas/AllOfItself"
+    WrapsItself:
+      type: object
+      properties:
+        value:
+          $ref: "#/components/schemas/WrapsItself"
+    JsonValue:
+      type: object
+      additionalProperties:
+        anyOf:
+          - type: string
+          - $ref: "#/components/schemas/JsonValue"

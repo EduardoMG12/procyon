@@ -266,6 +266,12 @@ func TestRules(t *testing.T) {
 			"PRC005 prc005-secrets.yaml:115:13 GET /sessions",
 		}},
 		{"prc005-nullable-boolean-3.1.yaml", []string{"PRC005"}, []string{}},
+		// Schemas that refer to themselves end: a map of maps, a list of
+		// lists, an allOf of itself and a value wrapping itself hold no
+		// value; a map of text or nested maps does.
+		{"prc005-recursive.yaml", []string{"PRC005"}, []string{
+			"PRC005 prc005-recursive.yaml:26:19 GET /documents",
+		}},
 		{"prc001-empty-override.yaml", []string{"PRC001"}, []string{
 			"PRC001 prc001-empty-override.yaml:13:5 DELETE /orders",
 		}},
