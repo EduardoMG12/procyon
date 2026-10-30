@@ -1,7 +1,6 @@
 package lint
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/EduardoMG12/procyon/internal/loader"
@@ -32,13 +31,19 @@ func Run(path string, opts Options) (report.Report, error) {
 	// an element once per media type. Findings that differ only in their
 	// operation or reason stay apart, so an ignore on one operation never
 	// hides another's.
-	seen := map[string]bool{}
+	type findingKey struct {
+		rule      string
+		location  report.Location
+		operation string
+		why       string
+	}
+	seen := map[findingKey]bool{}
 	var findings []report.Finding
 	for _, rule := range rules {
 		for _, f := range rule.check(spec.Doc()) {
 			f.Rule = rule.Rule
 			f.Location = spec.AsGiven(f.Location)
-			key := fmt.Sprintf("%s %s:%d:%d %s %s", rule.ID, f.Location.File, f.Location.Line, f.Location.Column, f.Operation, f.Why)
+			key := findingKey{rule.ID, f.Location, f.Operation, f.Why}
 			if seen[key] {
 				continue
 			}

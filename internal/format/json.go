@@ -107,23 +107,20 @@ func JSON(w io.Writer, rep report.Report) error {
 		Ignored:  []jsonIgnored{},
 		Notes:    []jsonNote{},
 	}
+	count := severityCounts(rep.Findings)
+	out.Summary = jsonSummary{
+		Critical: count[report.Critical],
+		High:     count[report.High],
+		Medium:   count[report.Medium],
+		Low:      count[report.Low],
+		Ignored:  len(rep.Ignored),
+	}
 	for _, f := range rep.Findings {
 		out.Findings = append(out.Findings, toJSON(f))
-		switch f.Rule.Severity {
-		case report.Critical:
-			out.Summary.Critical++
-		case report.High:
-			out.Summary.High++
-		case report.Medium:
-			out.Summary.Medium++
-		case report.Low:
-			out.Summary.Low++
-		}
 	}
 	for _, i := range rep.Ignored {
 		out.Ignored = append(out.Ignored, jsonIgnored{toJSON(i.Finding), i.Reason, i.Expires})
 	}
-	out.Summary.Ignored = len(rep.Ignored)
 	for _, n := range rep.Notes {
 		out.Notes = append(out.Notes, jsonNote{jsonLoc(n.Location), n.Message})
 	}

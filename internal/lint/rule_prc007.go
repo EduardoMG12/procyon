@@ -40,7 +40,9 @@ var identifierWords = []string{
 func checkPRC007(doc *openapi3.T) []report.Finding {
 	var findings []report.Finding
 	loader.ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-		if !reachableAnonymously(doc, path, op) {
+		// Marking an operation public (x-procyon-public) does not change
+		// that anyone can call it: it only says it is meant to be so.
+		if !loader.Unauthenticated(doc, path, op) {
 			return
 		}
 		param := objectIdentifier(doc, path, op)
@@ -63,16 +65,9 @@ func checkPRC007(doc *openapi3.T) []report.Finding {
 // objectIdentifier returns the first path parameter of op (or its path)
 // that identifies an object, or "".
 func objectIdentifier(doc *openapi3.T, path string, op *openapi3.Operation) string {
-	params := slices.Clone(op.Parameters)
-	if item := doc.Paths.Value(path); item != nil {
-		params = append(params, item.Parameters...)
-	}
-	for _, p := range params {
-		if p == nil || p.Value == nil || p.Value.In != openapi3.ParameterInPath {
-			continue
-		}
-		if identifies(p.Value.Name) {
-			return p.Value.Name
+	for _, p := range loader.OperationParameters(doc, path, op) {
+		if p.In == openapi3.ParameterInPath && identifies(p.Name) {
+			return p.Name
 		}
 	}
 	return ""

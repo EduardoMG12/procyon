@@ -45,11 +45,7 @@ var severityColor = map[report.Severity]string{
 // one-line summary.
 func Terminal(w io.Writer, rep report.Report, opts TerminalOptions) error {
 	t := terminal{opts: opts}
-	findings := slices.Clone(rep.Findings)
-	// Stable: within a severity, findings keep the engine's location order.
-	slices.SortStableFunc(findings, func(a, b report.Finding) int {
-		return int(b.Rule.Severity) - int(a.Rule.Severity)
-	})
+	findings := bySeverity(rep.Findings)
 	if len(findings) == 0 {
 		t.line("No findings.")
 		t.line("")
@@ -188,15 +184,33 @@ func (t *terminal) notes(notes []report.Note) {
 	t.line("")
 }
 
+// location writes a location as file:line:column, with forward slashes on
+// every system. The markdown format uses it too.
 func location(loc report.Location) string {
 	return fmt.Sprintf("%s:%d:%d", filepath.ToSlash(loc.File), loc.Line, loc.Column)
 }
 
-func (t *terminal) summary(rep report.Report) {
+// bySeverity returns a copy of findings, most serious first. The sort is
+// stable: within a severity, findings keep the engine's location order.
+func bySeverity(findings []report.Finding) []report.Finding {
+	sorted := slices.Clone(findings)
+	slices.SortStableFunc(sorted, func(a, b report.Finding) int {
+		return int(b.Rule.Severity) - int(a.Rule.Severity)
+	})
+	return sorted
+}
+
+// severityCounts counts the findings of each severity, for the summaries.
+func severityCounts(findings []report.Finding) map[report.Severity]int {
 	count := map[report.Severity]int{}
-	for _, f := range rep.Findings {
+	for _, f := range findings {
 		count[f.Rule.Severity]++
 	}
+	return count
+}
+
+func (t *terminal) summary(rep report.Report) {
+	count := severityCounts(rep.Findings)
 	verdict := t.paint(green, "PASSED")
 	if rep.Failed {
 		verdict = t.paint(red, "FAILED")

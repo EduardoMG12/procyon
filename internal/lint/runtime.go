@@ -65,6 +65,6 @@ func RuntimeRule(id string) report.Rule {
 // KnownRule reports whether id names a rule, lint or runtime: what an
 // x-procyon-ignore may name.
 func KnownRule(id string) bool {
-	isID := func(r report.Rule) bool { return r.ID == id }
-	return slices.ContainsFunc(Rules(), isID) || slices.ContainsFunc(runtimeRules, isID)
+	return slices.ContainsFunc(rules, func(r lintRule) bool { return r.ID == id }) ||
+		slices.ContainsFunc(runtimeRules, func(r report.Rule) bool { return r.ID == id })
 }

@@ -45,6 +45,10 @@ var (
 	// waterDepth, shoe size).
 	countQueryWords = [][]string{{"top"}, {"take"}, {"depth"}, {"size"}}
 
+	// countOrQueryWords are both lists, what a query parameter is checked
+	// against, joined once rather than on every check.
+	countOrQueryWords = slices.Concat(countWords, countQueryWords)
+
 	// countDescribingWords, right after a count word, make the field a
 	// value rather than an amount of work: limitPrice, retryAfter,
 	// repeatEvery, depthMeters.
