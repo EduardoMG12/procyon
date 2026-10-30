@@ -97,14 +97,16 @@ lazily. See `docs/agents/domain.md`.
 
 ## Current state
 
-Updated 2026-10-26. v0.1 is done and released as v0.1.0 (#21). v0.2
+Updated 2026-10-30. v0.1 is done and released as v0.1.0 (#21). v0.2
 (runtime tests, `procyon test`, [PRD 0002](docs/prds/0002-v0.2-runtime-tests.md))
 is built (spec #69, slices #70–#86, PRs #91–#113), then refactored and
-hardened (#114–#128): packages `report` (model + engine), `loader`
-(specs), `lint` (rules), `probe` (runtime tests), `words`, `format`,
+hardened (#114–#136) and released as v0.2.1. An audit after the release
+fixed a crash and removed duplicated code (#137–#145): packages `report`
+(model + engine), `loader` (specs, and the tests of what a spec may
+read), `lint` (rules), `probe` (runtime tests), `words`, `format`,
 `cmd/procyon`; `internal/arch` tests the import directions. It runs
 against vulnapi (ours, every PR) and weekly against VAmPI and crAPI
-(`.github/workflows/benchmark.yml`). Not yet released.
+(`.github/workflows/benchmark.yml`). Next: v0.3, not yet planned.
 The automatic `/code-review` skips paths containing "test" or "spec": give
 a separate review agent the file list for test files.
 Before every push, run the tests on a clean `git archive` of the commit:
