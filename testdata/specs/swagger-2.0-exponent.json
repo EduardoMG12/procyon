@@ -1,0 +1,16 @@
+{
+  "swagger": "2.0",
+  "info": { "title": "Shop", "version": "1.0.0" },
+  "securityDefinitions": { "key": { "type": "apiKey", "in": "header", "name": "X-Key" } },
+  "security": [ { "key": [] } ],
+  "paths": {
+    "/orders": {
+      "get": {
+        "parameters": [
+          { "name": "limit", "in": "query", "type": "integer", "maximum": 1e3 }
+        ],
+        "responses": { "200": { "description": "Orders" } }
+      }
+    }
+  }
+}

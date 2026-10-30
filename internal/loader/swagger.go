@@ -43,11 +43,17 @@ func (e *positionError) Error() string {
 // 2.0 pointer for the same element (/definitions/User) and looked up in the
 // original file. When the exact element has no counterpart, the nearest
 // ancestor that does is used.
-func fromSwagger(data []byte) (converted []byte, back func(position) (position, bool), err error) {
-	original, err := keyPositions(data)
-	if err != nil {
-		return nil, nil, err
+//
+// file is data's syntax tree, or nil for JSON, which load does not parse as
+// YAML. Parsing a large spec takes seconds, so it is parsed only once.
+func fromSwagger(data []byte, file *ast.File) (converted []byte, back func(position) (position, bool), err error) {
+	isJSON := file == nil
+	if isJSON {
+		if file, err = parser.ParseBytes(data, 0); err != nil {
+			return nil, nil, err
+		}
 	}
+	original := keyPositions(file)
 	// at is an error about an element of the original file, at its place.
 	at := func(pointer, format string, args ...any) error {
 		// paths > /users > $ref: a pointer reads badly once a key has a "/".
@@ -64,14 +70,17 @@ func fromSwagger(data []byte) (converted []byte, back func(position) (position, 
 		}
 		return err
 	}
-	// Decoding to JSON expands YAML aliases, and a few hundred bytes of
-	// nested aliases expand to gigabytes: refuse before expanding.
-	if err := limitAliases(data); err != nil {
-		return nil, nil, err
-	}
-	asJSON, err := yaml.YAMLToJSON(data)
-	if err != nil {
-		return nil, nil, err
+	asJSON := data
+	if !isJSON {
+		// Decoding to JSON expands YAML aliases, and a few hundred bytes of
+		// nested aliases expand to gigabytes: refuse before expanding. JSON
+		// has no aliases.
+		if err := limitAliases(file); err != nil {
+			return nil, nil, err
+		}
+		if asJSON, err = yaml.YAMLToJSON(data); err != nil {
+			return nil, nil, err
+		}
 	}
 	var raw any
 	if err := json.Unmarshal(asJSON, &raw); err != nil {
@@ -115,7 +124,7 @@ func fromSwagger(data []byte) (converted []byte, back func(position) (position, 
 	}
 	doc3, err := openapi2conv.ToV3(&doc2)
 	if err != nil {
-		return nil, nil, fmt.Errorf("converting Swagger 2.0 to OpenAPI 3: %s", swaggerNames(err.Error()))
+		return nil, nil, fmt.Errorf("converting Swagger 2.0 to OpenAPI 3: %s", swaggerNames.Replace(err.Error()))
 	}
 	operationServers(&doc2, doc3)
 	if doc3.Paths == nil {
@@ -276,24 +285,24 @@ func parentPointer(pointer string) string {
 // keyPointers maps the position of every mapping key in a YAML or JSON
 // text to its JSON pointer.
 func keyPointers(data []byte) (map[position]string, error) {
-	out := map[position]string{}
-	err := walkKeys(data, func(pointer string, p position) { out[p] = pointer })
-	return out, err
-}
-
-// keyPositions maps the JSON pointer of every mapping key in a YAML or JSON
-// text to its position.
-func keyPositions(data []byte) (map[string]position, error) {
-	out := map[string]position{}
-	err := walkKeys(data, func(pointer string, p position) { out[pointer] = p })
-	return out, err
-}
-
-func walkKeys(data []byte, visit func(pointer string, p position)) error {
 	file, err := parser.ParseBytes(data, 0)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	out := map[position]string{}
+	walkKeys(file, func(pointer string, p position) { out[p] = pointer })
+	return out, nil
+}
+
+// keyPositions maps the JSON pointer of every mapping key in a parsed YAML
+// or JSON text to its position.
+func keyPositions(file *ast.File) map[string]position {
+	out := map[string]position{}
+	walkKeys(file, func(pointer string, p position) { out[pointer] = p })
+	return out
+}
+
+func walkKeys(file *ast.File, visit func(pointer string, p position)) {
 	var walk func(node ast.Node, pointer string)
 	walk = func(node ast.Node, pointer string) {
 		switch n := node.(type) {
@@ -323,7 +332,6 @@ func walkKeys(data []byte, visit func(pointer string, p position)) error {
 	for _, doc := range file.Docs {
 		walk(doc, "")
 	}
-	return nil
 }
 
 func keyText(key ast.MapKeyNode) string {
