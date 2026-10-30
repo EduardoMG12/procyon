@@ -149,3 +149,157 @@ func TestSpecBehindADirectorySymlinkLeavingTheWorkingDirectoryIsRefused(t *testi
 		t.Fatalf("Load = %v, want an error refusing a spec reached through a link leading out", err)
 	}
 }
+
+// writeSpec writes a spec at path whose /orders path item is a $ref.
+func writeSpec(t *testing.T, path, ref string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "openapi: 3.0.3\ninfo:\n  title: Shop\n  version: 1.0.0\npaths:\n  /orders:\n    $ref: \"" + ref + "\"\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+const pathItem = "get:\n  responses:\n    \"200\":\n      description: OK\n"
+
+// fakeHome points the user's home directory at a new empty directory for
+// this test, and returns it.
+func fakeHome(t *testing.T) string {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // Windows
+	return home
+}
+
+// A spec saved straight into the home directory must not make all of home
+// (~/.ssh, ~/.config, ~/.aws) readable through $refs.
+func TestRefsRefusedWhenTheSpecSitsInTheHomeDirectory(t *testing.T) {
+	home := fakeHome(t)
+	writeFile(t, filepath.Join(home, "notes.yaml"), pathItem)
+	spec := filepath.Join(home, "api.yaml")
+	writeSpec(t, spec, "./notes.yaml")
+	_, err := Load(spec, Options{})
+	if err == nil || !strings.Contains(err.Error(), "home directory") {
+		t.Fatalf("Load = %v, want an error refusing $refs from the home directory", err)
+	}
+}
+
+// Hidden files and directories are never read, even inside the root: a spec
+// at a repository's top level sits next to .git, whose config may hold the
+// CI's checkout token.
+func TestRefsNeverReadHiddenFiles(t *testing.T) {
+	fakeHome(t)
+	repo := t.TempDir()
+	writeFile(t, filepath.Join(repo, ".git", "config"), pathItem)
+	writeFile(t, filepath.Join(repo, ".env"), pathItem)
+	for _, ref := range []string{"./.git/config", "./.env"} {
+		spec := filepath.Join(repo, "api.yaml")
+		writeSpec(t, spec, ref)
+		_, err := Load(spec, Options{})
+		if err == nil || !strings.Contains(err.Error(), "hidden") {
+			t.Errorf("$ref %s: Load = %v, want an error refusing a hidden file", ref, err)
+		}
+	}
+}
+
+// By default $refs stay in the spec's directory. A monorepo whose specs
+// share files from a sibling folder opts in with RefRoot.
+func TestRefRootAllowsSiblingFoldersOnlyWhenAskedFor(t *testing.T) {
+	fakeHome(t)
+	repo := t.TempDir()
+	writeFile(t, filepath.Join(repo, "common", "orders.yaml"), pathItem)
+	spec := filepath.Join(repo, "specs", "api.yaml")
+	writeSpec(t, spec, "../common/orders.yaml")
+
+	_, err := Load(spec, Options{})
+	if err == nil || !strings.Contains(err.Error(), "RefRoot") {
+		t.Fatalf("default: Load = %v, want an error explaining how to allow it", err)
+	}
+	if _, err := Load(spec, Options{RefRoot: repo}); err != nil {
+		t.Fatalf("with RefRoot: %v", err)
+	}
+}
+
+// A $ref to a directory says so, instead of claiming it points outside.
+func TestRefToADirectoryIsReportedAsSuch(t *testing.T) {
+	fakeHome(t)
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "orders"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	spec := filepath.Join(dir, "api.yaml")
+	writeSpec(t, spec, "./orders")
+	_, err := Load(spec, Options{})
+	if err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("Load = %v, want an error saying it is not a regular file", err)
+	}
+}
+
+// A symlink with an ordinary name must not lead to a hidden file: $refs
+// never follow symlinks at all.
+func TestRefsNeverFollowSymlinks(t *testing.T) {
+	fakeHome(t)
+	repo := t.TempDir()
+	writeFile(t, filepath.Join(repo, ".git", "config"), pathItem)
+	writeFile(t, filepath.Join(repo, ".env"), pathItem)
+	if err := os.Symlink(".git", filepath.Join(repo, "g")); err != nil {
+		t.Skipf("cannot create symlinks here: %v", err)
+	}
+	if err := os.Symlink(".env", filepath.Join(repo, "e.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	for _, ref := range []string{"./g/config", "./e.yaml"} {
+		spec := filepath.Join(repo, "api.yaml")
+		writeSpec(t, spec, ref)
+		_, err := Load(spec, Options{})
+		if err == nil || !strings.Contains(err.Error(), "symlink") {
+			t.Errorf("$ref %s: Load = %v, want an error refusing the symlink", ref, err)
+		}
+	}
+}
+
+// A RefRoot written through other directories than the spec's path is
+// refused with a clear message: accepting it would mean checking $ref paths
+// against one name of a directory while reading through another.
+func TestRefRootWrittenThroughOtherDirectoriesIsRefused(t *testing.T) {
+	fakeHome(t)
+	real := t.TempDir()
+	writeFile(t, filepath.Join(real, "common", "orders.yaml"), pathItem)
+	spec := filepath.Join(real, "specs", "api.yaml")
+	writeSpec(t, spec, "../common/orders.yaml")
+	alias := filepath.Join(t.TempDir(), "alias")
+	if err := os.Symlink(real, alias); err != nil {
+		t.Skipf("cannot create symlinks here: %v", err)
+	}
+	_, err := Load(spec, Options{RefRoot: alias})
+	if err == nil || !strings.Contains(err.Error(), "the same way") {
+		t.Fatalf("Load = %v, want an error asking to give both paths the same way", err)
+	}
+}
+
+// The escape found in review: a symlink below RefRoot in the spec's path
+// must not let the root be opened above RefRoot.
+func TestRefRootCannotBeWidenedThroughASymlinkInTheSpecPath(t *testing.T) {
+	fakeHome(t)
+	base := t.TempDir()
+	refRoot := filepath.Join(base, "ci", "repo", "sub")
+	writeFile(t, filepath.Join(refRoot, "a", "b", "c", "keep"), "")
+	writeFile(t, filepath.Join(base, "secret.yaml"), pathItem)
+	link := filepath.Join(base, "ci", "repo", "link")
+	if err := os.Symlink(filepath.Join(refRoot, "a", "b", "c"), link); err != nil {
+		t.Skipf("cannot create symlinks here: %v", err)
+	}
+	spec := filepath.Join(link, "api.yaml")
+	writeSpec(t, spec, "../../../secret.yaml")
+	loaded, err := Load(spec, Options{RefRoot: refRoot})
+	if err == nil {
+		for file := range loaded.Sources() {
+			if strings.HasSuffix(file, "secret.yaml") {
+				t.Fatal("read a file outside RefRoot")
+			}
+		}
+		t.Fatal("Load returned no error")
+	}
+}
