@@ -359,7 +359,9 @@ func TestTildeInOrdinaryNamesIsAllowed(t *testing.T) {
 }
 
 // Many fragment refs to one shared file are an ordinary layout: they must
-// not exhaust the budget, since the file is read once.
+// not exhaust the budgets, since the file is read and parsed once. The
+// file is handed to kin-openapi once per $ref, 80 MB in all, more than
+// maxRefReparsed: only the copies it parses may count.
 func TestManyFragmentRefsToOneFileAreFine(t *testing.T) {
 	fakeHome(t)
 	dir := t.TempDir()

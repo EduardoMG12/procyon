@@ -117,6 +117,9 @@ func loadParsed(path string, opts Options, data []byte, swagger any) (*openapi3.
 	loader.IncludeOrigin = true
 	loader.ReadFromURIFunc = files.read
 	doc, err := loader.LoadFromDataWithPath(withLocations(toLoad), specURL(path))
+	if files.overLimit != nil {
+		err = files.overLimit // see specFiles.overLimit
+	}
 	if err != nil {
 		return nil, nil, fmt.Errorf("%s: %w", path, err)
 	}

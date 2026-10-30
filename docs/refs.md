@@ -24,7 +24,13 @@ request, a vendor, a public repository), it does so defensively.
    regular file; a symlink, a Windows junction, a FIFO or a device is
    refused.
 5. **Limits.** At most 16 MiB for the spec, 10 MiB per referenced file,
-   32 MiB read from disk through all `$refs`, and 20,000 `$refs` resolved.
+   32 MiB read from disk through all `$refs`, 16 MiB parsed again through
+   all `$refs`, and 20,000 `$refs` resolved. A file is read once but may be
+   parsed many times: again for each `$ref` to the whole file
+   (`./error.yaml`), and, for each `$ref` into an `x-` extension of a header
+   and similar places the parser cannot reach directly, the file the `$ref`
+   sits in. A `$ref` into a file (`./common.yaml#/User`) parses it only the
+   first time.
 6. **The spec itself** must be a regular file, not a symlink (to a device
    that never ends, or to a file outside the repository), and not reached
    through a directory symlink leading outside the working directory.

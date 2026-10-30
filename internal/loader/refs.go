@@ -10,6 +10,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -22,15 +23,18 @@ import (
 // cannot exhaust a CI runner. Parsing costs many times a file's size in
 // memory, so the limits stay well below what a runner holds. maxRefSize
 // caps one file read through a $ref, maxRefTotal the bytes read from disk
-// through all of them, maxRefReads how many $refs are resolved (each may be
-// parsed again), and maxSpecSize the spec itself. The variables are only
-// variables so tests can lower them.
+// through all of them, maxRefReparsed the bytes kin-openapi parses again
+// through all of them (a file read once may be parsed many times; as much
+// as the largest spec), maxRefReads how many $refs are resolved, and
+// maxSpecSize the spec itself. The variables are only variables so tests
+// can lower them.
 const maxRefSize = 10 << 20 // 10 MiB
 
 var (
-	maxRefTotal int64 = 32 << 20 // 32 MiB
-	maxRefReads       = 20000
-	maxSpecSize int64 = 16 << 20 // 16 MiB
+	maxRefTotal    int64 = 32 << 20 // 32 MiB
+	maxRefReparsed int64 = 16 << 20 // 16 MiB
+	maxRefReads          = 20000
+	maxSpecSize    int64 = 16 << 20 // 16 MiB
 )
 
 // specFiles is every file one spec was read from: the spec itself and the
@@ -60,9 +64,19 @@ type specFiles struct {
 	// the same). Hidden parts are only refused after it.
 	specRel string
 	// total counts the bytes read from disk through $refs, against
-	// maxRefTotal, and reads the $refs resolved, against maxRefReads.
-	total int64
-	reads int
+	// maxRefTotal, reparsed the bytes kin-openapi parses again, against
+	// maxRefReparsed, and reads the $refs resolved, against maxRefReads.
+	total    int64
+	reparsed int64
+	reads    int
+	// loaded holds the locations kin-openapi's document cache has been
+	// handed, so a copy it drops unparsed is not counted (see handOver).
+	loaded map[string]bool
+	// overLimit is the error of the last $ref refused by maxRefReads or
+	// maxRefReparsed. kin-openapi may report another error in its place
+	// (when reading a file to parse it again fails, it returns the error
+	// that made it parse again), so Load returns this one.
+	overLimit error
 	// specAbs is the spec's absolute path, for $refs back into it.
 	specAbs string
 }
@@ -72,6 +86,8 @@ func newSpecFiles(path, refRoot string, data []byte) *specFiles {
 		spec: path, refRoot: refRoot,
 		paths: map[string]string{}, lines: map[string][]string{},
 		cache: map[string][]byte{}, cacheOwner: map[string]string{}, specData: data,
+		// kin-openapi's document cache starts with the spec, loaded first.
+		loaded: map[string]bool{specURL(path).String(): true},
 	}
 	files.specAbs, _ = filepath.Abs(path)
 	files.add(specURL(path), path, data)
@@ -142,11 +158,12 @@ func (f *specFiles) read(_ *openapi3.Loader, location *url.URL) ([]byte, error) 
 	}
 	path := filepath.Clean(filepath.FromSlash(local))
 	if f.reads++; f.reads > maxRefReads {
-		return nil, fmt.Errorf("$ref %q: the spec resolves more than %d $refs", path, maxRefReads)
+		f.overLimit = fmt.Errorf("$ref %q: the spec resolves more than %d $refs", path, maxRefReads)
+		return nil, f.overLimit
 	}
 	if data, ok := f.cache[path]; ok {
 		f.paths[location.String()] = f.cacheOwner[path]
-		return data, nil
+		return f.handOver(location, path, data, false)
 	}
 	abs, err := filepath.Abs(path) // lexical: touches nothing
 	if err != nil {
@@ -157,7 +174,7 @@ func (f *specFiles) read(_ *openapi3.Loader, location *url.URL) ([]byte, error) 
 		// api.yaml): it is the spec, already read.
 		f.paths[location.String()] = f.spec
 		f.cache[path], f.cacheOwner[path] = withLocations(f.specData), f.spec
-		return f.cache[path], nil
+		return f.handOver(location, path, f.cache[path], false) // the spec was parsed first
 	}
 	if f.root == nil {
 		root, specRel, err := openRefRoot(f.spec, f.refRoot)
@@ -184,7 +201,56 @@ func (f *specFiles) read(_ *openapi3.Loader, location *url.URL) ([]byte, error) 
 	}
 	f.add(location, path, data)
 	f.cache[path], f.cacheOwner[path] = withLocations(data), path
-	return f.cache[path], nil
+	return f.handOver(location, path, f.cache[path], true)
+}
+
+// handOver counts data against maxRefReparsed before kin-openapi gets it,
+// unless it is a file's first copy (fresh from disk, counted against
+// maxRefTotal): the cache makes reading a file again free, not parsing it.
+// kin-openapi parses what it is handed, again and again: a $ref to a whole
+// file (./error.yaml) parses it each time, and so does a $ref whose
+// fragment it cannot find in its typed document (one into an x- extension
+// of a header, say), which parses the file the $ref sits in. The one
+// exception is its document cache: a $ref into a file (./common.yaml#/User)
+// asks for the file each time, but only the first copy of each location is
+// parsed. Counting the copies it drops would refuse a spec with many such
+// $refs to one large shared file, which costs nothing.
+func (f *specFiles) handOver(location *url.URL, path string, data []byte, firstCopy bool) ([]byte, error) {
+	if kinCaller() == "(*Loader).loadFromURIInternal" {
+		if f.loaded[location.String()] {
+			return data, nil // dropped unparsed: kin-openapi has the document
+		}
+		f.loaded[location.String()] = true
+	}
+	if firstCopy {
+		return data, nil
+	}
+	if f.reparsed += int64(len(data)); f.reparsed > maxRefReparsed {
+		f.overLimit = fmt.Errorf("$ref %q: resolving the spec's $refs parses files again, more than %d MiB in total "+
+			"(some $refs, such as ones to a whole file or into an x- extension, parse a file again each time)", path, maxRefReparsed>>20)
+		return nil, f.overLimit
+	}
+	return data, nil
+}
+
+// kinCaller names the kin-openapi function that asked for a file, such as
+// "(*Loader).loadFromURIInternal": the first kin-openapi frame on the stack
+// past its readURL, which every request goes through. If kin-openapi renames
+// the function, every copy is counted, and a test with many $refs into one
+// shared file fails instead of a hostile spec getting through.
+func kinCaller() string {
+	const kin = "github.com/getkin/kin-openapi/openapi3."
+	pcs := make([]uintptr, 16)
+	frames := runtime.CallersFrames(pcs[:runtime.Callers(0, pcs)])
+	for {
+		frame, more := frames.Next()
+		if name, ok := strings.CutPrefix(frame.Function, kin); ok && name != "(*Loader).readURL" {
+			return name
+		}
+		if !more {
+			return ""
+		}
+	}
 }
 
 // shortName matches an 8.3 short name such as GIT~1 or PROGRA~2.EXE: up to
