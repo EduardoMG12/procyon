@@ -46,12 +46,14 @@ func imports(t *testing.T, pkg string) []string {
 // through import nothing that could open a connection or run a program.
 // (kin-openapi itself imports net/http; the loader refuses remote $refs.)
 func TestLintNeverImportsTheNetwork(t *testing.T) {
-	// net/netip and net/url are only values: parsing an address or a URL
-	// opens nothing.
-	forbidden := []string{"net", "net/http", "crypto/tls", "os/exec"}
+	// net and every net/... package can reach the network (net/http,
+	// net/smtp, net/rpc, ...), except net/netip and net/url: they are only
+	// values, and parsing an address or a URL opens nothing.
+	values := []string{"net/netip", "net/url"}
 	for _, pkg := range []string{"lint", "loader", "words", "report", "format"} {
 		for _, imp := range imports(t, pkg) {
-			if slices.Contains(forbidden, imp) {
+			network := (imp == "net" || strings.HasPrefix(imp, "net/")) && !slices.Contains(values, imp)
+			if network || imp == "crypto/tls" || imp == "os/exec" {
 				t.Errorf("internal/%s imports %s", pkg, imp)
 			}
 		}
@@ -79,10 +81,12 @@ func TestFormatsSeeOnlyTheReport(t *testing.T) {
 }
 
 // The linter never depends on the runtime tests, and the loader on neither.
+// Neither linter nor runtime tests know about formats (hard rule 8).
 func TestDependenciesPointOneWay(t *testing.T) {
 	for pkg, forbidden := range map[string][]string{
 		"lint":   {module + "probe", module + "format"},
 		"loader": {module + "lint", module + "probe", module + "format"},
+		"probe":  {module + "format"},
 		"report": {module + "lint", module + "loader", module + "probe"},
 	} {
 		for _, imp := range imports(t, pkg) {
