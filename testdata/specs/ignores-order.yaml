@@ -1,0 +1,41 @@
+openapi: 3.0.3
+info:
+  title: Ignores in a stable order
+  version: 1.0.0
+security:
+  - alpha: []
+paths:
+  /a:
+    servers:
+      - url: https://a.example.com
+        x-procyon-ignore:
+          - rule: PRC004
+            reason: "Left over from the old mirror"
+    get:
+      responses:
+        "200":
+          description: OK
+  /b:
+    servers:
+      - url: https://b.example.com
+        x-procyon-ignore:
+          - rule: PRC004
+            reason: "Left over from the old mirror"
+    get:
+      responses:
+        "200":
+          description: OK
+components:
+  securitySchemes:
+    alpha:
+      type: http
+      scheme: bearer
+      x-procyon-ignore:
+        - rule: PRC003
+          reason: "Left over from basic auth"
+    beta:
+      type: http
+      scheme: bearer
+      x-procyon-ignore:
+        - rule: PRC003
+          reason: "Left over from basic auth"

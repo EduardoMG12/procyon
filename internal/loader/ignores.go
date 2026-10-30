@@ -2,6 +2,7 @@ package loader
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -19,7 +20,9 @@ import (
 const ignoreKey = "x-procyon-ignore"
 
 // parseIgnores reads every x-procyon-ignore in the spec. A malformed entry
-// is an error: a typo must never silently ignore something.
+// is an error: a typo must never silently ignore something. They are read
+// in a stable order (what lives in a map, by key), so the notes about them
+// and the error for a malformed one are the same on every run.
 //
 // An ignore on a security scheme also covers its OAuth2 flows. In a spec
 // converted from Swagger 2.0, an ignore at the root also covers the servers
@@ -49,8 +52,9 @@ func parseIgnores(doc *openapi3.T, asGiven func(report.Location) report.Location
 		add(server.Extensions, server.Origin, "", "server "+server.URL, server)
 	}
 	if doc.Paths != nil {
-		for _, item := range doc.Paths.Map() {
-			for _, server := range item.Servers {
+		paths := doc.Paths.Map()
+		for _, path := range slices.Sorted(maps.Keys(paths)) {
+			for _, server := range paths[path].Servers {
 				add(server.Extensions, server.Origin, "", "server "+server.URL, server)
 			}
 		}
