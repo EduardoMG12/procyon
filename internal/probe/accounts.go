@@ -2,6 +2,7 @@ package probe
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -23,6 +24,23 @@ type caller struct {
 }
 
 var anonymous = caller{name: "anonymous"}
+
+// needAccounts checks both test accounts have a token or a login.
+func needAccounts(opts Options) error {
+	var missing []string
+	if opts.TokenA == "" && opts.LoginA == nil {
+		missing = append(missing, EnvTokenA+" (account A)")
+	}
+	if opts.TokenB == "" && opts.LoginB == nil {
+		missing = append(missing, EnvTokenB+" (account B)")
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return fmt.Errorf("set %s: the token of a test account seeded in the API "+
+		"(the bare token: Procyon adds \"Bearer \" when the spec asks for it), "+
+		"or declare how it logs in under test.accounts in .procyon.yaml", strings.Join(missing, " and "))
+}
 
 // authorize puts token into req the way cred says. The token is the bare
 // value: Procyon adds the "Bearer " or "Basic " prefix the scheme needs.

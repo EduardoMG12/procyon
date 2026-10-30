@@ -5,14 +5,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/EduardoMG12/procyon/internal/loader"
-
 	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/loader"
 	"github.com/EduardoMG12/procyon/internal/report"
 )
 
@@ -26,9 +24,6 @@ type Options struct {
 	RefRoot string
 	// Timeout is how long one request may take. Zero means defaultTimeout.
 	Timeout time.Duration
-	// Budget is the most requests a run sends. Zero means budgetPerOperation
-	// for each operation in the spec, and at least minBudget.
-	Budget int
 	// TokenA and TokenB are the test accounts' tokens (PROCYON_USER_A_TOKEN,
 	// PROCYON_USER_B_TOKEN). B must not be allowed to touch A's objects.
 	TokenA, TokenB string
@@ -91,15 +86,18 @@ func Run(ctx context.Context, specPath string, opts Options) (report.Report, err
 		return report.Report{}, err
 	}
 	timeout := cmp.Or(opts.Timeout, defaultTimeout)
-	budget := cmp.Or(opts.Budget, max(minBudget, budgetPerOperation*len(spec.Operations())))
+	budget := max(minBudget, budgetPerOperation*len(spec.Operations()))
 	r := &runner{client: newClient(timeout, budget), target: target}
+	defer r.client.http.CloseIdleConnections()
 	res := &results{root: report.Location{File: specPath, Line: 1, Column: 1}}
 
 	// TLS first: a server that speaks only an old protocol is reported
 	// before anything else can fail on it.
-	if err := res.tls(ctx, r.client, target, timeout); err != nil {
+	key, err := res.tls(ctx, target, timeout)
+	if err != nil {
 		return report.Report{}, err
 	}
+	r.client.pin = key // every later connection must present the key the check saw
 	a, b, err := r.signIn(ctx, spec, opts)
 	if err != nil {
 		return report.Report{}, err
@@ -184,28 +182,6 @@ func (res *results) note(where report.Location, message string) {
 	}
 }
 
-// tls checks an https target's TLS (PRC105), or notes that an http one
-// has none to check, and pins the key it saw for the rest of the run.
-// Without a handshake there is no key to pin, so the run stops: carrying
-// on unpinned would let someone who blocked the check step in later.
-func (res *results) tls(ctx context.Context, c *client, target *url.URL, timeout time.Duration) error {
-	if target.Scheme != "https" {
-		res.note(res.root, "TLS not checked: the target is plain http "+
-			"(a disposable copy usually is; TLS belongs to the production proxy). PRC105 runs on https targets.")
-		return nil
-	}
-	problems, note, key := checkTLS(ctx, target, timeout)
-	if key == nil {
-		return fmt.Errorf("%s: %s", target.Host, note)
-	}
-	c.pin = key
-	if len(problems) > 0 {
-		res.findings = append(res.findings, weakTLS(res.root, target, problems))
-	}
-	res.note(res.root, note)
-	return nil
-}
-
 // skipSet is test.skip as a set. An entry that names no operation is a
 // note: a typo must not quietly call what was meant to be skipped.
 func (res *results) skipSet(ops []loader.Operation, skip []string) map[string]bool {
@@ -219,57 +195,22 @@ func (res *results) skipSet(ops []loader.Operation, skip []string) map[string]bo
 	return set
 }
 
-// needAccounts checks both test accounts have a token or a login.
-func needAccounts(opts Options) error {
-	var missing []string
-	if opts.TokenA == "" && opts.LoginA == nil {
-		missing = append(missing, EnvTokenA+" (account A)")
-	}
-	if opts.TokenB == "" && opts.LoginB == nil {
-		missing = append(missing, EnvTokenB+" (account B)")
-	}
-	if len(missing) == 0 {
-		return nil
-	}
-	return fmt.Errorf("set %s: the token of a test account seeded in the API "+
-		"(the bare token: Procyon adds \"Bearer \" when the spec asks for it), "+
-		"or declare how it logs in under test.accounts in .procyon.yaml", strings.Join(missing, " and "))
-}
-
 // loadSpecs loads the spec and, for --base-spec, which of its operations
 // changed (nil: test everything). A base that does not load (it was broken
 // on main, and this change may be the fix) means testing everything, with
 // a note, not failing the run.
 func loadSpecs(specPath string, opts Options) (spec *loader.Spec, changed map[string]bool, note string, err error) {
-	spec, err = loader.Load(specPath, loader.Options{RefRoot: opts.RefRoot, KnownRule: lint.KnownRule})
+	load := loader.Options{RefRoot: opts.RefRoot, KnownRule: lint.KnownRule}
+	spec, err = loader.Load(specPath, load)
 	if err != nil || opts.BaseSpec == "" {
 		return spec, nil, "", err
 	}
-	base, err := loader.Load(opts.BaseSpec, loader.Options{RefRoot: opts.RefRoot, KnownRule: lint.KnownRule})
+	base, err := loader.Load(opts.BaseSpec, load)
 	if err != nil {
 		return spec, nil, fmt.Sprintf("--base-spec not used, every operation is tested: %v", err), nil
 	}
 	changed, note = spec.Changed(base)
 	return spec, changed, note, nil
-}
-
-// signIn returns the two test accounts with their tokens: from the
-// environment, which wins, or from their declared login.
-func (r *runner) signIn(ctx context.Context, spec *loader.Spec, opts Options) (a, b caller, err error) {
-	a = caller{name: "A", token: opts.TokenA}
-	b = caller{name: "B", token: opts.TokenB}
-	for _, account := range []struct {
-		who   *caller
-		login *Login
-	}{{&a, opts.LoginA}, {&b, opts.LoginB}} {
-		if account.who.token == "" {
-			if account.who.token, err = r.login(ctx, spec, account.who.name, account.login); err != nil {
-				return a, b, err
-			}
-		}
-		r.tokens = append(r.tokens, account.who.token)
-	}
-	return a, b, nil
 }
 
 // readers are the GETs by path: how A checks whether B changed or deleted

@@ -21,6 +21,28 @@ type tlsProblem struct {
 	proof string // "negotiated TLS 1.0"
 }
 
+// tls checks an https target's TLS (PRC105), or notes that an http one
+// has none to check, and returns the key it saw, for the run to pin (nil
+// for http). Without a handshake there is no key to pin, so the run stops:
+// carrying on unpinned would let someone who blocked the check step in
+// later.
+func (res *results) tls(ctx context.Context, target *url.URL, timeout time.Duration) ([]byte, error) {
+	if target.Scheme != "https" {
+		res.note(res.root, "TLS not checked: the target is plain http "+
+			"(a disposable copy usually is; TLS belongs to the production proxy). PRC105 runs on https targets.")
+		return nil, nil
+	}
+	problems, note, key := checkTLS(ctx, target, timeout)
+	if key == nil {
+		return nil, fmt.Errorf("%s: %s", target.Host, note)
+	}
+	if len(problems) > 0 {
+		res.findings = append(res.findings, weakTLS(res.root, target, problems))
+	}
+	res.note(res.root, note)
+	return key, nil
+}
+
 // checkTLS connects to an https target with crypto/tls and returns what is
 // weak: a protocol older than TLS 1.2, a weak cipher suite, and, for a
 // certificate a known CA signed, one expired, not yet valid or for another

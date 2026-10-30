@@ -28,6 +28,25 @@ type Login struct {
 	Token     string `yaml:"token"`     // JSON pointer to the token in the response
 }
 
+// signIn returns the two test accounts with their tokens: from the
+// environment, which wins, or from their declared login.
+func (r *runner) signIn(ctx context.Context, spec *loader.Spec, opts Options) (a, b caller, err error) {
+	a = caller{name: "A", token: opts.TokenA}
+	b = caller{name: "B", token: opts.TokenB}
+	for _, account := range []struct {
+		who   *caller
+		login *Login
+	}{{&a, opts.LoginA}, {&b, opts.LoginB}} {
+		if account.who.token == "" {
+			if account.who.token, err = r.login(ctx, spec, account.who.name, account.login); err != nil {
+				return a, b, err
+			}
+		}
+		r.tokens = append(r.tokens, account.who.token)
+	}
+	return a, b, nil
+}
+
 // login signs who in and returns its token. It goes through the same
 // client as every other request, so it is subject to the same target
 // checks, timeout and budget.
@@ -144,6 +163,9 @@ func expand(v any) (any, []string, error) {
 	return out, secrets, nil
 }
 
+// pointerEscapes undoes a JSON pointer's escapes: ~1 is a / and ~0 a ~.
+var pointerEscapes = strings.NewReplacer("~1", "/", "~0", "~")
+
 // pointer resolves a JSON pointer (RFC 6901: /session/token, /items/0/id)
 // in a decoded JSON value, or returns nil.
 func pointer(v any, ptr string) any {
@@ -154,7 +176,7 @@ func pointer(v any, ptr string) any {
 		return nil
 	}
 	for _, part := range strings.Split(ptr[1:], "/") {
-		part = strings.NewReplacer("~1", "/", "~0", "~").Replace(part)
+		part = pointerEscapes.Replace(part)
 		switch node := v.(type) {
 		case map[string]any:
 			v = node[part]
