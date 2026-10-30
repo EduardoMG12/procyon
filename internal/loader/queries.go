@@ -1,6 +1,8 @@
 package loader
 
 import (
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 
@@ -124,15 +126,16 @@ func LocateField(origin *openapi3.Origin, field string) report.Location {
 	return Locate(origin)
 }
 
-// ForEachScheme calls fn once for every defined security scheme. An alias
-// ($ref to another scheme) is skipped: it is the same scheme, and its
+// ForEachScheme calls fn once for every defined security scheme, by name. An
+// alias ($ref to another scheme) is skipped: it is the same scheme, and its
 // finding belongs where the scheme is written.
 func ForEachScheme(doc *openapi3.T, fn func(name string, scheme *openapi3.SecurityScheme)) {
 	if doc.Components == nil {
 		return
 	}
-	for name, ref := range doc.Components.SecuritySchemes {
-		if ref != nil && ref.Ref == "" && ref.Value != nil {
+	schemes := doc.Components.SecuritySchemes
+	for _, name := range slices.Sorted(maps.Keys(schemes)) {
+		if ref := schemes[name]; ref != nil && ref.Ref == "" && ref.Value != nil {
 			fn(name, ref.Value)
 		}
 	}
