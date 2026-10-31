@@ -249,6 +249,7 @@ func TestConfigFile(t *testing.T) {
 		{"unknown format", "format: html\n", nil, 2, `.procyon.yaml: format: unknown format "html"`},
 		{"output without a path", "output: [json]\n", nil, 2, `.procyon.yaml: output: "json": want format=path`},
 		{"login without a token pointer", "test:\n  accounts:\n    a:\n      login:\n        operation: POST /login\n", nil, 2, ".procyon.yaml:5:18: test.accounts.a.login needs operation"},
+		{"account b's login is checked too", "test:\n  accounts:\n    b:\n      login:\n        operation: POST /login\n", nil, 2, ".procyon.yaml:5:18: test.accounts.b.login needs operation"},
 		{"login with a token and a cookie", "test:\n  accounts:\n    a:\n      login:\n        operation: POST /login\n        token: /token\n        cookie: sid\n", nil, 2, "either token"},
 		{"login with a body and a form", "test:\n  accounts:\n    a:\n      login:\n        operation: POST /login\n        cookie: sid\n        body: {u: a}\n        form: {u: a}\n", nil, 2, "keep one"},
 		{"unknown key in a login", "test:\n  accounts:\n    b:\n      login:\n        url: /login\n", nil, 2, "url"},
