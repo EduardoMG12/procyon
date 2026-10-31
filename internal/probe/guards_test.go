@@ -129,3 +129,36 @@ func TestShortValuesAreNotTelling(t *testing.T) {
 		t.Errorf("sharedUnseen = %q, want nothing", got)
 	}
 }
+
+// mutations: a very long string is sent where the spec sets no maxLength,
+// to find a crash or a hang (PRC103), but the spec allows it: a server
+// that accepts it is no PRC104 (VAmPI's register and login).
+func TestAnUnboundedLongStringAcceptedIsNoPRC104(t *testing.T) {
+	spec := writeSpec(t, bearerSpec+`  /comments:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text: {type: string}
+            example: {text: hello}
+      responses: {"201": {description: created}}
+`)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ Text string }
+		switch {
+		case userOf(r) == "":
+			w.WriteHeader(http.StatusUnauthorized)
+		case json.NewDecoder(r.Body).Decode(&in) != nil: // text as a number
+			w.WriteHeader(http.StatusBadRequest)
+		default: // any length, as the spec allows
+			w.WriteHeader(http.StatusCreated)
+		}
+	})
+	rep := runOn(t, spec, handler, Options{})
+	if got := findingKeys(rep); len(got) != 0 {
+		t.Errorf("findings %q, want none: the spec sets no maxLength", got)
+	}
+}

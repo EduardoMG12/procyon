@@ -17,21 +17,27 @@ import (
 	"github.com/EduardoMG12/procyon/internal/report"
 )
 
-// mutation is a request body the spec says the API must refuse.
+// mutation is a request body built to break the API.
 type mutation struct {
 	what string // "title as a number", for the finding
 	body []byte
+	// allowed is true when the spec does not forbid the body (a very long
+	// string where it sets no maxLength): a 5xx or no answer is a finding
+	// (PRC103), a 2xx is not (PRC104).
+	allowed bool
 }
 
 // mutations breaks the spec's example in fixed ways, one field at a time,
-// never randomly: each one a body the schema forbids.
+// never randomly: each one a body the schema forbids, except the very long
+// string, which looks only for a crash or a hang.
 //
 //   - a wrong type: the first required field with known types (or the
 //     first field with known types) set to a value of none of them;
 //   - a missing required field: the first one the example has, left out;
 //   - a value outside an enum: the first string enum field;
 //   - a string too long: the first string field with a maxLength, one
-//     character past it; else the first string field, 100 000 characters.
+//     character past it; else the first string field, 100 000 characters,
+//     which the spec allows.
 //
 // Fields are in name order. A mutation that comes out equal to the example
 // is dropped: it would prove nothing. An example that is not a JSON object
@@ -44,37 +50,37 @@ func mutations(example []byte, fields []loader.Field) []mutation {
 	}
 	original, _ := json.Marshal(base)
 	var out []mutation
-	add := func(what string, change func(map[string]any)) {
+	add := func(what string, allowed bool, change func(map[string]any)) {
 		body := maps.Clone(base)
 		change(body)
 		data, _ := json.Marshal(body) // decoded JSON always encodes back
 		if !bytes.Equal(data, original) {
-			out = append(out, mutation{what, data})
+			out = append(out, mutation{what, data, allowed})
 		}
 	}
 
 	if target, ok := wrongTypeTarget(fields); ok {
 		value, what := wrongValue(target.Types)
-		add(target.Name+" as "+what, func(b map[string]any) { b[target.Name] = value })
+		add(target.Name+" as "+what, false, func(b map[string]any) { b[target.Name] = value })
 	}
 	for _, f := range fields {
 		if _, inExample := base[f.Name]; f.Required && inExample {
-			add("without the required "+f.Name, func(b map[string]any) { delete(b, f.Name) })
+			add("without the required "+f.Name, false, func(b map[string]any) { delete(b, f.Name) })
 			break
 		}
 	}
 	for _, f := range fields {
 		if f.Enum && slices.Equal(f.Types, []string{"string"}) {
-			add(f.Name+" outside its enum", func(b map[string]any) { b[f.Name] = "procyon-not-in-enum" })
+			add(f.Name+" outside its enum", false, func(b map[string]any) { b[f.Name] = "procyon-not-in-enum" })
 			break
 		}
 	}
 	if f, ok := firstWithMaxLength(fields); ok {
 		n := int(*f.MaxLength) + 1
-		add(fmt.Sprintf("%s of %d characters (maxLength %d)", f.Name, n, *f.MaxLength),
+		add(fmt.Sprintf("%s of %d characters (maxLength %d)", f.Name, n, *f.MaxLength), false,
 			func(b map[string]any) { b[f.Name] = strings.Repeat("a", n) })
 	} else if f, ok := firstUnboundedString(fields); ok {
-		add(fmt.Sprintf("%s of %d characters", f.Name, veryLong),
+		add(fmt.Sprintf("%s of %d characters", f.Name, veryLong), true,
 			func(b map[string]any) { b[f.Name] = strings.Repeat("a", veryLong) })
 	}
 	return out
@@ -138,8 +144,9 @@ func wrongValue(types []string) (any, string) {
 
 // malformed sends op's example as A, then each mutation, and returns a
 // PRC103 finding if a mutation crashed the server (5xx) and a PRC104
-// finding if one was accepted (2xx). When the example itself fails with a
-// 5xx, a crash proves nothing about validation: it says so in a note.
+// finding if one the spec forbids was accepted (2xx). When the example
+// itself fails with a 5xx, a crash proves nothing about validation: it says
+// so in a note.
 //
 // hung is true when a request got no answer at all: the server may stay
 // busy, so the caller stops sending.
@@ -180,7 +187,7 @@ func (r *runner) malformed(ctx context.Context, op loader.Operation, path string
 		switch {
 		case exchange.Status >= 500:
 			crashed, crashEvidence = append(crashed, m.what), append(crashEvidence, exchange)
-		case success(exchange):
+		case success(exchange) && !m.allowed: // a body the spec allows may be accepted
 			accepted, acceptEvidence = append(accepted, m.what), append(acceptEvidence, exchange)
 		}
 	}
@@ -188,7 +195,7 @@ func (r *runner) malformed(ctx context.Context, op loader.Operation, path string
 	if len(crashed) > 0 {
 		findings = append(findings, report.Finding{
 			Rule: lint.RuntimeRule("PRC103"), Location: op.Location, Operation: name,
-			Why: "A request body the spec forbids (" + strings.Join(crashed, "; ") + ") made the server fail with a 5xx: " +
+			Why: "A malformed or very long request body (" + strings.Join(crashed, "; ") + ") made the server fail with a 5xx: " +
 				"it reached code that did not expect it, which can leak errors or be used to take the server down.",
 			Fix:      "Validate the request body against the schema before using it, and answer 400 with what is wrong.",
 			Evidence: crashEvidence,
