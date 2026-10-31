@@ -1,0 +1,55 @@
+openapi: 3.0.3
+info:
+  title: Writes whose spec documents a 2xx as an error answer
+  version: "1"
+security: [{bearer: []}]
+paths:
+  /login:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Credentials"}
+            example: {user: alice@example.com, pass: wrong-password}
+      responses:
+        "200": {description: "Logged in; the answer holds a token."}
+        "202": {description: "Successful request, but invalid password."} # an error: the example's own answer
+  /register:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Credentials"}
+            example: {user: new@example.com, pass: a-long-password}
+      responses:
+        "200": {description: "Registered; the answer holds a token."}
+        "202": {description: "E-mail address already registered, or a field is missing."} # an error
+  /notes:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Credentials"}
+            example: {user: alice@example.com, pass: a-note}
+      responses:
+        "200": {description: "The note, saved."}
+        "202": {description: "The note, accepted and saved later."} # a success: still PRC104
+  /upload:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Credentials"}
+            example: {user: alice@example.com, pass: a-file}
+      responses:
+        "200": {description: "The file, or an error message when none was sent."} # the only 2xx: says nothing
+components:
+  securitySchemes:
+    bearer: {type: http, scheme: bearer}
+  schemas:
+    Credentials:
+      type: object
+      required: [user, pass]
+      properties:
+        user: {type: string}
+        pass: {type: string}

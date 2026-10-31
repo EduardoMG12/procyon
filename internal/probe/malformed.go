@@ -143,7 +143,8 @@ func wrongValue(types []string) (any, string) {
 
 // malformed sends op's example as A, then each mutation, and returns a
 // PRC103 finding if a mutation crashed the server (5xx) and a PRC104
-// finding if one the spec forbids was accepted (2xx). When the example
+// finding if one the spec forbids was accepted (a 2xx the spec does not
+// document as an error answer, loader.Spec.ErrorAnswer). When the example
 // itself fails with a 5xx, a crash proves nothing about validation: it says
 // so in a note.
 //
@@ -162,6 +163,10 @@ func (r *runner) malformed(ctx context.Context, op loader.Operation, path string
 	// refuse every mutation for another reason.
 	if !success(control) {
 		return nil, fmt.Sprintf("malformed input not tested: the spec's own example, sent as A, already gets %d", control.Status), false, nil
+	}
+	if r.spec.ErrorAnswer(op.Method, op.Path, control.Status) {
+		return nil, fmt.Sprintf("malformed input not tested: the spec's own example, sent as A, already gets %d, "+
+			"which the spec documents as an error answer", control.Status), false, nil
 	}
 	var crashed, accepted []string
 	var crashEvidence, acceptEvidence []report.Exchange
@@ -186,7 +191,9 @@ func (r *runner) malformed(ctx context.Context, op loader.Operation, path string
 		switch {
 		case exchange.Status >= 500:
 			crashed, crashEvidence = append(crashed, m.what), append(crashEvidence, exchange)
-		case success(exchange) && !m.allowed: // a body the spec allows may be accepted
+		case success(exchange) && !m.allowed && !r.spec.ErrorAnswer(op.Method, op.Path, exchange.Status):
+			// A body the spec allows may be accepted, and a 2xx the spec
+			// documents as an error ("202: invalid password") is a refusal.
 			accepted, acceptEvidence = append(accepted, m.what), append(acceptEvidence, exchange)
 		}
 	}
