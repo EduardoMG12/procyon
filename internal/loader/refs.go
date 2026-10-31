@@ -19,24 +19,6 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-// Limits on what a spec can make Procyon read and parse, so a hostile spec
-// cannot exhaust a CI runner. Parsing costs many times a file's size in
-// memory, so the limits stay well below what a runner holds. maxRefSize
-// caps one file read through a $ref, maxRefTotal the bytes read from disk
-// through all of them, maxRefReparsed the bytes kin-openapi parses again
-// through all of them (a file read once may be parsed many times; as much
-// as the largest spec), maxRefReads how many $refs are resolved, and
-// maxSpecSize the spec itself. The variables are only variables so tests
-// can lower them.
-const maxRefSize = 10 << 20 // 10 MiB
-
-var (
-	maxRefTotal    int64 = 32 << 20 // 32 MiB
-	maxRefReparsed int64 = 16 << 20 // 16 MiB
-	maxRefReads          = 20000
-	maxSpecSize    int64 = 16 << 20 // 16 MiB
-)
-
 // specFiles is every file one spec was read from: the spec itself and the
 // local files its $refs point to.
 type specFiles struct {
@@ -341,47 +323,6 @@ func readRegular(root *os.Root, rel string) ([]byte, error) {
 	return data, nil
 }
 
-// openRefRoot opens the one directory $refs may read from: refRoot when
-// given (it must contain the spec), otherwise the spec's directory, and
-// returns the spec's directory relative to it. It refuses a directory that
-// would expose the whole machine: the file system's root, or the user's
-// home directory or one containing it. That check runs on the directory
-// actually opened, by identity, so another name for home (a symlink, a bind
-// mount, a macOS firmlink, a Windows subst drive) is refused too.
-func openRefRoot(spec, refRoot string) (*os.Root, string, error) {
-	specDir, err := filepath.Abs(filepath.Dir(spec))
-	if err != nil {
-		return nil, "", err
-	}
-	dir := specDir
-	if refRoot != "" {
-		if dir, err = filepath.Abs(refRoot); err != nil {
-			return nil, "", err
-		}
-	}
-	specRel, ok := within(dir, specDir)
-	if !ok {
-		if _, same := within(evalSymlinks(dir), evalSymlinks(specDir)); same {
-			// Matching only after resolving symlinks would mean opening one
-			// directory while checking $ref paths against another name for
-			// it; a symlink in between could widen the root. Refuse.
-			return nil, "", fmt.Errorf("the $ref root %s and the spec %s are written through different directories; "+
-				"give both the same way (for example both relative to the repository root)", dir, spec)
-		}
-		return nil, "", fmt.Errorf("the $ref root %s does not contain the spec", dir)
-	}
-	root, err := os.OpenRoot(dir)
-	if err != nil {
-		return nil, "", err
-	}
-	if reason := tooBroad(root); reason != "" {
-		root.Close()
-		return nil, "", fmt.Errorf("refusing $refs: %s is %s, and reading from it would expose the whole machine; "+
-			"move the spec into a project directory", dir, reason)
-	}
-	return root, specRel, nil
-}
-
 // tooBroad explains why an opened root may not serve $refs, or returns "":
 // it is the user's home directory, one of its ancestors, or the root of its
 // file system. Directories are compared by identity, not by name.
@@ -428,25 +369,6 @@ func homeDir() string {
 		return u.HomeDir
 	}
 	return ""
-}
-
-// within reports whether child is parent or inside it, as text, and its
-// path relative to parent.
-func within(parent, child string) (rel string, ok bool) {
-	rel, err := filepath.Rel(parent, child)
-	if err != nil || !filepath.IsLocal(rel) {
-		return "", false
-	}
-	return rel, true
-}
-
-// evalSymlinks returns path with symlinks resolved, or path itself if it
-// cannot be.
-func evalSymlinks(path string) string {
-	if real, err := filepath.EvalSymlinks(path); err == nil {
-		return real
-	}
-	return path
 }
 
 // withLocations returns the file at path, whose content is data, as
