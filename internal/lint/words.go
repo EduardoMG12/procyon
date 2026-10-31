@@ -17,9 +17,13 @@ var (
 	// secretWords name values that must never appear in a response.
 	secretWords = [][]string{
 		{"password"}, {"passwd"}, {"passphrase"}, {"senha"},
-		{"secret"}, {"segredo"},
 		{"private", "key"}, {"chave", "privada"},
 	}
+
+	// issuedSecretWords name values a server generates and shows once, in
+	// the response that creates or rotates them (a webhook's signing
+	// secret, an OAuth app's client secret), and never again.
+	issuedSecretWords = [][]string{{"secret"}, {"segredo"}}
 
 	// credentialWords name values an API legitimately hands out once (a
 	// login returns a token, creating a key returns the key) but that must

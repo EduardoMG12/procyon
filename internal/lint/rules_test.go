@@ -288,6 +288,17 @@ func TestRules(t *testing.T) {
 		{"prc005-recursive.yaml", []string{"PRC005"}, []string{
 			"PRC005 prc005-recursive.yaml:26:19 GET /documents",
 		}},
+		// A secret is shown once by the POST that creates it (/webhooks) or
+		// rotates it (/webhooks/{id}/rotate-secret), never by a POST to one
+		// record, a GET or a PATCH. Passwords and private keys are never
+		// shown, not even on creation.
+		{"prc005-issued-secrets.yaml", []string{"PRC005"}, []string{
+			"PRC005 prc005-issued-secrets.yaml:22:19 POST /webhooks",
+			"PRC005 prc005-issued-secrets.yaml:24:19 POST /webhooks",
+			"PRC005 prc005-issued-secrets.yaml:52:19 POST /webhooks/{id}",
+			"PRC005 prc005-issued-secrets.yaml:63:19 GET /webhooks/{id}",
+			"PRC005 prc005-issued-secrets.yaml:74:19 PATCH /webhooks/{id}",
+		}},
 		{"prc001-empty-override.yaml", []string{"PRC001"}, []string{
 			"PRC001 prc001-empty-override.yaml:13:5 DELETE /orders",
 		}},

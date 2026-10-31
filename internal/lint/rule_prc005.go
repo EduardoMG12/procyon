@@ -24,8 +24,10 @@ var prc005 = lintRule{
 	check: checkPRC005,
 }
 
-// checkPRC005 reports response fields holding a secret. Passwords, secrets
-// and private keys are reported in any response. Tokens and API keys are
+// checkPRC005 reports response fields holding a secret. Passwords and
+// private keys are reported in any response. Secrets are reported in any
+// response but that of a POST creating or rotating them: a new webhook's
+// signing secret is shown once, when it is made. Tokens and API keys are
 // reported only in GET responses: issuing one from a POST (a login, a new
 // key) is how they work, but reading one back must never be possible.
 //
@@ -35,7 +37,7 @@ func checkPRC005(doc *openapi3.T) []report.Finding {
 	var found onePerPlace
 	loader.ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		forEachResponseProperty(op, func(name string, prop *openapi3.SchemaRef) {
-			if !holdsSecret(method, name, prop.Value) {
+			if !holdsSecret(method, path, name, prop.Value) {
 				return
 			}
 			loc := propertyLocation(prop)
@@ -59,16 +61,28 @@ var (
 	credentialTypes = []string{"string"}
 )
 
-// holdsSecret reports whether a response field of an operation with this
-// method holds a secret: a secret word and a value of secretTypes, or, in
-// a GET, a credential word and a value of credentialTypes. hasPassword (a
-// flag) and secretRef (an object) are about a secret, not the secret.
-func holdsSecret(method, name string, s *openapi3.Schema) bool {
-	if words.Matches(name, secretWords) && holdsValue(s, secretTypes, map[*openapi3.Schema]bool{}) {
+// holdsSecret reports whether a response field of the operation method
+// path holds a secret: a secret word and a value of secretTypes (an issued
+// secret word too, unless the POST creates or rotates it), or, in a GET, a
+// credential word and a value of credentialTypes. hasPassword (a flag) and
+// secretRef (an object) are about a secret, not the secret.
+func holdsSecret(method, path, name string, s *openapi3.Schema) bool {
+	secret := words.Matches(name, secretWords) ||
+		words.Matches(name, issuedSecretWords) && (method != "POST" || !createsOrRotates(path))
+	if secret && holdsValue(s, secretTypes, map[*openapi3.Schema]bool{}) {
 		return true
 	}
 	return method == "GET" && words.Match(name, credentialWords, words.Describing, credentialReferenceWords) &&
 		holdsValue(s, credentialTypes, map[*openapi3.Schema]bool{})
+}
+
+// createsOrRotates reports whether a POST to path makes something new: its
+// last segment is not a parameter, so it goes to a collection (POST
+// /webhooks) or to an action (POST /webhooks/{id}/rotate-secret), not to
+// one record (POST /webhooks/{id}, an update).
+func createsOrRotates(path string) bool {
+	last := path[strings.LastIndex(path, "/")+1:]
+	return !strings.HasPrefix(last, "{")
 }
 
 // holdsValue reports whether a schema can hold a secret's value: one of
