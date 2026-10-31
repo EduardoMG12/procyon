@@ -107,6 +107,33 @@ func TestCookieLoginWithoutTheCookieNamesIt(t *testing.T) {
 	}
 }
 
+// A login that cannot work is refused with what is wrong, naming the
+// account.
+func TestLoginRefusalsSayWhy(t *testing.T) {
+	srv := httptest.NewServer(loginsAPI())
+	defer srv.Close()
+	alice := map[string]any{"username": "alice", "password": "alice-password"}
+	tests := []struct {
+		spec  string
+		login Login
+		want  string
+	}{
+		{loginsSpec, Login{Operation: "POST /nowhere", Token: "/token"}, `the spec has no operation "POST /nowhere"`},
+		{vulnapiSpec, Login{Operation: "GET /notes/{id}", Token: "/token"},
+			"GET /notes/{id} needs a value in its path; use a login operation without one"},
+		{loginsSpec, Login{Operation: "get /me", Body: alice, Token: "/token"}, "get /me is a GET, which sends no body"},
+		// POST /session answers with a cookie and a redirect, not JSON.
+		{loginsSpec, Login{Operation: "POST /session", Body: alice, Token: "/token"},
+			"POST /session answered 303: redirects are not followed, and the token must be in the JSON answer"},
+	}
+	for _, tt := range tests {
+		_, err := Run(context.Background(), tt.spec, Options{BaseURL: srv.URL, LoginA: &tt.login, TokenB: vulnapi.TokenB})
+		if want := "login of test account A: " + tt.want; err == nil || err.Error() != want {
+			t.Errorf("%s: err = %v, want %q", tt.login.Operation, err, want)
+		}
+	}
+}
+
 // A token read from a cookie, and a password sent in a form, are masked in
 // evidence like any other token, even when the API echoes them.
 func TestCookieTokenAndFormPasswordAreMasked(t *testing.T) {

@@ -3,11 +3,13 @@ package probe
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -45,8 +47,8 @@ func (r *runner) signIn(ctx context.Context, spec *loader.Spec, opts Options) (a
 		login *Login
 	}{{&a, opts.LoginA}, {&b, opts.LoginB}} {
 		if account.who.token == "" {
-			if account.who.token, err = r.login(ctx, spec, account.who.name, account.login); err != nil {
-				return a, b, err
+			if account.who.token, err = r.login(ctx, spec, account.login); err != nil {
+				return a, b, fmt.Errorf("login of test account %s: %w", account.who.name, err)
 			}
 		}
 		r.tokens = append(r.tokens, account.who.token)
@@ -54,64 +56,79 @@ func (r *runner) signIn(ctx context.Context, spec *loader.Spec, opts Options) (a
 	return a, b, nil
 }
 
-// login signs who in and returns its token. It goes through the same
-// client as every other request, so it is subject to the same target
+// login signs an account in and returns its token. It goes through the
+// same client as every other request, so it is subject to the same target
 // checks, timeout and budget.
-func (r *runner) login(ctx context.Context, spec *loader.Spec, who string, l *Login) (string, error) {
-	fail := func(format string, args ...any) (string, error) {
-		return "", fmt.Errorf("login of test account %s: %s", who, fmt.Sprintf(format, args...))
-	}
-	method, path, _ := strings.Cut(strings.TrimSpace(l.Operation), " ")
-	method = strings.ToUpper(method)
-	var op *loader.Operation
-	for _, o := range spec.Operations() {
-		if o.Method == method && o.Path == strings.TrimSpace(path) {
-			op = &o
-			break
-		}
-	}
-	switch {
-	case op == nil:
-		return fail("the spec has no operation %q", l.Operation)
-	case strings.Contains(op.Path, "{"):
-		return fail("%s needs a value in its path; use a login operation without one", l.Operation)
-	case op.Method == http.MethodGet && (l.Body != nil || l.Form != nil):
-		return fail("%s is a GET, which sends no body", l.Operation)
+func (r *runner) login(ctx context.Context, spec *loader.Spec, l *Login) (string, error) {
+	op, err := loginOperation(spec, l)
+	if err != nil {
+		return "", err
 	}
 	body, contentType, err := r.loginBody(l)
 	if err != nil {
-		return "", fmt.Errorf("login of test account %s: %w", who, err)
+		return "", err
 	}
-	signIn := *op
+	signIn := op
 	signIn.Body, signIn.Credential = body, nil
 	exchange, got, resp, err := r.sendWith(ctx, signIn, op.Path, anonymous, contentType)
 	if err != nil {
-		return "", fmt.Errorf("login of test account %s: %w", who, err)
+		return "", err
 	}
 	redirect := exchange.Status >= 300 && exchange.Status < 400
-	// A login that sets a cookie often redirects to the app's start page;
-	// the cookie comes with the redirect.
-	if l.Cookie != "" && (success(exchange) || redirect) {
-		for _, c := range resp.Cookies() {
-			if c.Name == l.Cookie && c.Value != "" {
-				return c.Value, nil
-			}
+	switch {
+	case l.Cookie != "" && (success(exchange) || redirect):
+		// A login that sets a cookie often redirects to the app's start
+		// page; the cookie comes with the redirect.
+		if token := cookieValue(resp, l.Cookie); token != "" {
+			return token, nil
 		}
-		return fail("%s answered %d with no cookie %s", l.Operation, exchange.Status, l.Cookie)
+		return "", fmt.Errorf("%s answered %d with no cookie %s", l.Operation, exchange.Status, l.Cookie)
+	case redirect:
+		return "", fmt.Errorf("%s answered %d: redirects are not followed, and the token must be in the JSON answer", l.Operation, exchange.Status)
+	case !success(exchange):
+		return "", fmt.Errorf("%s answered %d", l.Operation, exchange.Status)
 	}
-	if !success(exchange) {
-		if redirect {
-			return fail("%s answered %d: redirects are not followed, and the token must be in the JSON answer", l.Operation, exchange.Status)
+	return tokenAt(got, l.Token)
+}
+
+// loginOperation is the spec's operation a login names ("POST /login"). It
+// is refused when it cannot sign anyone in as declared: its path needs a
+// value, or it is a GET and the login has a body to send.
+func loginOperation(spec *loader.Spec, l *Login) (loader.Operation, error) {
+	method, path, _ := strings.Cut(strings.TrimSpace(l.Operation), " ")
+	method, path = strings.ToUpper(method), strings.TrimSpace(path)
+	ops := spec.Operations()
+	i := slices.IndexFunc(ops, func(o loader.Operation) bool { return o.Method == method && o.Path == path })
+	switch {
+	case i < 0:
+		return loader.Operation{}, fmt.Errorf("the spec has no operation %q", l.Operation)
+	case strings.Contains(ops[i].Path, "{"):
+		return loader.Operation{}, fmt.Errorf("%s needs a value in its path; use a login operation without one", l.Operation)
+	case ops[i].Method == http.MethodGet && (l.Body != nil || l.Form != nil):
+		return loader.Operation{}, fmt.Errorf("%s is a GET, which sends no body", l.Operation)
+	}
+	return ops[i], nil
+}
+
+// cookieValue is the value of the cookie named name that resp sets, or "".
+func cookieValue(resp *http.Response, name string) string {
+	for _, c := range resp.Cookies() {
+		if c.Name == name && c.Value != "" {
+			return c.Value
 		}
-		return fail("%s answered %d", l.Operation, exchange.Status)
 	}
-	v, ok := decode(got)
+	return ""
+}
+
+// tokenAt is the string at the JSON pointer ptr of a login's answer.
+func tokenAt(body []byte, ptr string) (string, error) {
+	v, ok := decode(body)
 	if !ok {
-		return fail("the response is not JSON")
+		return "", errors.New("the response is not JSON")
 	}
-	token, ok := pointer(v, l.Token).(string)
+	token, ok := pointer(v, ptr).(string)
 	if !ok || token == "" {
-		return fail("no string at %s in the response", l.Token)
+		return "", fmt.Errorf("no string at %s in the response", ptr)
 	}
 	return token, nil
 }
