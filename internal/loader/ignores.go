@@ -47,24 +47,23 @@ func parseIgnores(doc *openapi3.T, asGiven func(report.Location) report.Location
 			root = append(root, server)
 		}
 	}
-	add(doc.Extensions, doc.Origin, "", "the spec", root...)
-	for _, server := range doc.Servers {
-		add(server.Extensions, server.Origin, "", "server "+server.URL, server)
+	addServers := func(servers openapi3.Servers) {
+		for _, server := range servers {
+			add(server.Extensions, server.Origin, "", "server "+server.URL, server)
+		}
 	}
+	add(doc.Extensions, doc.Origin, "", "the spec", root...)
+	addServers(doc.Servers)
 	if doc.Paths != nil {
 		paths := doc.Paths.Map()
 		for _, path := range slices.Sorted(maps.Keys(paths)) {
-			for _, server := range paths[path].Servers {
-				add(server.Extensions, server.Origin, "", "server "+server.URL, server)
-			}
+			addServers(paths[path].Servers)
 		}
 	}
 	ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		add(op.Extensions, op.Origin, method+" "+path, "")
 		if op.Servers != nil {
-			for _, server := range *op.Servers {
-				add(server.Extensions, server.Origin, "", "server "+server.URL, server)
-			}
+			addServers(*op.Servers)
 		}
 	})
 	ForEachScheme(doc, func(name string, scheme *openapi3.SecurityScheme) {

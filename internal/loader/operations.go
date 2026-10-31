@@ -219,11 +219,8 @@ func requiredQuery(doc *openapi3.T, path string, op *openapi3.Operation) []Query
 // gives none, or one that is not a string, a number or a boolean.
 func parameterExample(p *openapi3.Parameter) string {
 	example := p.Example
-	if example == nil && len(p.Examples) > 0 {
-		names := slices.Sorted(maps.Keys(p.Examples))
-		if ref := p.Examples[names[0]]; ref != nil && ref.Value != nil {
-			example = ref.Value.Value
-		}
+	if example == nil {
+		example = firstNamedExample(p.Examples)
 	}
 	if example == nil && p.Schema != nil && p.Schema.Value != nil {
 		example = p.Schema.Value.Example
@@ -237,6 +234,20 @@ func parameterExample(p *openapi3.Parameter) string {
 		return strconv.FormatBool(v)
 	}
 	return ""
+}
+
+// firstNamedExample is the value of the example whose name sorts first, or
+// nil.
+func firstNamedExample(examples openapi3.Examples) any {
+	if len(examples) == 0 {
+		return nil
+	}
+	names := slices.Sorted(maps.Keys(examples))
+	ref := examples[names[0]]
+	if ref == nil || ref.Value == nil {
+		return nil
+	}
+	return ref.Value.Value
 }
 
 // jsonBody is the application/json media type of an operation's request
@@ -257,11 +268,8 @@ func exampleBody(op *openapi3.Operation) []byte {
 		return nil
 	}
 	example := media.Example
-	if example == nil && len(media.Examples) > 0 {
-		names := slices.Sorted(maps.Keys(media.Examples))
-		if ref := media.Examples[names[0]]; ref != nil && ref.Value != nil {
-			example = ref.Value.Value
-		}
+	if example == nil {
+		example = firstNamedExample(media.Examples)
 	}
 	if example == nil && media.Schema != nil && media.Schema.Value != nil {
 		example = media.Schema.Value.Example
