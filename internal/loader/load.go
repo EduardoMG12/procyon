@@ -56,10 +56,31 @@ func load(path string, opts Options) (*openapi3.T, *specFiles, error) {
 		return doc, files, err
 	}
 	file, err := checkSyntax(path, data)
+	if goccyKeepBug(err) {
+		// kin-openapi parses with its own YAML parser, which reads such a
+		// block: if it loads the spec, lint it without goccy's syntax tree,
+		// as JSON is; if not, goccy's error stands. A Swagger 2.0 spec stays
+		// refused: it needs the tree to be converted, and loaded as OpenAPI
+		// 3 it has no openapi version.
+		if doc, files, loadErr := loadParsed(path, opts, data, nil, nil); loadErr == nil {
+			return doc, files, nil
+		}
+	}
 	if err != nil {
 		return nil, nil, err
 	}
 	return loadParsed(path, opts, data, file, swaggerVersion(file))
+}
+
+// goccyKeepBug reports whether err is goccy/go-yaml refusing valid YAML: a
+// block scalar that keeps its line breaks (|+ or >+) but has no content,
+// such as "example: |+" followed by a blank line in DigitalOcean's spec.
+// goccy/go-yaml v1.19.2, the latest release, has the bug.
+//
+// ponytail: matches goccy's message, so if a release rewords it such specs
+// are refused again (never wrongly accepted); drop this once goccy fixes it.
+func goccyKeepBug(err error) bool {
+	return err != nil && strings.HasSuffix(err.Error(), ": could not find multi-line content")
 }
 
 // checkSyntax parses the spec as YAML. kin-openapi's own syntax errors are
@@ -117,7 +138,7 @@ func loadParsed(path string, opts Options, data []byte, file *ast.File, swagger 
 	loader := openapi3.NewLoader()
 	loader.IncludeOrigin = true
 	loader.ReadFromURIFunc = files.read
-	doc, err := loader.LoadFromDataWithPath(withLocations(toLoad), specURL(path))
+	doc, err := loader.LoadFromDataWithPath(files.withLocations(path, toLoad), specURL(path))
 	if files.overLimit != nil {
 		err = files.overLimit // see specFiles.overLimit
 	}
