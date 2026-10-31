@@ -97,7 +97,7 @@ func adminPath(path string) bool {
 			return !unicode.IsLetter(r) && !unicode.IsDigit(r)
 		})
 		for _, w := range parts {
-			if slices.ContainsFunc(adminWords, func(a string) bool { return words.Same(w, a) }) { // admins too
+			if words.OneOf(w, adminWords) { // admins too
 				return true
 			}
 		}

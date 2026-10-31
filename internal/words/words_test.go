@@ -39,3 +39,19 @@ func TestMatch(t *testing.T) {
 		}
 	}
 }
+
+func TestOneOf(t *testing.T) {
+	list := []string{"admin", "address"}
+	tests := map[string]bool{
+		"admin":     true,
+		"admins":    true, // a plural
+		"addresses": true,
+		"adminx":    false, // not a plural
+		"adm":       false,
+	}
+	for word, want := range tests {
+		if got := OneOf(word, list); got != want {
+			t.Errorf("OneOf(%q) = %v, want %v", word, got, want)
+		}
+	}
+}

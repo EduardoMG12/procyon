@@ -73,6 +73,12 @@ func Same(word, listed string) bool {
 	return ok && (rest == "" || rest == "s" || rest == "es")
 }
 
+// OneOf reports whether word is one of list, or the plural of one (see
+// Same): admins is one of [admin internal].
+func OneOf(word string, list []string) bool {
+	return slices.ContainsFunc(list, func(listed string) bool { return Same(word, listed) })
+}
+
 // Split splits a field name into lowercase words: userPassword,
 // password_hash, api-token, APIKey and senhaUsuario become
 // [user password], [password hash], [api token], [api key], [senha usuario].
