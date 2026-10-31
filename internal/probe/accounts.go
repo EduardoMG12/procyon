@@ -1,10 +1,8 @@
 package probe
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/EduardoMG12/procyon/internal/loader"
@@ -58,31 +56,4 @@ func authorize(req *http.Request, cred *loader.Credential, token string) {
 	case "cookie":
 		req.AddCookie(&http.Cookie{Name: cred.Name, Value: token})
 	}
-}
-
-// mask hides every token in s, in each of its forms, so evidence never
-// shows a credential, even one the API echoes back.
-func mask(s string, tokens ...string) string {
-	for _, token := range tokens {
-		if token == "" {
-			continue
-		}
-		for _, form := range forms(token) {
-			s = strings.ReplaceAll(s, form, "****")
-		}
-	}
-	return s
-}
-
-// forms are the ways a token can be written in an answer: as it is,
-// URL-encoded and JSON-escaped (a JSON string escapes <, > and &, and
-// PHP's escapes / too).
-func forms(token string) []string {
-	return []string{token, url.QueryEscape(token), jsonEscaped(token), strings.ReplaceAll(token, "/", `\/`)}
-}
-
-// jsonEscaped is token as encoding/json writes it inside a string.
-func jsonEscaped(token string) string {
-	quoted, _ := json.Marshal(token) // a string always marshals
-	return string(quoted[1 : len(quoted)-1])
 }
