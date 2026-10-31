@@ -5,8 +5,8 @@
 //
 // Each planted vulnerability is marked "Vulnerable (PRC…)" in its handler's
 // doc comment, and the fixed twin's behavior is the s.fixed check beside
-// it. The notes are in this file, the shop in shop.go, and the accounts and
-// their tokens in accounts.go.
+// it. The notes are in this file, the shop in shop.go, the reviews in
+// review.go, and the accounts and their tokens in accounts.go.
 //
 // Never run it anywhere but a test or a disposable container.
 package vulnapi
@@ -63,6 +63,7 @@ func New(fixed bool) http.Handler {
 	mux.HandleFunc("GET /menu", s.menu)
 	mux.HandleFunc("GET /orders", s.listOrders)
 	mux.HandleFunc("GET /orders/{orderId}", s.getOrder)
+	mux.HandleFunc("POST /reviews", s.review)
 	return mux
 }
 

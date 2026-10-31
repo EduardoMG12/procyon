@@ -34,6 +34,9 @@ type runner struct {
 	// first, for the note that says they were not followed.
 	redirects     int
 	firstRedirect string
+	// leaks are the PRC109 findings, at most one per operation in leaked.
+	leaks  []report.Finding
+	leaked map[string]bool
 }
 
 // send calls one operation as who and records the exchange, with every
@@ -45,8 +48,12 @@ func (r *runner) send(ctx context.Context, op loader.Operation, path string, who
 }
 
 // sendFull is send, also returning the response body (up to maxResponse).
+// Every answer it gets is looked at for an internal error (PRC109).
 func (r *runner) sendFull(ctx context.Context, op loader.Operation, path string, who caller) (report.Exchange, []byte, error) {
 	exchange, got, resp, err := r.sendWith(ctx, op, path, who, "application/json")
+	if err == nil {
+		r.lookForInternalError(op, exchange, got)
+	}
 	if err == nil && resp.StatusCode >= 300 && resp.StatusCode < 400 {
 		r.redirects++
 		if r.firstRedirect == "" {

@@ -113,7 +113,8 @@ procyon test openapi.yaml --compose docker-compose.yml --service api --port 8080
   object IDs from A's responses and checks that B cannot read, change or
   delete them (PRC102), that anonymous callers cannot use operations that
   require authentication (PRC101), that malformed bodies are refused
-  (PRC103, PRC104) and, on `https`, that TLS is sound (PRC105).
+  (PRC103, PRC104), that no answer shows a stack trace or a database
+  error (PRC109) and, on `https`, that TLS is sound (PRC105).
 - Give the tokens in the environment (bare: Procyon adds `Bearer ` when the
   spec asks for it), or declare a login in
   [`.procyon.yaml`](docs/configuration.md) for APIs that issue tokens.
@@ -207,6 +208,7 @@ Runtime rules, found by `procyon test` against a running copy of the API
 | [PRC103](docs/rules/PRC103.md) | medium | Malformed request made the server fail |
 | [PRC104](docs/rules/PRC104.md) | low | Server accepted a request the spec forbids |
 | [PRC105](docs/rules/PRC105.md) | high | The API's TLS is weak |
+| [PRC109](docs/rules/PRC109.md) | medium | A response shows an internal error |
 
 ## What it can and cannot see
 

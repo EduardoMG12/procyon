@@ -37,6 +37,8 @@ func TestPlantedVulnerabilities(t *testing.T) {
 		{"PRC104: missing title", "POST", "/notes", TokenA, `{"body":"x"}`, 201, 400},
 		{"PRC104: title too long", "POST", "/notes", TokenA, `{"title":"` + strings.Repeat("a", 101) + `"}`, 201, 400},
 		{"valid note", "POST", "/notes", TokenA, `{"title":"ok"}`, 201, 201},
+		{"valid review", "POST", "/reviews", TokenA, `{"rating":5}`, 204, 204},
+		{"PRC109: a bad review is refused either way (probe's tests check the trace)", "POST", "/reviews", TokenA, `{"rating":"five"}`, 400, 400},
 	}
 	for _, fixed := range []bool{false, true} {
 		for _, tt := range tests {

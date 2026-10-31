@@ -80,6 +80,8 @@ jobs:
           set -e
           test "$code" = 1
           test "$(jq '.summary.critical' vulnerable.json)" = 6
+          test "$(jq '.summary.medium' vulnerable.json)" = 3  # PRC103 twice, PRC109 once
+          jq -e '.findings | any(.rule.id == "PRC109" and .operation == "POST /reviews")' vulnerable.json > /dev/null
       - name: The fixed twin passes
         run: FIXED=true ./procyon test internal/vulnapi/openapi.yaml --compose internal/vulnapi/docker-compose.yml --service api --port 8080
       - name: README example, the operations this change touches

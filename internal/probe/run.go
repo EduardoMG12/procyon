@@ -90,7 +90,7 @@ func Run(ctx context.Context, specPath string, opts Options) (report.Report, err
 	pathNote := withServerPath(target, spec.ServerPath())
 	timeout := cmp.Or(opts.Timeout, defaultTimeout)
 	budget := max(minBudget, budgetPerOperation*len(spec.Operations()))
-	r := &runner{client: newClient(timeout, budget), target: target}
+	r := &runner{client: newClient(timeout, budget), target: target, leaked: map[string]bool{}}
 	defer r.client.http.CloseIdleConnections()
 	res := &results{root: report.Location{File: specPath, Line: 1, Column: 1}}
 	res.note(res.root, pathNote)
@@ -116,6 +116,13 @@ func Run(ctx context.Context, specPath string, opts Options) (report.Report, err
 	s := &session{runner: r, res: res, ofA: ofA, ofB: ofB, a: a, b: b, changed: changed, readers: readers(ops)}
 	if err := s.testInOrder(ctx, ops); err != nil {
 		return report.Report{}, err
+	}
+	for _, f := range r.leaks {
+		// Discovery reads unchanged operations too, for IDs; only the
+		// ones under test are reported.
+		if changed == nil || changed[f.Operation] {
+			res.findings = append(res.findings, f)
+		}
 	}
 
 	if len(created) > 0 {
