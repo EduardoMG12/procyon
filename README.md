@@ -20,10 +20,9 @@ for an API written in any language: Procyon reads the spec and talks HTTP,
 never your source code.
 
 **What it is not.** Procyon checks authorization and exposure against what
-the spec describes. It does not know your business rules (that a search
-must filter by the phone the caller proved, that changing an e-mail must
-ask for it to be confirmed again), and it cannot test routes the spec
-leaves out. It complements a code review; it does not replace one.
+the spec describes. It does not know your business rules (that a
+cancelled order cannot be paid, who may grant a discount), and it cannot
+test routes the spec leaves out. It complements a code review; it does not replace one.
 
 ## Why
 
