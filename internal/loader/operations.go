@@ -48,6 +48,15 @@ type Operation struct {
 	// spec's order. The credential parameter is not one of them: the token
 	// fills it.
 	Query []QueryParam
+	// spec is the operation as kin-openapi loaded it, for InResponse.
+	spec *openapi3.Operation
+}
+
+// InResponse reports whether a response schema of the operation declares
+// the field at path ("reviews.email"): the only fields an x-procyon-ignore
+// on it may name.
+func (o Operation) InResponse(path string) bool {
+	return o.spec != nil && inResponse(o.spec, path)
 }
 
 // QueryParam is one required query parameter.
@@ -145,6 +154,7 @@ func (s *Spec) Operations() []Operation {
 			NeedsBody:  op.RequestBody != nil && op.RequestBody.Value != nil && op.RequestBody.Value.Required,
 			Fields:     bodyFields(op),
 			Query:      requiredQuery(s.doc, path, op),
+			spec:       op,
 		})
 	})
 	return ops

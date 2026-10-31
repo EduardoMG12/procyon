@@ -39,12 +39,23 @@ func personalData(op loader.Operation, exchange report.Exchange, body []byte) []
 			Field:     place,
 			Why: fmt.Sprintf("A request with no credentials got %d, and its field %s holds %s: anyone can collect it, "+
 				"for every record they can reach, which breaks privacy laws such as the GDPR and LGPD.", exchange.Status, place, kinds[i]),
-			Fix: "Leave the field out of what callers without credentials get, or require authentication for the operation. " +
-				"If it is public on purpose (a business's own contact), ignore this field with x-procyon-ignore and field: " + place + ".",
+			Fix:      "Leave the field out of what callers without credentials get, or require authentication for the operation. " + ignoreAdvice(op, place),
 			Evidence: []report.Exchange{exchange},
 		})
 	}
 	return findings
+}
+
+// ignoreAdvice says how to ignore the field at place when it is public on
+// purpose. An ignore may only name a field the operation's response schema
+// declares (loader rejects any other, and the run stops), so a field the
+// schema leaves out must be declared first.
+func ignoreAdvice(op loader.Operation, place string) string {
+	if op.InResponse(place) {
+		return "If it is public on purpose (a business's own contact), ignore this field with x-procyon-ignore and field: " + place + "."
+	}
+	return "If it is public on purpose (a business's own contact), declare " + place + " in the operation's response schema, " +
+		"then ignore it with x-procyon-ignore and field: " + place + " (an ignore may only name a field the schema declares)."
 }
 
 // personalValue is one value of an answer that is personal data.
