@@ -1,6 +1,8 @@
 package probe
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -68,5 +70,31 @@ func TestPRC106OnAProtectedOperation(t *testing.T) {
 		if body := f.Evidence[0].Body; strings.Contains(body, "ana@example.com") {
 			t.Errorf("%s evidence shows the e-mail: %s", f.Rule.ID, body)
 		}
+	}
+}
+
+// Personal data the anonymous caller sent in the same request, in its body
+// or its query, is not exposure when the answer echoes it back. Everything
+// else in the same answer still is.
+func TestPRC106SkipsWhatTheCallerSent(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/merchants/register":
+			var sent struct{ Email string }
+			json.NewDecoder(r.Body).Decode(&sent)
+			fmt.Fprintf(w, `{"merchant": {"email": %q}, "debug": {"raw_request": {"email": %q}}, "manager": {"email": "lead@bank.example"}}`,
+				sent.Email, sent.Email)
+		case "/newsletter":
+			fmt.Fprintf(w, `{"email": %q, "owner": {"phone": "+55 11 98765-4321"}}`, r.URL.Query().Get("email"))
+		}
+	})
+	rep := runOn(t, "../../testdata/specs/prc106-echo.yaml", handler, Options{})
+	var got []string
+	for _, f := range findingsOf(rep, "PRC106") {
+		got = append(got, f.Operation+" "+f.Field)
+	}
+	want := []string{"POST /merchants/register manager.email", "GET /newsletter owner.phone"} // in the spec's order
+	if !slices.Equal(got, want) {
+		t.Errorf("PRC106 on %q, want %q", got, want)
 	}
 }

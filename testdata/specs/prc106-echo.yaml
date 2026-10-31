@@ -1,0 +1,19 @@
+openapi: 3.0.3
+info:
+  title: Open operations that answer the caller's own e-mail back
+  version: "1"
+paths:
+  /merchants/register:
+    post:
+      security: []
+      requestBody:
+        content:
+          application/json:
+            example: {email: merchant@example.com, password: hunter2-hunter2}
+      responses: {"200": {description: The new merchant.}}
+  /newsletter:
+    get:
+      security: []
+      parameters:
+        - {name: email, in: query, required: true, example: reader@example.com, schema: {type: string}}
+      responses: {"200": {description: The subscription.}}
