@@ -100,6 +100,43 @@ func TestJSONWithADuplicateKeyGetsTheYAMLError(t *testing.T) {
 	}
 }
 
+// kin-openapi joins its validation errors on one line with " | ", without
+// line numbers: each gets its own line, at its place in the original file,
+// Swagger 2.0 included. A single error stays on one line.
+func TestInvalidSpecErrorsGetALineEach(t *testing.T) {
+	const items = "when schema type is 'array', schema 'items' must be non-null"
+	tests := []struct {
+		name string
+		want []string // the lines of stderr, after "procyon: "
+	}{
+		{"invalid-spec-array-without-items.yaml", []string{
+			"invalid-spec-array-without-items.yaml: invalid spec, 3 errors:",
+			`  invalid-spec-array-without-items.yaml:27:5: invalid components: schema "Thing": ` + items,
+			"  invalid-spec-array-without-items.yaml:11:15: invalid paths: invalid path /a: invalid operation GET: " + items,
+			"  invalid-spec-array-without-items.yaml:23:19: invalid paths: invalid path /b: invalid operation GET: " + items,
+		}},
+		{"swagger-2.0-array-without-items.yaml", []string{
+			"swagger-2.0-array-without-items.yaml: invalid spec, 2 errors:",
+			`  swagger-2.0-array-without-items.yaml:12:3: invalid components: schema "Thing": ` + items,
+			"  swagger-2.0-array-without-items.yaml:9:11: invalid paths: invalid path /a: invalid operation GET: " + items,
+		}},
+		{"invalid-spec-no-info.yaml", []string{
+			"invalid-spec-no-info.yaml:1:1: invalid spec: invalid info: must be an object",
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := run(t, "lint", spec(tt.name))
+			want := "procyon: " + strings.Join(tt.want, "\n") + "\n"
+			// Every line names the file as given on the command line.
+			want = strings.ReplaceAll(want, tt.name, spec(tt.name))
+			if r.code != 2 || r.stderr != want {
+				t.Errorf("exit %d, stderr:\n%s\nwant 2 and:\n%s", r.code, r.stderr, want)
+			}
+		})
+	}
+}
+
 func TestUsageErrorsExitTwoAndShowUsage(t *testing.T) {
 	tests := []struct {
 		name string

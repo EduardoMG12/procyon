@@ -163,15 +163,12 @@ func loadParsed(path string, opts Options, data []byte, file *ast.File, swagger 
 	// A requirement naming an undefined scheme is a security finding
 	// (PRC002), with a location and a fix, not a reason to refuse the spec.
 	if err = withoutTolerated(err); err != nil {
-		// Some validation errors append the schema and value on extra lines;
-		// the first line says what is wrong.
-		msg, _, _ := strings.Cut(err.Error(), "\n")
-		invalid := "invalid spec"
 		// A hint, not a diagnosis: the unknown field may also be a typo.
+		hint := ""
 		if _, unknownField := errors.AsType[*openapi3.ExtraSiblingFieldsError](err); unknownField && doc.IsOpenAPI32OrLater() {
-			invalid += " (OpenAPI 3.2 is only partly supported: some fields new in 3.2, such as a tag's kind, are refused)"
+			hint = " (OpenAPI 3.2 is only partly supported: some fields new in 3.2, such as a tag's kind, are refused)"
 		}
-		return nil, nil, fmt.Errorf("%s: %s: %s", path, invalid, msg)
+		return nil, nil, invalidSpec(path, err, hint, files.asGiven)
 	}
 	if err := checkExtensions(doc, files.asGiven); err != nil {
 		return nil, nil, err

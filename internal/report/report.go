@@ -149,7 +149,8 @@ type Outcome string
 const (
 	NotCalled Outcome = ""          // this caller is not tested on this operation
 	Allowed   Outcome = "allowed"   // a 2xx, as expected
-	Denied    Outcome = "denied"    // not a 2xx
+	Denied    Outcome = "denied"    // not a 2xx, nor a 5xx
+	Failed    Outcome = "error"     // a 5xx: the server failed, which says nothing about who may call it
 	Reached   Outcome = "finding"   // a 2xx that is a finding (PRC101, PRC102)
 	Public    Outcome = "public"    // x-procyon-public, not called anonymously
 	Skipped   Outcome = "skipped"   // could not be called; a note says why

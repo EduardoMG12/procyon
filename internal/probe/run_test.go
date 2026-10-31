@@ -435,6 +435,24 @@ func TestNoPRC102OnObjectsEveryoneMayRead(t *testing.T) {
 	}
 }
 
+// A 5xx is no denial: the server failed, and the matrix says so.
+func TestMatrixTellsAServerErrorFromADenial(t *testing.T) {
+	api := vulnapi.New(false)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/me" && userOf(r) == "" {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		api.ServeHTTP(w, r)
+	})
+	rep := runOn(t, vulnapiSpec, handler, Options{})
+	want := report.MatrixRow{Operation: "GET /me", A: report.Cell{Outcome: report.Allowed, Status: 200},
+		Anonymous: report.Cell{Outcome: report.Failed, Status: 500}}
+	if !slices.Contains(rep.Matrix, want) {
+		t.Errorf("matrix %+v; want the row %+v", rep.Matrix, want)
+	}
+}
+
 // A write that needs a body the spec gives no example for is never dropped
 // silently: a note says why it was not tested.
 func TestWriteWithoutAnExampleGetsANote(t *testing.T) {
