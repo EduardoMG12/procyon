@@ -53,15 +53,9 @@ func (s *session) otherAccount(ctx context.Context, op loader.Operation, f fille
 // same object also held, that B's own reads never showed and B's own
 // object does not hold: A's data, not something every user sees.
 func (s *session) readAsB(ctx context.Context, op loader.Operation, f filled) (verdict, error) {
-	toA := s.ofA.bodies[f.path]
-	if toA == nil {
-		// Discovery read another object (A's own was not known yet): A
-		// reads this one now, to compare with what B gets.
-		exchange, body, err := s.sendFull(ctx, op, f.path, s.a)
-		if err != nil || !success(exchange) {
-			return cannotTell("not tested as B: A's own read of it failed"), err
-		}
-		s.ofA.bodies[f.path], toA = body, body
+	toA, err := s.answerToA(ctx, op, f.path)
+	if err != nil || toA == nil {
+		return cannotTell("not tested as B: A's own read of it failed"), err
 	}
 	exchange, toB, err := s.sendFull(ctx, op, f.path, s.b)
 	if err != nil || !success(exchange) {
@@ -77,6 +71,22 @@ func (s *session) readAsB(ctx context.Context, op loader.Operation, f filled) (v
 		return notReached(exchange), nil
 	}
 	return reached(op, exchange), nil
+}
+
+// answerToA is A's answer to op at path, the read B's answer is compared
+// with: the one discovery recorded or, when discovery read another path
+// (A's own object was not known yet), a new read. Nil when A's read
+// fails.
+func (s *session) answerToA(ctx context.Context, op loader.Operation, path string) ([]byte, error) {
+	if body := s.ofA.bodies[path]; body != nil {
+		return body, nil
+	}
+	exchange, body, err := s.sendFull(ctx, op, path, s.a)
+	if err != nil || !success(exchange) {
+		return nil, err
+	}
+	s.ofA.bodies[path] = body
+	return body, nil
 }
 
 // withoutBsOwn drops the values B's own object on the same operation also
@@ -216,20 +226,26 @@ func bolaFinding(op loader.Operation, evidence []report.Exchange) *report.Findin
 
 // sharedUnseen lists the values B's answer and A's answer both hold that
 // B's own reads never showed: A's data. Values that prove nothing are left
-// out: the path's own values (an API may echo the ID it was asked for), the
-// words true and false, and anything shorter than minTelling ("ok", "1").
+// out: the path's own values (an API may echo the ID it was asked for), and
+// those that are not telling.
 func sharedUnseen(toB, toA []byte, ofB *harvest, pathValues []string) []string {
 	inA := setOf(valuesIn(toA))
 	added := map[string]bool{}
 	var shared []string // in the order B's answer shows them
 	for _, value := range valuesIn(toB) {
-		telling := len(value) >= minTelling && value != "true" && value != "false" && !slices.Contains(pathValues, value)
-		if telling && inA[value] && !ofB.saw(value) && !added[value] {
+		if telling(value) && !slices.Contains(pathValues, value) && inA[value] && !ofB.saw(value) && !added[value] {
 			added[value] = true
 			shared = append(shared, value)
 		}
 	}
 	return shared
+}
+
+// telling reports whether value can tell one account's data from
+// another's: not the words true and false, and not shorter than minTelling
+// ("ok", "1").
+func telling(value string) bool {
+	return len(value) >= minTelling && value != "true" && value != "false"
 }
 
 // unseen keeps the values B's own responses never showed.
