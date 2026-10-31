@@ -61,18 +61,16 @@ func (h *harvest) add(path string, body []byte) {
 		_, isObject := v.(map[string]any)
 		h.single[path] = isObject
 	}
-	objects(v, func(o object) {
-		h.byPath[path] = append(h.byPath[path], o)
-		for _, value := range o {
-			h.seen[value] = true
-		}
-	})
+	objects(v, func(o object) { h.byPath[path] = append(h.byPath[path], o) })
+	walk(v, func(value string) { h.seen[value] = true })
 }
 
 // objects calls fn for every JSON object in v, breadth first: an object
 // before the objects inside it, so in [{"id": "o7", "customer": {"id":
 // "c1"}}] the order comes before its customer. Keys are visited in sorted
-// order, so objects are found in the same order on every run.
+// order, so objects are found in the same order on every run. An object
+// holds only its own string and number fields: the values of a list
+// ("tags": ["x"]) are no field's one value, so they fill no parameter.
 func objects(v any, fn func(object)) {
 	queue := []any{v}
 	for len(queue) > 0 {
@@ -97,13 +95,11 @@ func objects(v any, fn func(object)) {
 	}
 }
 
-// walk calls fn for every string or number field in v.
+// walk calls fn for every string or number in v, at any depth, the values
+// of lists too ({"tags": ["x"]} holds "x"): the same values PRC106's
+// fieldsIn reads.
 func walk(v any, fn func(value string)) {
-	objects(v, func(o object) {
-		for _, name := range sortedKeys(o) {
-			fn(o[name])
-		}
-	})
+	fieldsIn(v, "", "", func(_, _, value string) { fn(value) })
 }
 
 // sortedKeys is m's keys in order, so a map is walked the same way on
