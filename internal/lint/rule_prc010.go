@@ -49,7 +49,7 @@ func checkPRC010(doc *openapi3.T) []report.Finding {
 		}
 		findings = append(findings, report.Finding{
 			Location:  loader.Locate(op.Origin),
-			Operation: method + " " + path,
+			Operation: loader.OperationKey(method, path),
 			Why:       "This looks like an administrative operation, but it requires the same authentication as regular operations: any user who can call those may be able to call this.",
 			Fix:       "Give it a stricter requirement of its own, such as an admin-only OAuth2 scope or a separate scheme, and enforce it on the server.",
 		})

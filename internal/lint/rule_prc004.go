@@ -51,7 +51,7 @@ func checkPRC004(doc *openapi3.T) []report.Finding {
 	loader.ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		if op.Servers != nil {
 			for _, server := range *op.Servers {
-				flag(server, method+" "+path)
+				flag(server, loader.OperationKey(method, path))
 			}
 		}
 	})

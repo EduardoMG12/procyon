@@ -39,7 +39,7 @@ func checkPRC006(doc *openapi3.T) []report.Finding {
 			}
 			found.add(report.Finding{
 				Location:  propertyLocation(prop),
-				Operation: method + " " + path,
+				Operation: loader.OperationKey(method, path),
 				Why: fmt.Sprintf("This operation needs no authentication and returns %q, personal data. "+
 					"Anyone can collect it, for every record they can reach, which breaks privacy laws such as the GDPR and LGPD.", name),
 				Fix: "Require authentication for the operation, or remove the field from what it returns to anonymous callers.",
