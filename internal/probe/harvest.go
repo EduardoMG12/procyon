@@ -225,3 +225,46 @@ func (h *harvest) fill(path string, query []loader.QueryParam) (filled, error) {
 func (h *harvest) saw(value string) bool {
 	return h.seen[value]
 }
+
+// sawAllFor reports whether h's responses showed every one of values as
+// the value of its own parameter of path (sawFor): values are a filled
+// path's, one per parameter, in order. An ID seen for another resource
+// does not count: menu item 4 says nothing about order 4. A value with no
+// parameter of the path to match was not seen.
+func (h *harvest) sawAllFor(path string, values []string) bool {
+	params := pathParam.FindAllStringSubmatch(path, -1) // {"{id}", "id"} for each
+	for i, v := range values {
+		if i >= len(params) || !h.sawFor(path, params[i][1], v) {
+			return false
+		}
+	}
+	return true
+}
+
+// sawFor reports whether h's responses showed value where pick would
+// look for parameter param of path: in the parent collection's objects,
+// under the parameter's name or "id", or in any object under the
+// parameter's name, unless that name is just "id": "id" alone does not say
+// which resource the value belongs to, where orderId does.
+func (h *harvest) sawFor(path, param, value string) bool {
+	key := normalize(param)
+	holds := func(o object, field string) bool {
+		v, has := o[field]
+		return has && v == value
+	}
+	parent, _, _ := strings.Cut(path, "/{"+param+"}")
+	for _, o := range h.byPath[parent] {
+		if holds(o, key) || holds(o, "id") {
+			return true
+		}
+	}
+	if key == "id" {
+		return false
+	}
+	for _, objects := range h.byPath {
+		if slices.ContainsFunc(objects, func(o object) bool { return holds(o, key) }) {
+			return true
+		}
+	}
+	return false
+}

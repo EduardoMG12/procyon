@@ -91,9 +91,11 @@ func (s *session) anonymous(ctx context.Context, op loader.Operation, path strin
 
 // asB tests B on A's object in the path (PRC102).
 func (s *session) asB(ctx context.Context, op loader.Operation, f filled) (report.Cell, error) {
-	if !f.own && len(unseen(f.values, s.ofB.harvest)) == 0 {
+	if !f.own && s.ofB.sawAllFor(op.Path, f.values) {
 		// Every user is shown these IDs (a public list of every book), and
 		// nothing says which object is A's: B reaching it proves nothing.
+		// Only an ID shown for this path's own parameters counts: B seeing
+		// "4" as a menu item's ID is no reason to skip A's order 4.
 		s.res.note(op.Location, op.Key()+": not tested as B: every user is shown this object's ID and nothing marks it as A's; "+
 			"declare one of A's under test.ids in .procyon.yaml")
 		return skipped, nil
