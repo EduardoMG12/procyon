@@ -95,7 +95,7 @@ func grantPath(path string) bool {
 			continue
 		}
 		parts := words.Split(segments[i])
-		if len(parts) == 1 && slices.ContainsFunc(grantPathWords, func(g string) bool { return words.Same(parts[0], g) }) {
+		if len(parts) == 1 && words.OneOf(parts[0], grantPathWords) {
 			return true
 		}
 	}
@@ -126,7 +126,7 @@ func lowEnum(s *openapi3.Schema) bool {
 			return false
 		}
 		for _, w := range words.Split(text) {
-			if !slices.ContainsFunc(lowValues, func(low string) bool { return words.Same(w, low) }) {
+			if !words.OneOf(w, lowValues) {
 				return false
 			}
 		}
