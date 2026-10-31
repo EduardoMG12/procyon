@@ -1,17 +1,11 @@
 package loader
 
 import (
-	"errors"
 	"fmt"
-	"io"
-	"io/fs"
 	"net/url"
 	"os"
-	"os/user"
 	"path/filepath"
-	"regexp"
 	"runtime"
-	"slices"
 	"strings"
 
 	"github.com/EduardoMG12/procyon/internal/report"
@@ -238,137 +232,6 @@ func kinCaller() string {
 			return ""
 		}
 	}
-}
-
-// shortName matches an 8.3 short name such as GIT~1 or PROGRA~2.EXE: up to
-// six characters, a tilde, digits, and an extension of up to three.
-// order~2024.yaml is an ordinary long name.
-var shortName = regexp.MustCompile(`^[^.~]{1,6}~[0-9]+(\.[^.]{0,3})?$`)
-
-// refusedPart explains why a path relative to the root may not be read
-// as text, or returns "": a hidden part (.git, .env) after the spec's own
-// directory, or a short 8.3 name (GIT~1) that could alias one. Short names
-// exist on Windows, and also on FAT drives and SMB shares mounted anywhere.
-func refusedPart(rel, specRel string) string {
-	parts := strings.Split(rel, string(filepath.Separator))
-	own := 0 // parts that belong to the spec's own directory
-	if specRel != "." {
-		specParts := strings.Split(specRel, string(filepath.Separator))
-		if len(parts) > len(specParts) && slices.Equal(parts[:len(specParts)], specParts) {
-			own = len(specParts)
-		}
-	}
-	for i, part := range parts {
-		if i < own {
-			continue
-		}
-		if shortName.MatchString(part) {
-			return "short (8.3) names are not allowed in $refs; use the full name"
-		}
-		if strings.HasPrefix(part, ".") && part != "." {
-			return "hidden files and directories (.git, .env, ...) are never read"
-		}
-	}
-	return ""
-}
-
-// readRegular reads a regular file of at most maxRefSize through root. Every
-// part of the path is checked with Lstat first: symlinks are never followed
-// (a link with an ordinary name could lead to .git), every part but the
-// last must be a plain directory (not a Windows junction), and the last
-// must be a regular file, checked before opening (a FIFO would block).
-// After opening, the file must still be the one checked, so swapping it
-// between the check and the read is caught.
-func readRegular(root *os.Root, rel string) ([]byte, error) {
-	if rel == "." {
-		return nil, errors.New("not a regular file")
-	}
-	parts := strings.Split(rel, string(filepath.Separator))
-	var checked fs.FileInfo
-	for i := range parts {
-		info, err := root.Lstat(filepath.Join(parts[:i+1]...))
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil, errors.New("file not found")
-		}
-		if err != nil {
-			return nil, errors.New("cannot be read")
-		}
-		switch last := i == len(parts)-1; {
-		case info.Mode()&fs.ModeSymlink != 0:
-			return nil, errors.New("symlinks are not followed in $refs; refer to the file itself")
-		case !last && !info.IsDir():
-			return nil, errors.New("cannot be read (a part of the path is not a plain directory)")
-		case last && !info.Mode().IsRegular():
-			return nil, errors.New("not a regular file")
-		case last && info.Size() > maxRefSize:
-			return nil, fmt.Errorf("larger than %d MiB", maxRefSize>>20)
-		}
-		checked = info
-	}
-	file, err := root.Open(rel)
-	if err != nil {
-		return nil, errors.New("cannot be read")
-	}
-	defer file.Close()
-	if opened, err := file.Stat(); err != nil || !os.SameFile(opened, checked) {
-		return nil, errors.New("cannot be read (it changed while being checked)")
-	}
-	data, err := io.ReadAll(io.LimitReader(file, maxRefSize+1))
-	if err != nil {
-		return nil, errors.New("cannot be read")
-	}
-	if len(data) > maxRefSize {
-		return nil, fmt.Errorf("larger than %d MiB", maxRefSize>>20) // it grew while being read
-	}
-	return data, nil
-}
-
-// tooBroad explains why an opened root may not serve $refs, or returns "":
-// it is the user's home directory, one of its ancestors, or the root of its
-// file system. Directories are compared by identity, not by name.
-func tooBroad(root *os.Root) string {
-	opened, err := root.Stat(".")
-	if err != nil {
-		return "unreadable"
-	}
-	if fsRoot := filepath.VolumeName(root.Name()) + string(filepath.Separator); sameDir(opened, fsRoot) {
-		return "the file system's root"
-	}
-	home := homeDir()
-	if home == "" {
-		return "" // unknown home: only the root check above applies
-	}
-	if sameDir(opened, home) {
-		return "your home directory"
-	}
-	// The home's ancestors as written and as resolved (/home may be a link
-	// to /usr/home): either way they contain it.
-	for _, h := range []string{home, evalSymlinks(home)} {
-		for dir := filepath.Dir(h); ; dir = filepath.Dir(dir) {
-			if sameDir(opened, dir) {
-				return "a directory containing your home directory"
-			}
-			if filepath.Dir(dir) == dir {
-				break
-			}
-		}
-	}
-	return ""
-}
-
-func sameDir(opened fs.FileInfo, dir string) bool {
-	info, err := os.Stat(dir)
-	return err == nil && os.SameFile(opened, info)
-}
-
-func homeDir() string {
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		return home
-	}
-	if u, err := user.Current(); err == nil {
-		return u.HomeDir
-	}
-	return ""
 }
 
 // withLocations returns the file at path, whose content is data, as
