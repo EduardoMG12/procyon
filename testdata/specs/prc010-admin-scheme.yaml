@@ -1,0 +1,56 @@
+openapi: 3.0.3
+info:
+  title: Clinics
+  version: 1.0.0
+security:
+  - bearer: []
+paths:
+  /api/appointments:
+    get:
+      responses:
+        "200":
+          description: Appointments
+  /api/status/details:
+    get:
+      security:
+        - superAdmin: []
+      responses:
+        "200":
+          description: Detailed status, for super admins
+  /api/reports/billing:
+    get:
+      security:
+        - superAdmin: []
+        - bearer: []
+      responses:
+        "200":
+          description: Billing report
+  /api/admin/tenants:
+    get:
+      security:
+        - superAdmin: []
+      responses:
+        "200":
+          description: Tenants
+  /api/admin/exports:
+    get:
+      security:
+        - bearer: []
+        - superAdmin: []
+      responses:
+        "200":
+          description: Exports
+  /api/admin/users:
+    get:
+      responses:
+        "200":
+          description: Users
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+    superAdmin:
+      type: apiKey
+      in: header
+      name: X-Super-Admin-Key

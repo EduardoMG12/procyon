@@ -29,8 +29,9 @@ var adminWords = []string{"admin", "internal", "debug", "management"}
 // whose security is exactly that of some regular operation: whoever can
 // call the regular one can probably call the admin one. Comparing with
 // regular operations, not with the spec's default, also works for specs
-// that repeat security on every operation. Unauthenticated operations are
-// PRC001's.
+// that repeat security on every operation. A requirement whose name says
+// it is for admins is not reported, even where a regular path uses it too.
+// Unauthenticated operations are PRC001's.
 func checkPRC010(doc *openapi3.T) []report.Finding {
 	regular := map[string]bool{}
 	loader.ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
@@ -43,6 +44,9 @@ func checkPRC010(doc *openapi3.T) []report.Finding {
 		if !adminPath(path) || loader.Unauthenticated(doc, path, op) || !regular[authKey(doc, path, op)] {
 			return
 		}
+		if adminRequirement(loader.EffectiveSecurity(doc, op)) {
+			return
+		}
 		findings = append(findings, report.Finding{
 			Location:  loader.Locate(op.Origin),
 			Operation: method + " " + path,
@@ -51,6 +55,42 @@ func checkPRC010(doc *openapi3.T) []report.Finding {
 		})
 	})
 	return findings
+}
+
+// adminRequirement reports whether every alternative of reqs asks for a
+// scheme or scope named with an admin word: superAdmin, AdminApiKey,
+// oauth: [orders:admin]. Such a requirement was written for admins, even
+// when a few regular paths use it too (a detailed status page guarded by
+// superAdmin). One alternative without an admin name lets regular users in:
+// [{superAdmin}, {bearer}] accepts a plain bearer token.
+func adminRequirement(reqs openapi3.SecurityRequirements) bool {
+	for _, req := range reqs {
+		if !adminAlternative(req) {
+			return false
+		}
+	}
+	return len(reqs) > 0
+}
+
+// adminAlternative reports whether one of the schemes an alternative asks
+// for, or one of their scopes, has an admin word in its name. The schemes of
+// an alternative are all required, so one admin scheme is enough.
+func adminAlternative(req openapi3.SecurityRequirement) bool {
+	for scheme, scopes := range req {
+		if adminName(scheme) || slices.ContainsFunc(scopes, adminName) {
+			return true
+		}
+	}
+	return false
+}
+
+// adminName reports whether a scheme or scope name holds an admin word, in
+// any case style: superAdmin, admin_key, orders:admin. Like path segments,
+// an all-lowercase name is one word: superadmin is not split.
+func adminName(name string) bool {
+	return slices.ContainsFunc(words.Split(name), func(w string) bool {
+		return words.OneOf(w, adminWords)
+	})
 }
 
 // authKey is equal for operations that authenticate the same way: the same
