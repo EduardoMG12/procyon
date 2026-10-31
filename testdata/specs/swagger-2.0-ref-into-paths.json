@@ -1,0 +1,12 @@
+{
+  "swagger": "2.0",
+  "info": {"title": "t", "version": "1"},
+  "host": "example.com",
+  "schemes": ["https"],
+  "securityDefinitions": {"k": {"type": "apiKey", "in": "header", "name": "X-Key"}},
+  "security": [{"k": []}],
+  "paths": {
+    "/a": {"get": {"responses": {"default": {"description": "err", "schema": {"type": "object", "properties": {"code": {"type": "string"}}}}}}},
+    "/b": {"get": {"responses": {"default": {"description": "err", "schema": {"$ref": "#/paths/~1a/get/responses/default/schema"}}}}}
+  }
+}

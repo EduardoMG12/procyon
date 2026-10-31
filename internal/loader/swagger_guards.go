@@ -74,6 +74,45 @@ func pathItemRef(raw any) string {
 	return ""
 }
 
+// failedPathsRef returns the pointer of the $ref into #/paths that the
+// converter failed to resolve with err, or "". The converter resolves
+// $refs in the OpenAPI 3 document it builds, where a path's response has
+// another shape (its schema moved into content), so it cannot find what
+// "#/paths/.../responses/default/schema" points at, and names it in err.
+func failedPathsRef(raw any, err error) string {
+	if err == nil {
+		return ""
+	}
+	_, ref, found := strings.Cut(err.Error(), `"#/paths/`)
+	ref, _, closed := strings.Cut(ref, `"`)
+	if !found || !closed {
+		return ""
+	}
+	return refPointer(raw, "#/paths/"+ref, "")
+}
+
+// refPointer returns the pointer of the first $ref to ref under node, or "".
+func refPointer(node any, ref, pointer string) string {
+	switch n := node.(type) {
+	case map[string]any:
+		if n["$ref"] == ref {
+			return pointer + "/$ref"
+		}
+		for _, k := range slices.Sorted(maps.Keys(n)) { // the same $ref on every run
+			if found := refPointer(n[k], ref, pointer+"/"+escapePointer(k)); found != "" {
+				return found
+			}
+		}
+	case []any:
+		for i, v := range n {
+			if found := refPointer(v, ref, pointer+"/"+strconv.Itoa(i)); found != "" {
+				return found
+			}
+		}
+	}
+	return ""
+}
+
 // maxMediaTypes bounds the media types kept per consumes or produces list.
 // The converter copies a body or response schema once per media type, and
 // every copy has the same schema, so the rest add nothing but work.

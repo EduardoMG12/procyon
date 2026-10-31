@@ -58,8 +58,8 @@ FAILED  1 high · 0 medium · 0 low · 0 ignored  (fails at: high)
 ```
 
 Exit code `0` passed, `1` a finding at or above the fail threshold, `2`
-Procyon could not run. Inputs: OpenAPI 3.0 and 3.1, split across local files
-or not, and Swagger 2.0 in one file; YAML or JSON.
+Procyon could not run. Inputs: OpenAPI 3.0, 3.1 and, in part, 3.2, split
+across local files or not, and Swagger 2.0 in one file; YAML or JSON.
 
 | Flag | |
 |---|---|

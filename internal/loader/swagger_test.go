@@ -2,6 +2,7 @@ package loader
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -29,5 +30,15 @@ func TestSwaggerRequestBodyLocation(t *testing.T) {
 		if got := fmt.Sprintf("%d:%d", loc.Line, loc.Column); got != tt.want {
 			t.Errorf("%s %s %s: request body at %s, want %s", tt.spec, tt.method, tt.path, got, tt.want)
 		}
+	}
+}
+
+// The converter cannot resolve a $ref into a path's response schema: the
+// user is pointed at the $ref and told where to move what it points at.
+func TestSwaggerRefIntoPathsIsRefusedAtTheRef(t *testing.T) {
+	_, err := Load("../../testdata/specs/swagger-2.0-ref-into-paths.json", anyRule)
+	want := "swagger-2.0-ref-into-paths.json:10:79: paths > /b > get > responses > default > schema > $ref: this $ref into #/paths cannot be converted to OpenAPI 3"
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("Load = %v, want %q", err, want)
 	}
 }
