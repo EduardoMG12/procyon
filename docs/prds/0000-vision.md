@@ -61,7 +61,8 @@ experience, not on the number of checks.
 |---|---|---|---|
 | **v0.1 — Lint** | Reads the spec and reports security problems in the API's *design* | CI, on every PR | [0001](0001-v0.1-spec-lint.md) |
 | **v0.2 — Runtime tests** | Starts a disposable copy of the API (Docker) with seeded test accounts, checks that user A's objects are unreachable by user B and by anonymous callers (BOLA), checks TLS, checks that malformed input is rejected, then tears everything down. Only tests operations changed in the PR. Posts a PR comment with an authorization matrix | CI, on every PR | [0002](0002-v0.2-runtime-tests.md) |
-| **v0.3 — Security QA environment** | Runs continuously against a permanent security-QA environment (next to staging and prod), keeps history and trends, reads the spec from a URL | A long-lived environment | not written |
+| **v0.3 — More runtime checks** | Adds to `procyon test` four checks that need no configuration: personal data in public answers, predictable IDs on public operations, another account's list showing A's objects, internal errors in responses | CI, on every PR | [0003](0003-v0.3-more-runtime-checks.md) |
+| **v0.4 — Security QA environment** | Runs continuously against a permanent security-QA environment (next to staging and prod), keeps history and trends, reads the spec from a URL | A long-lived environment | not written |
 
 **Benchmark against known-vulnerable APIs.** v0.2 is validated against every
 well-known deliberately vulnerable API that runs in Docker (OWASP crAPI,
@@ -115,4 +116,4 @@ files      │ + locs   │     │ PRC0xx │     │ignores,│     │       
 - Reading or analysing source code (SAST).
 - Being a general-purpose scanner for websites, networks or hosts.
 - Testing systems the user does not own or is not authorized to test.
-- A hosted service or dashboard before v0.3.
+- A hosted service or dashboard before v0.4.
