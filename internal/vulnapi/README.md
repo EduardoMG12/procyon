@@ -32,6 +32,7 @@ Two seeded test accounts, by bearer token:
 | PRC102 | `GET /owner-notes?owner=` | B lists A's notes by naming A in the query | `404` |
 | PRC103 | `POST`, `PUT /notes…` | a body that is not a note (`{"title": 42}`) gives a `500` | `400` |
 | PRC104 | `POST`, `PUT /notes…` | a missing `title`, or a `title` or `body` past its `maxLength`, is accepted | `400` |
+| PRC109 | `POST /reviews` | a review that is not valid gets a `400` with a Python stack trace | `400` with a plain message |
 
 Not vulnerable in either: `GET /health` and `POST /login` (public on purpose), `GET /me`,
 `GET /menu` (the same for every user), `GET /orders` (the caller's own), and

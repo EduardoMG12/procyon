@@ -37,6 +37,7 @@ func TestLoadListsOperationsInOrder(t *testing.T) {
 		"GET /orders",
 		"GET /orders/{orderId}",
 		"GET /owner-notes",
+		"POST /reviews",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("operations = %q, want %q", got, want)
@@ -94,6 +95,8 @@ func TestOperationExampleBodies(t *testing.T) {
 		want, needs := "", false
 		if op.Path == "/login" {
 			want, needs = "", true // a schema with no example
+		} else if op.Path == "/reviews" {
+			want, needs = `{"comment":"Clear and fast","rating":5}`, true
 		} else if op.Method == "POST" || op.Method == "PUT" {
 			want, needs = `{"body":"bread, coffee","title":"Shopping list"}`, true
 		}

@@ -40,6 +40,7 @@ func TestRunFindsThePlantedVulnerabilities(t *testing.T) {
 		"PRC108 GET /notes-search",       // B's own search still returns A's notes
 		"PRC102 GET /owner-notes",
 		"PRC102 GET /orders/{orderId}", // though B saw its ID as a menu item's
+		"PRC109 POST /reviews",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("vulnerable API: findings %q, want %q", got, want)
@@ -51,6 +52,10 @@ func TestRunFindsThePlantedVulnerabilities(t *testing.T) {
 	if len(bola) != 1 || bola[0].Caller != "B" || !strings.HasSuffix(bola[0].URL, "/notes/1") || // a seeded note, before the one A created
 		strings.Contains(bola[0].URL+bola[0].Body, vulnapi.TokenB) {
 		t.Errorf("PRC102 evidence = %+v, want B's GET /notes/1, with no token", bola)
+	}
+	trace := rep.Findings[slices.Index(got, "PRC109 POST /reviews")].Evidence
+	if len(trace) != 1 || trace[0].Caller != "A" || trace[0].Status != 400 || trace[0].Body != "Traceback (most recent call last):" {
+		t.Errorf("PRC109 evidence = %+v, want A's 400 and the trace's first line", trace)
 	}
 	evidence := rep.Findings[0].Evidence
 	if len(evidence) != 1 || evidence[0].Caller != "anonymous" || evidence[0].Status != 200 ||
@@ -267,6 +272,7 @@ func TestRunFillsTheAuthorizationMatrix(t *testing.T) {
 		"POST /login A= 0 B= 0 anon=public 0",
 		"POST /notes A= 0 B= 0 anon=denied 401",
 		"PUT /notes/{id} A= 0 B=finding 200 anon=denied 401",
+		"POST /reviews A= 0 B= 0 anon=denied 401",
 		"DELETE /notes/{id} A= 0 B=finding 204 anon=denied 401",
 	}
 	if !slices.Equal(got, want) {
@@ -311,8 +317,8 @@ func TestRunOverHTTPS(t *testing.T) {
 func TestRunWithABaseSpecTestsOnlyChangedOperations(t *testing.T) {
 	rep := runOn(t, vulnapiSpec, vulnapi.New(false), Options{BaseSpec: "../../testdata/specs/runtime-notes-base.yaml"})
 	got := findingKeys(rep)
-	// GET /notes (PRC101), GET and DELETE /notes/{id}, GET /owner-notes and
-	// the shop did not change; GET /notes/{id}/preview is new.
+	// GET /notes (PRC101), GET and DELETE /notes/{id}, GET /owner-notes,
+	// the shop and the reviews did not change; GET /notes/{id}/preview is new.
 	want := []string{"PRC103 POST /notes", "PRC104 POST /notes", "PRC102 PUT /notes/{id}", "PRC103 PUT /notes/{id}", "PRC104 PUT /notes/{id}",
 		"PRC101 GET /notes/{id}/preview", "PRC108 GET /notes-search"}
 	if !slices.Equal(got, want) {
@@ -324,8 +330,8 @@ func TestRunWithABaseSpecTestsOnlyChangedOperations(t *testing.T) {
 			skipped++
 		}
 	}
-	if skipped != 9 || !slices.ContainsFunc(rep.Notes, func(n report.Note) bool { return strings.Contains(n.Message, "9 of 14 operations unchanged") }) {
-		t.Errorf("skipped rows %d, notes %v; want 9 and the unchanged note", skipped, rep.Notes)
+	if skipped != 10 || !slices.ContainsFunc(rep.Notes, func(n report.Note) bool { return strings.Contains(n.Message, "10 of 15 operations unchanged") }) {
+		t.Errorf("skipped rows %d, notes %v; want 10 and the unchanged note", skipped, rep.Notes)
 	}
 }
 

@@ -126,7 +126,7 @@ type Exchange struct {
 	Method string
 	URL    string // the path and query, as sent: "/notes/1"
 	Status int    // 0 when the request got no answer within the timeout
-	Body   string // the start of the response body
+	Body   string // the start of the response body; for PRC109, the line that shows the error
 	Sent   string // the start of the request body, when there was one
 }
 
