@@ -49,7 +49,7 @@ func TestMarkdownAuthorizationMatrix(t *testing.T) {
 		{Operation: "GET /orders", A: report.Cell{Outcome: report.Allowed, Status: 200}, Anonymous: report.Cell{Outcome: report.Denied, Status: 401}},
 		{Operation: "GET /orders/{id}", A: report.Cell{Outcome: report.Allowed, Status: 200}, B: report.Cell{Outcome: report.Denied, Status: 404}, Anonymous: report.Cell{Outcome: report.Denied, Status: 401}},
 		{Operation: "DELETE /orders/{id}", B: report.Cell{Outcome: report.Reached, Status: 204}, Anonymous: report.Cell{Outcome: report.Denied, Status: 401}},
-		{Operation: "POST /orders", A: report.Cell{Outcome: report.Failed, Status: 500}, Anonymous: report.Cell{Outcome: report.Denied, Status: 401}},
+		{Operation: "POST /orders", A: report.Cell{Outcome: report.ServerError, Status: 500}, Anonymous: report.Cell{Outcome: report.Denied, Status: 401}},
 		{Operation: "GET /reports/{id}", A: report.Cell{Outcome: report.Skipped}, B: report.Cell{Outcome: report.Skipped}, Anonymous: report.Cell{Outcome: report.Skipped}},
 		{Operation: "GET /users/{id}", A: report.Cell{Outcome: report.Allowed, Status: 200}, B: report.Cell{Outcome: report.Unchanged}, Anonymous: report.Cell{Outcome: report.Unchanged}},
 		{Operation: "GET /a|b", A: report.Cell{Outcome: report.Allowed, Status: 200}}, // a | must not split the row

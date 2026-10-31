@@ -463,7 +463,7 @@ func TestMatrixTellsAServerErrorFromADenial(t *testing.T) {
 	})
 	rep := runOn(t, vulnapiSpec, handler, Options{})
 	want := report.MatrixRow{Operation: "GET /me", A: report.Cell{Outcome: report.Allowed, Status: 200},
-		Anonymous: report.Cell{Outcome: report.Failed, Status: 500}}
+		Anonymous: report.Cell{Outcome: report.ServerError, Status: 500}}
 	if !slices.Contains(rep.Matrix, want) {
 		t.Errorf("matrix %+v; want the row %+v", rep.Matrix, want)
 	}

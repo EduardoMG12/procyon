@@ -118,7 +118,7 @@ func markdownMatrix(b *strings.Builder, rows []report.MatrixRow) {
 
 // icons draw the matrix's outcomes; NotCalled has none and is drawn "–".
 var icons = map[report.Outcome]string{
-	report.Allowed: "✅", report.Denied: "🚫", report.Failed: "💥", report.Reached: "❌", report.Public: "🌐", report.Skipped: "⏭️", report.Unchanged: "💤",
+	report.Allowed: "✅", report.Denied: "🚫", report.ServerError: "💥", report.Reached: "❌", report.Public: "🌐", report.Skipped: "⏭️", report.Unchanged: "💤",
 }
 
 func markdownCell(c report.Cell) string {
