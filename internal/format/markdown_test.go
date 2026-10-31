@@ -2,8 +2,10 @@ package format_test
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/EduardoMG12/procyon/internal/format"
@@ -70,5 +72,47 @@ func TestMarkdownAuthorizationMatrix(t *testing.T) {
 	}
 	if !bytes.Equal(got.Bytes(), want) {
 		t.Errorf("output differs from %s\n--- got ---\n%s\n--- want ---\n%s", path, got.Bytes(), want)
+	}
+}
+
+// GitHub refuses a job summary over 1 MiB, and a large spec's report is
+// several. The summary's counts stay exact, the most serious findings are
+// shown, and a last line says what was left out and where to find it.
+func TestMarkdownStaysUnderGitHubsLimit(t *testing.T) {
+	const limit = 1 << 20
+	critical := report.Rule{ID: "PRC102", Title: "Another account reached A's object", Severity: report.Critical}
+	low := report.Rule{ID: "PRC008", Title: "Request field has no limit", Severity: report.Low}
+	rep := report.Report{FailOn: report.High, Failed: true}
+	long := strings.Repeat("A long explanation. ", 50) // about 1 KB a finding
+	for i := range 3000 {
+		rule := low
+		if i%1000 == 999 {
+			rule = critical // written last, shown first
+		}
+		rep.Findings = append(rep.Findings, report.Finding{Rule: rule,
+			Location: report.Location{File: "openapi.yaml", Line: i + 1, Column: 1}, Why: long, Fix: "Fix it."})
+	}
+	rep.Notes = []report.Note{{Location: report.Location{File: "openapi.yaml", Line: 1, Column: 1}, Message: "a note"}}
+
+	var got bytes.Buffer
+	if err := format.Markdown(&got, rep); err != nil {
+		t.Fatal(err)
+	}
+	page := got.String()
+	if got.Len() > limit {
+		t.Errorf("the Markdown is %d bytes, over GitHub's %d", got.Len(), limit)
+	}
+	for _, want := range []string{"| critical | 3 |", "| low | 2997 |"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the summary does not count every finding: no %q", want)
+		}
+	}
+	if n := strings.Count(page, "#### CRITICAL"); n != 3 {
+		t.Errorf("%d critical findings shown, want all 3, before any low one", n)
+	}
+	shown := strings.Count(page, "\n#### ")
+	notShown := fmt.Sprintf("**Not shown:** %d findings and 1 note.", 3000-shown)
+	if shown == 0 || !strings.Contains(page, "\n\n---\n\n"+notShown) || !strings.HasSuffix(page, "the JSON or SARIF output.\n") {
+		t.Errorf("the page does not end with %q and where to find the rest:\n%s", notShown, page[max(0, len(page)-600):])
 	}
 }

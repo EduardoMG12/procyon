@@ -37,6 +37,14 @@ steps:
       sarif_file: procyon.sarif
 ```
 
+GitHub refuses a job summary over 1 MiB, and a large spec can have
+thousands of findings (DocuSign's public spec: about 6,000, 2.7 MB of
+Markdown). So the Markdown output stops before 1 MiB: the table of counts
+at the top still counts every finding, the most serious findings come
+first, and a last line says how many findings (and ignored findings,
+notes or matrix rows) are not shown. The JSON and SARIF outputs always
+hold them all.
+
 Run Procyon before any step that writes credentials into the workspace
 (see [how `$refs` are read](refs.md)).
 
