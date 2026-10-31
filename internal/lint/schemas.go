@@ -11,7 +11,7 @@ import (
 
 // What the rules about schema properties (PRC005, PRC006, PRC008, PRC009)
 // share: the schemas an operation receives and returns, a walk over their
-// properties, and where a property is written.
+// properties, where a property is written, and one finding per place.
 
 // requestSchemas returns the schemas of an operation's request body, one per
 // media type, or nil when it has no body.
@@ -120,4 +120,34 @@ func readOnly(s *openapi3.Schema) bool {
 // {}, or a schema made only of properties or allOf/anyOf/oneOf parts.
 func untyped(s *openapi3.Schema) bool {
 	return s.Type == nil || len(s.Type.Slice()) == 0
+}
+
+// onePerPlace collects a rule's findings about schema properties. A schema
+// shared by several operations is one problem, fixed where it is written:
+// one finding at that place, listing every operation that reaches it, so an
+// ignore on one of them covers only that one (see report.New).
+type onePerPlace struct {
+	findings []report.Finding
+	at       map[report.Location]int // place -> index in findings
+}
+
+func (p *onePerPlace) add(f report.Finding) {
+	if i, ok := p.at[f.Location]; ok {
+		g := &p.findings[i]
+		// Operations are visited one after another, so a repeat (the same
+		// schema under two media types) is always the last one added.
+		last := g.Operation
+		if n := len(g.Also); n > 0 {
+			last = g.Also[n-1]
+		}
+		if last != f.Operation {
+			g.Also = append(g.Also, f.Operation)
+		}
+		return
+	}
+	if p.at == nil {
+		p.at = map[report.Location]int{}
+	}
+	p.at[f.Location] = len(p.findings)
+	p.findings = append(p.findings, f)
 }
