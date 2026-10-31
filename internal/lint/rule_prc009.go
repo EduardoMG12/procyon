@@ -48,7 +48,7 @@ func checkPRC009(doc *openapi3.T) []report.Finding {
 			if word := privilegeWord(name); word != "" && !assignedOnPurpose(word, path, prop.Value) {
 				found.add(report.Finding{
 					Location:  propertyLocation(prop),
-					Operation: method + " " + path,
+					Operation: loader.OperationKey(method, path),
 					Why: fmt.Sprintf("The request body accepts %q. If the server copies the request into the record, "+
 						"any user can send it and grant themselves privileges.", name),
 					Fix: "Mark the field readOnly: true (or remove it from the request schema), and set it on the server " +

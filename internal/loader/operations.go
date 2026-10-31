@@ -73,7 +73,7 @@ type Field struct {
 
 // Key names the operation as reports do: "GET /notes/{id}".
 func (o Operation) Key() string {
-	return o.Method + " " + o.Path
+	return OperationKey(o.Method, o.Path)
 }
 
 // Credential is where a token goes in a request.

@@ -49,7 +49,7 @@ func checkPRC007(doc *openapi3.T) []report.Finding {
 		}
 		findings = append(findings, report.Finding{
 			Location:  loader.Locate(op.Origin),
-			Operation: method + " " + path,
+			Operation: loader.OperationKey(method, path),
 			Why: fmt.Sprintf("This operation needs no authentication and picks an object by {%s}. "+
 				"Nobody can check whose object it is, so anyone can try identifiers one after another and reach every object.", param),
 			Fix: "Require authentication and check on the server that the caller may access the object. " +
