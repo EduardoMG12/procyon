@@ -60,6 +60,7 @@ func New(fixed bool) http.Handler {
 	mux.HandleFunc("PUT /notes/{id}", s.update)
 	mux.HandleFunc("DELETE /notes/{id}", s.delete)
 	mux.HandleFunc("GET /owner-notes", s.ofOwner)
+	mux.HandleFunc("GET /shop", s.page)
 	mux.HandleFunc("GET /menu", s.menu)
 	mux.HandleFunc("GET /orders", s.listOrders)
 	mux.HandleFunc("GET /orders/{orderId}", s.getOrder)

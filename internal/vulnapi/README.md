@@ -30,6 +30,7 @@ Two seeded test accounts, by bearer token:
 | PRC102 | `GET /owner-notes?owner=` | B lists A's notes by naming A in the query | `404` |
 | PRC103 | `POST`, `PUT /notes…` | a body that is not a note (`{"title": 42}`) gives a `500` | `400` |
 | PRC104 | `POST`, `PUT /notes…` | a missing `title`, or a `title` or `body` past its `maxLength`, is accepted | `400` |
+| PRC106 | `GET /shop` (public) | the review shows its author's e-mail and phone to anyone (its 11-digit `orderNumber` is not reported) | only `author`, `text` and `orderNumber` |
 
 Not vulnerable in either: `GET /health` and `POST /login` (public on purpose), `GET /me`,
 `GET /menu` (the same for every user), `GET /orders` (the caller's own), and

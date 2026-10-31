@@ -202,6 +202,24 @@ paths:
           description: No owner given.
         "404":
           description: No such owner, or not the caller.
+  /shop:
+    get:
+      x-procyon-public: "The shop's page, shown to every visitor"
+      operationId: shopPage
+      security: []
+      responses:
+        "200":
+          description: The shop and its latest reviews.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name: {type: string, maxLength: 100}
+                  reviews:
+                    type: array
+                    maxItems: 10
+                    items: {type: object, properties: {author: {type: string, maxLength: 50}, text: {type: string, maxLength: 1000}, orderNumber: {type: string, maxLength: 20}}}
   /menu:
     get:
       operationId: menu

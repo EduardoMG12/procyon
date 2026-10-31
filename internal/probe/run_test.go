@@ -37,6 +37,7 @@ func TestRunFindsThePlantedVulnerabilities(t *testing.T) {
 		"PRC102 GET /notes/{id}", "PRC102 PUT /notes/{id}", "PRC103 PUT /notes/{id}", "PRC104 PUT /notes/{id}",
 		"PRC102 DELETE /notes/{id}",
 		"PRC102 GET /owner-notes",
+		"PRC106 GET /shop", "PRC106 GET /shop", // the review's email and phone, not its orderNumber
 		"PRC102 GET /orders/{orderId}", // though B saw its ID as a menu item's
 	}
 	if !slices.Equal(got, want) {
@@ -252,7 +253,7 @@ func TestRunFillsTheAuthorizationMatrix(t *testing.T) {
 			row.A.Outcome, row.A.Status, row.B.Outcome, row.B.Status, row.Anonymous.Outcome, row.Anonymous.Status))
 	}
 	want := []string{
-		"GET /health A=allowed 200 B= 0 anon=public 0",
+		"GET /health A=allowed 200 B= 0 anon=public 200", // a public read is called anonymously, for PRC106
 		"GET /me A=allowed 200 B= 0 anon=denied 401",
 		"GET /menu A=allowed 200 B= 0 anon=denied 401",
 		"GET /notes A=allowed 200 B= 0 anon=finding 200",
@@ -260,6 +261,7 @@ func TestRunFillsTheAuthorizationMatrix(t *testing.T) {
 		"GET /orders A=allowed 200 B= 0 anon=denied 401",
 		"GET /orders/{orderId} A=allowed 200 B=finding 200 anon=denied 401",
 		"GET /owner-notes A=allowed 200 B=finding 200 anon=denied 401",
+		"GET /shop A=allowed 200 B= 0 anon=finding 200", // public, and it shows personal data (PRC106)
 		"POST /login A= 0 B= 0 anon=public 0",
 		"POST /notes A= 0 B= 0 anon=denied 401",
 		"PUT /notes/{id} A= 0 B=finding 200 anon=denied 401",
@@ -308,7 +310,7 @@ func TestRunWithABaseSpecTestsOnlyChangedOperations(t *testing.T) {
 	rep := runOn(t, vulnapiSpec, vulnapi.New(false), Options{BaseSpec: "../../testdata/specs/runtime-notes-base.yaml"})
 	got := findingKeys(rep)
 	// GET /notes (PRC101), GET and DELETE /notes/{id}, GET /owner-notes and
-	// the shop did not change.
+	// the shop (its menu, orders and page) did not change.
 	want := []string{"PRC103 POST /notes", "PRC104 POST /notes", "PRC102 PUT /notes/{id}", "PRC103 PUT /notes/{id}", "PRC104 PUT /notes/{id}"}
 	if !slices.Equal(got, want) {
 		t.Errorf("findings %q, want %q", got, want)
@@ -319,8 +321,8 @@ func TestRunWithABaseSpecTestsOnlyChangedOperations(t *testing.T) {
 			skipped++
 		}
 	}
-	if skipped != 9 || !slices.ContainsFunc(rep.Notes, func(n report.Note) bool { return strings.Contains(n.Message, "9 of 12 operations unchanged") }) {
-		t.Errorf("skipped rows %d, notes %v; want 9 and the unchanged note", skipped, rep.Notes)
+	if skipped != 10 || !slices.ContainsFunc(rep.Notes, func(n report.Note) bool { return strings.Contains(n.Message, "10 of 13 operations unchanged") }) {
+		t.Errorf("skipped rows %d, notes %v; want 10 and the unchanged note", skipped, rep.Notes)
 	}
 }
 

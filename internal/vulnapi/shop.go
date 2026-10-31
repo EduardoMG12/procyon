@@ -10,8 +10,9 @@ type order struct {
 	Address string `json:"address"`
 }
 
-// The shop, never changed: a menu every signed-in user sees, and each
-// user's orders. Their IDs overlap on purpose: menu item 1 is not order 1.
+// The shop, never changed: a page anyone sees, a menu every signed-in user
+// sees, and each user's orders. Their IDs overlap on purpose: menu item 1
+// is not order 1.
 var (
 	menuItems  = []map[string]string{{"id": "1", "name": "Lamp"}, {"id": "2", "name": "Desk"}}
 	shopOrders = []order{
@@ -19,6 +20,20 @@ var (
 		{ID: "2", Owner: "bob", Item: "Desk", Address: "34 Oak Avenue"},
 	}
 )
+
+// page is the shop's public page, with its latest review. The review's
+// orderNumber has eleven digits, like a phone number, but its name says
+// it is none.
+//
+// Vulnerable (PRC106): the review shows its author's e-mail and phone to
+// anyone.
+func (s *server) page(w http.ResponseWriter, r *http.Request) {
+	review := map[string]string{"author": "Alice", "text": "The lamp is lovely", "orderNumber": "20261031001"}
+	if !s.fixed {
+		review["email"], review["phone"] = "alice@example.com", "+1 555 010 0123"
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"name": "Lamp & Desk", "reviews": []map[string]string{review}})
+}
 
 // menu lists what the shop sells, the same for every signed-in user.
 func (s *server) menu(w http.ResponseWriter, r *http.Request) {
