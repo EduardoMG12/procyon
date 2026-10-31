@@ -3,6 +3,7 @@ package probe
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/EduardoMG12/procyon/internal/lint"
 	"github.com/EduardoMG12/procyon/internal/loader"
@@ -20,11 +21,11 @@ import (
 // isList reports whether op is a list or search that A read: a GET, not in
 // test.skip, whose 2xx answer to A was a JSON array, not one object.
 func (s *session) isList(op loader.Operation) bool {
-	if op.Method != "GET" || s.skip[op.Key()] {
+	if op.Method != http.MethodGet || s.skip[op.Key()] {
 		return false
 	}
-	array, answered := s.ofA.single[op.Path]
-	return answered && !array && s.ofA.cells[op.Key()].Outcome == report.Allowed
+	single, answered := s.ofA.single[op.Path]
+	return answered && !single && s.ofA.cells[op.Key()].Outcome == report.Allowed
 }
 
 // listLeak reads op as B, with its required filter filled from B's own

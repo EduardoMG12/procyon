@@ -59,16 +59,30 @@ func internalError(body []byte) (what, line string) {
 // the length of an excerpt.
 func (r *runner) lookForInternalError(op loader.Operation, exchange report.Exchange, body []byte) {
 	what, line := internalError(body)
-	if what == "" || r.leaked[op.Key()] {
+	if what == "" || r.withInternalError[op.Key()] {
 		return
 	}
-	r.leaked[op.Key()] = true
+	r.withInternalError[op.Key()] = true
 	exchange.Body = r.excerpt(line)
-	r.leaks = append(r.leaks, report.Finding{
+	r.internalErrors = append(r.internalErrors, report.Finding{
 		Rule: lint.RuntimeRule("PRC109"), Location: op.Location, Operation: op.Key(),
 		Why: "The answer holds " + what + ": it shows how the server is built (file paths, libraries, queries) " +
 			"and tells an attacker where to aim.",
 		Fix:      "Log the details on the server and answer with a short message and the right status. Turn off debug output in every deployment.",
 		Evidence: []report.Exchange{exchange},
 	})
+}
+
+// internalErrorsUnderTest are the PRC109 findings of the operations under
+// test: those changed since --base-spec, or every one when changed is nil.
+// Discovery reads unchanged operations too, for IDs, and their answers are
+// looked at like any other; they are just not reported.
+func (r *runner) internalErrorsUnderTest(changed map[string]bool) []report.Finding {
+	var kept []report.Finding
+	for _, f := range r.internalErrors {
+		if changed == nil || changed[f.Operation] {
+			kept = append(kept, f)
+		}
+	}
+	return kept
 }

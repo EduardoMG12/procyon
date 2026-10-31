@@ -107,7 +107,7 @@ func (s *session) writeAsB(ctx context.Context, op loader.Operation, f filled) (
 	// that object from the same example. If the server refuses the changed
 	// body (the field was an email or an enum), B sends the example as is.
 	original := op.Body
-	op.Body = asB(op.Body)
+	op.Body = markedAsB(op.Body)
 	reader, canRead := s.readers[op.Path]
 	if !canRead {
 		if op.Method == http.MethodDelete {
@@ -243,10 +243,10 @@ func unseen(values []string, ofB *harvest) []string {
 	return kept
 }
 
-// asB is the example with its first text field (by name) marked as B's
-// write, so A's object, made from the same example or not, never already
+// markedAsB is the example with its first text field (by name) marked as
+// B's write, so A's object, made from the same example or not, never already
 // holds it. An example with no text field is sent as it is.
-func asB(example []byte) []byte {
+func markedAsB(example []byte) []byte {
 	fields, ok := decodeObject(example)
 	if !ok {
 		return example

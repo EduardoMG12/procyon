@@ -34,9 +34,10 @@ type runner struct {
 	// first, for the note that says they were not followed.
 	redirects     int
 	firstRedirect string
-	// leaks are the PRC109 findings, at most one per operation in leaked.
-	leaks  []report.Finding
-	leaked map[string]bool
+	// internalErrors are the PRC109 findings of every call, at most one
+	// per operation: the operations in withInternalError.
+	internalErrors    []report.Finding
+	withInternalError map[string]bool
 }
 
 // send calls one operation as who and records the exchange, with every
