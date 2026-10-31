@@ -58,7 +58,7 @@ func TestUpFindsThePortAndDownCleansUp(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := strings.Join(calls(t, log), " | ")
-	if want := "up --detach --wait | port api 8080 | down --volumes --remove-orphans"; got != want {
+	if want := "up --detach --wait | port api 8080 | down --volumes --remove-orphans --rmi local"; got != want {
 		t.Errorf("docker calls = %q, want %q", got, want)
 	}
 }
@@ -72,7 +72,7 @@ func TestUpFailureShowsDockersOutputAndStillTearsDown(t *testing.T) {
 	if err := down(); err != nil {
 		t.Fatal(err)
 	}
-	if got := calls(t, log); got[len(got)-1] != "down --volumes --remove-orphans" {
+	if got := calls(t, log); got[len(got)-1] != "down --volumes --remove-orphans --rmi local" {
 		t.Errorf("last docker call = %q, want down", got[len(got)-1])
 	}
 }
@@ -89,7 +89,7 @@ func TestDownRunsAfterCancel(t *testing.T) {
 	if err := down(); err != nil {
 		t.Fatalf("down after cancel: %v", err)
 	}
-	if got := calls(t, log); got[len(got)-1] != "down --volumes --remove-orphans" {
+	if got := calls(t, log); got[len(got)-1] != "down --volumes --remove-orphans --rmi local" {
 		t.Errorf("last docker call = %q, want down", got[len(got)-1])
 	}
 }
