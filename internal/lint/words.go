@@ -104,8 +104,10 @@ var piiDescribingWords = append(slices.Clone(words.Describing),
 
 // piiReferenceWords, right before a personal-data word, make it something
 // other than a person's data: supportEmail (the company's), walletAddress,
-// listenAddress, ipAddress.
+// listenAddress, ipAddress, repositoryFullName (owner/name),
+// softDescriptorPhone (the merchant's, on a card statement).
 var piiReferenceWords = append(slices.Clone(words.Reference),
 	"support", "sender", "noreply", "reply", "from", "wallet", "contract",
 	"listen", "ip", "mac", "server", "host", "bind", "remote", "local", "web",
+	"repository", "repo", "descriptor",
 )

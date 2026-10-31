@@ -1,0 +1,45 @@
+openapi: 3.0.3
+info:
+  title: Cloud network
+  version: 1.0.0
+security:
+  - key: []
+paths:
+  /security-groups:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                IpPermissions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      CidrIp:
+                        type: string
+                IpamScopeId:
+                  type: string
+                CurrentIpamScopeIds:
+                  type: array
+                  items:
+                    type: string
+                NetworkInsightsAccessScopeId:
+                  type: string
+                Permissions:
+                  type: array
+                  items:
+                    type: string
+                ScopeId:
+                  type: string
+      responses:
+        "201":
+          description: Created
+components:
+  securitySchemes:
+    key:
+      type: apiKey
+      in: header
+      name: X-Key

@@ -152,6 +152,22 @@ func TestRules(t *testing.T) {
 			"PRC009 prc009-grants-and-enums.yaml:137:17 PATCH /flags",
 			"PRC009 prc009-grants-and-enums.yaml:140:17 PATCH /flags",
 		}},
+		// IpPermissions (firewall rules) and IpamScopeId (a pool of IP
+		// addresses) are network settings. Still reported: Permissions,
+		// ScopeId and NetworkInsightsAccessScopeId (a known limit).
+		{"prc009-network-words.yaml", []string{"PRC009"}, []string{
+			"PRC009 prc009-network-words.yaml:29:17 POST /security-groups",
+			"PRC009 prc009-network-words.yaml:31:17 POST /security-groups",
+			"PRC009 prc009-network-words.yaml:35:17 POST /security-groups",
+		}},
+		// A repository's full name (owner/name) and a merchant's soft
+		// descriptor phone are not a person's. Still reported: full_name
+		// (it may be a person's), ownerFullName, sponsorPhone.
+		{"prc006-references.yaml", []string{"PRC006"}, []string{
+			"PRC006 prc006-references.yaml:24:19 GET /repositories",
+			"PRC006 prc006-references.yaml:26:19 GET /repositories",
+			"PRC006 prc006-references.yaml:28:19 GET /repositories",
+		}},
 		// Admin words count in the path's own segments, plural included
 		// (/admins), not in a parameter's name (/users/{admin_id}).
 		{"prc010-path-words.yaml", []string{"PRC010"}, []string{
