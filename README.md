@@ -97,7 +97,7 @@ steps:
 Run Procyon before any step that writes credentials into the workspace
 (see [docs/refs.md](docs/refs.md)).
 
-## Testing a running copy: `procyon test` (v0.2, in progress)
+## Testing a running copy: `procyon test` (v0.2)
 
 `procyon lint` reads the spec. `procyon test` asks the API itself: it starts
 a disposable copy from your compose file, calls every operation as two test
@@ -198,7 +198,7 @@ jobs:
 | [PRC011](docs/rules/PRC011.md) | medium | Deprecated OAuth2 flow |
 
 Runtime rules, found by `procyon test` against a running copy of the API
-(v0.2, in progress):
+(v0.2):
 
 | ID | Severity | Catches |
 |---|---|---|
