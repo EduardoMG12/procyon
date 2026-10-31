@@ -199,7 +199,8 @@ type filled struct {
 	// values are the values used that name an object, unescaped: not a
 	// query parameter's example, which names none of the account's.
 	values []string
-	own    bool // every value is known to be the account's own
+	params []string // the parameter each of values fills, in the same order
+	own    bool     // every value is known to be the account's own
 }
 
 // fill replaces every parameter of path with a value, and adds the
@@ -208,8 +209,8 @@ type filled struct {
 // spec's example.
 func (h *harvest) fill(path string, query []loader.QueryParam) (filled, error) {
 	f := filled{own: true}
-	use := func(v string, own bool) {
-		f.values = append(f.values, v)
+	use := func(param, v string, own bool) {
+		f.values, f.params = append(f.values, v), append(f.params, param)
 		f.own = f.own && own
 	}
 	var missing string
@@ -219,7 +220,7 @@ func (h *harvest) fill(path string, query []loader.QueryParam) (filled, error) {
 		if !ok && missing == "" {
 			missing = name
 		}
-		use(v, own)
+		use(name, v, own)
 		return url.PathEscape(v)
 	})
 	if missing != "" {
@@ -230,7 +231,7 @@ func (h *harvest) fill(path string, query []loader.QueryParam) (filled, error) {
 		v, own, ok := h.pick(path, q.Name)
 		switch {
 		case ok:
-			use(v, own)
+			use(q.Name, v, own)
 		case q.Example != "":
 			v = q.Example
 		default:
