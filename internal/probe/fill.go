@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/EduardoMG12/procyon/internal/loader"
@@ -94,6 +95,23 @@ func (h *harvest) ownObject(o object, from string) bool {
 func namesObject(name string) bool {
 	parts := words.Split(name)
 	return len(parts) > 0 && words.OneOf(parts[len(parts)-1], []string{"id", "uuid"})
+}
+
+// pagingParameters are, as words, the names of query parameters that page
+// or sort a list. The whole name must be one: orderId and page_title are
+// not.
+var pagingParameters = [][]string{
+	{"limit"}, {"offset"}, {"cursor"},
+	{"page"}, {"per", "page"}, {"page", "size"}, {"size"},
+	{"sort"}, {"sort", "by"}, {"order"}, {"order", "by"},
+}
+
+// pagesAList reports whether a query parameter's name says it pages or
+// sorts a list (limit, per_page, pageSize, sortBy): it names no object,
+// whatever value it gets.
+func pagesAList(name string) bool {
+	parts := words.Split(name)
+	return slices.ContainsFunc(pagingParameters, func(p []string) bool { return slices.Equal(parts, p) })
 }
 
 // pathParam matches a path parameter: {id}, {orderId}.
