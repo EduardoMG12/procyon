@@ -222,7 +222,8 @@ func TestUnfilledQueryParameterIsANote(t *testing.T) {
 // object (status) is never sent, though a response shows one and the spec
 // gives an example. A bare reply to an action on A's picture (/picture/love
 // answers every caller the same text) holds no data of A's: it is no
-// finding.
+// finding. The matrix's A cell is A's call with the parameter B was tested
+// with, not discovery's call without it (400 here).
 func TestOptionalQueryParametersThatNameAnObject(t *testing.T) {
 	var statusSent bool
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -253,6 +254,14 @@ func TestOptionalQueryParametersThatNameAnObject(t *testing.T) {
 	for _, f := range findingsOf(rep, "PRC102") {
 		if !strings.Contains(f.Why, "by changing the query parameter") {
 			t.Errorf("%s: why %q, want it to say the ID was a query parameter", f.Operation, f.Why)
+		}
+	}
+	for _, row := range rep.Matrix {
+		switch row.Operation {
+		case "GET /picture", "GET /picture/love", "GET /note":
+			if row.A != (report.Cell{Outcome: report.Allowed, Status: http.StatusOK}) {
+				t.Errorf("%s: A's cell %+v, want A's call with the query ID: allowed, 200", row.Operation, row.A)
+			}
 		}
 	}
 	for _, note := range []string{

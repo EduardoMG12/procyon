@@ -76,15 +76,20 @@ func (s *session) readAsB(ctx context.Context, op loader.Operation, f filled) (v
 
 // answerToA is A's answer to op at path, the read B's answer is compared
 // with: the one discovery recorded or, when discovery read another path
-// (A's own object was not known yet), a new read. Nil when A's read
-// fails.
+// (A's own object, or an optional query ID, was not known yet), a new
+// read. The new read is then the matrix's A cell: the same request B gets.
+// Nil when A's read fails.
 func (s *session) answerToA(ctx context.Context, op loader.Operation, path string) ([]byte, error) {
 	if body := s.ofA.bodies[path]; body != nil {
 		return body, nil
 	}
 	exchange, body, err := s.sendFull(ctx, op, path, s.a)
-	if err != nil || !success(exchange) {
+	if err != nil {
 		return nil, err
+	}
+	s.ofA.cells[op.Key()] = cellOf(exchange, false)
+	if !success(exchange) {
+		return nil, nil
 	}
 	s.ofA.bodies[path] = body
 	return body, nil
