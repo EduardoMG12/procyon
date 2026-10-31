@@ -5,10 +5,10 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -19,9 +19,30 @@ jobs:
         run: go test -race ./...
       - name: Build
         run: scripts/release.sh "$GITHUB_REF_NAME"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    # The "release" environment requires the maintainer's approval, so a
+    # pushed tag builds the binaries but publishes nothing until a person
+    # approves this job in the Actions tab. Only this job can write.
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           # v0.1.0-rc.1 and similar are pre-releases, never "Latest".
           flags=()

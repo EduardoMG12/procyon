@@ -110,8 +110,12 @@ Only the owner releases.
    `dist/procyon_0.1.0_linux_amd64 --version` (the Windows binaries end in
    `.exe`).
 2. Tag and push: `git tag v0.1.0 && git push origin v0.1.0`. The release
-   workflow runs the same script and publishes `dist/*` as a GitHub
-   release.
-3. Without Actions (a private repository on a free plan), publish from the
+   workflow's `build` job runs the tests and the same script.
+3. Approve the `publish` job: the run waits on the `release` environment,
+   which requires the owner's review (Actions → the run → "Review
+   deployments"). Only then is `dist/*` published as a GitHub release. A tag
+   pushed by mistake is never published: reject the job, then delete the
+   tag.
+4. Without Actions (a private repository on a free plan), publish from the
    local build instead: `gh release create v0.1.0 dist/* --generate-notes`
    (add `--prerelease` for a tag such as `v0.1.0-rc.1`).
