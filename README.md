@@ -114,8 +114,9 @@ procyon test openapi.yaml --compose docker-compose.yml --service api --port 8080
   delete them (PRC102), that a list or search does not hand B A's objects in
   bulk (PRC108), that anonymous callers cannot use operations that
   require authentication (PRC101), that malformed bodies are refused
-  (PRC103, PRC104), that no answer shows a stack trace or a database
-  error (PRC109) and, on `https`, that TLS is sound (PRC105).
+  (PRC103, PRC104), that anonymous answers hold no personal data (PRC106),
+  that no answer shows a stack trace or a database error (PRC109) and, on
+  `https`, that TLS is sound (PRC105).
 - Give the tokens in the environment (bare: Procyon adds `Bearer ` when the
   spec asks for it), or declare a login in
   [`.procyon.yaml`](docs/configuration.md) for APIs that issue tokens.
@@ -200,7 +201,7 @@ jobs:
 | [PRC011](docs/rules/PRC011.md) | medium | Deprecated OAuth2 flow |
 
 Runtime rules, found by `procyon test` against a running copy of the API
-(v0.2):
+(v0.2 and later):
 
 | ID | Severity | Catches |
 |---|---|---|
@@ -209,6 +210,7 @@ Runtime rules, found by `procyon test` against a running copy of the API
 | [PRC103](docs/rules/PRC103.md) | medium | Malformed request made the server fail |
 | [PRC104](docs/rules/PRC104.md) | low | Server accepted a request the spec forbids |
 | [PRC105](docs/rules/PRC105.md) | high | The API's TLS is weak |
+| [PRC106](docs/rules/PRC106.md) | high | Public operation returned personal data |
 | [PRC108](docs/rules/PRC108.md) | critical | Another account's list shows A's objects |
 | [PRC109](docs/rules/PRC109.md) | medium | A response shows an internal error |
 

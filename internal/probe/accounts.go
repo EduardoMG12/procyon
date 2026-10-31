@@ -60,22 +60,25 @@ func authorize(req *http.Request, cred *loader.Credential, token string) {
 	}
 }
 
-// mask hides every token in s, as written, URL-encoded and JSON-escaped (a
-// JSON string escapes <, > and &, and PHP's escapes / too), so evidence
-// never shows a credential, even one the API echoes back.
+// mask hides every token in s, in each of its forms, so evidence never
+// shows a credential, even one the API echoes back.
 func mask(s string, tokens ...string) string {
 	for _, token := range tokens {
 		if token == "" {
 			continue
 		}
-		s = strings.ReplaceAll(s, token, "****")
-		for _, escaped := range []string{url.QueryEscape(token), jsonEscaped(token), strings.ReplaceAll(token, "/", `\/`)} {
-			if escaped != token {
-				s = strings.ReplaceAll(s, escaped, "****")
-			}
+		for _, form := range forms(token) {
+			s = strings.ReplaceAll(s, form, "****")
 		}
 	}
 	return s
+}
+
+// forms are the ways a token can be written in an answer: as it is,
+// URL-encoded and JSON-escaped (a JSON string escapes <, > and &, and
+// PHP's escapes / too).
+func forms(token string) []string {
+	return []string{token, url.QueryEscape(token), jsonEscaped(token), strings.ReplaceAll(token, "/", `\/`)}
 }
 
 // jsonEscaped is token as encoding/json writes it inside a string.
