@@ -12,10 +12,8 @@ import (
 
 // discoverAccounts has each account create its own objects (create), then
 // reads as A, then as B, and marks which values are each one's own
-// (identityMarks). B reads only paths with nothing in them: what B is shown
-// without naming an object, so a value B "saw" never comes from reading A's
-// objects, which is the very thing being tested. created lists what each
-// account made, for a note.
+// (identityMarks). B reads only what it is shown without naming an object
+// (discover's topLevel). created lists what each account made, for a note.
 func (r *runner) discoverAccounts(ctx context.Context, ops []loader.Operation, a, b caller, ids map[string][]string) (ofA, ofB *discovery, created []string, err error) {
 	madeA, err := r.create(ctx, ops, a)
 	if err != nil {
@@ -54,12 +52,11 @@ func (r *runner) discoverAccounts(ctx context.Context, ops []loader.Operation, a
 // GET or a GET on one of its items (POST /notes next to GET /notes or GET
 // /notes/{id}), with the spec's example as the body. What it answers is
 // recorded like a read, under the collection's path, so the new object's
-// ID can fill /notes/{id} when nothing else can. Only collections: a POST /logout or
-// /reset-password has neither, and is never sent.
+// ID can fill /notes/{id} when nothing else can. Only collections: a POST
+// /logout or /reset-password has neither, and is never sent.
 func (r *runner) create(ctx context.Context, ops []loader.Operation, who caller) (made []createdObject, err error) {
 	for _, op := range ops {
-		if op.Method != http.MethodPost || strings.Contains(op.Path, "{") || op.Public || op.Body == nil || r.skip[op.Key()] ||
-			!isCollection(ops, op.Path) {
+		if !r.createsWith(ops, op) {
 			continue
 		}
 		exchange, body, err := r.sendFull(ctx, op, op.Path, who)
@@ -71,6 +68,14 @@ func (r *runner) create(ctx context.Context, ops []loader.Operation, who caller)
 		}
 	}
 	return made, nil
+}
+
+// createsWith reports whether create sends op: a POST not in test.skip, on
+// a collection with nothing in its path, that is not public and has an
+// example body.
+func (r *runner) createsWith(ops []loader.Operation, op loader.Operation) bool {
+	return op.Method == http.MethodPost && !strings.Contains(op.Path, "{") && !op.Public && op.Body != nil && !r.skip[op.Key()] &&
+		isCollection(ops, op.Path)
 }
 
 // createdObject is what an account's POST to a collection answered.
@@ -110,9 +115,7 @@ func identityMarks(mine, theirs *discovery) map[string]string {
 			own, other := mine.byPath[path][i], theirs.byPath[path][i]
 			for _, field := range sortedKeys(own) {
 				v := own[field]
-				idLike := strings.HasSuffix(field, "id") || strings.Contains(field, "user") || strings.Contains(field, "name") ||
-					strings.Contains(field, "email") || strings.Contains(field, "login")
-				if v != other[field] && v != "" && v != "true" && v != "false" && (len(v) >= minTelling || idLike) {
+				if v != other[field] && v != "" && v != "true" && v != "false" && (len(v) >= minTelling || idLike(field)) {
 					if _, seen := marks[v]; !seen {
 						marks[v] = path
 					}
@@ -121,6 +124,13 @@ func identityMarks(mine, theirs *discovery) map[string]string {
 		}
 	}
 	return marks
+}
+
+// idLike reports whether a normalized field name names an identity: it
+// ends in id, or holds user, name, email or login.
+func idLike(field string) bool {
+	return strings.HasSuffix(field, "id") || strings.Contains(field, "user") || strings.Contains(field, "name") ||
+		strings.Contains(field, "email") || strings.Contains(field, "login")
 }
 
 // discover calls who's reads (GET operations) and records what their
@@ -142,28 +152,35 @@ func (r *runner) discover(ctx context.Context, ops []loader.Operation, who calle
 	for progress := true; progress; {
 		progress = false
 		for i, op := range ops {
-			if done[i] || op.Method != http.MethodGet || (topLevel && (strings.Contains(op.Path, "{") || len(op.Query) > 0)) || r.skip[op.Key()] {
+			if done[i] || !r.discovers(op, topLevel) {
 				continue
 			}
 			f, err := h.fill(op.Path, op.Query)
 			if err != nil {
 				continue // not yet
 			}
-			path := f.path
 			done[i], progress = true, true
-			exchange, body, err := r.sendFull(ctx, op, path, who)
+			exchange, body, err := r.sendFull(ctx, op, f.path, who)
 			if err != nil {
 				return nil, err
 			}
-			key := op.Key()
-			d.cells[key] = cellOf(exchange, false)
+			d.cells[op.Key()] = cellOf(exchange, false)
 			if success(exchange) {
 				h.add(op.Path, body)
-				d.bodies[path] = body
+				d.bodies[f.path] = body
 			}
 		}
 	}
 	return d, nil
+}
+
+// discovers reports whether discover calls op: a GET not in test.skip
+// and, with topLevel, one with nothing in its path and no required query.
+func (r *runner) discovers(op loader.Operation, topLevel bool) bool {
+	if op.Method != http.MethodGet || r.skip[op.Key()] {
+		return false
+	}
+	return !topLevel || (!strings.Contains(op.Path, "{") && len(op.Query) == 0)
 }
 
 // discovery is what one caller's reads showed.

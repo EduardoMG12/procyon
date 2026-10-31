@@ -114,27 +114,8 @@ func Run(ctx context.Context, specPath string, opts Options) (report.Report, err
 	}
 
 	s := &session{runner: r, res: res, ofA: ofA, ofB: ofB, a: a, b: b, changed: changed, readers: readers(ops)}
-	firstDelete := slices.IndexFunc(ops, func(op loader.Operation) bool { return op.Method == http.MethodDelete })
-	if firstDelete < 0 {
-		firstDelete = len(ops)
-	}
-	for _, op := range ops[:firstDelete] {
-		if err := s.testOperation(ctx, op); err != nil {
-			return report.Report{}, err
-		}
-	}
-	noAnswer, err := s.malformedPass(ctx)
-	if err != nil {
+	if err := s.testInOrder(ctx, ops); err != nil {
 		return report.Report{}, err
-	}
-	for _, op := range ops[firstDelete:] {
-		if noAnswer {
-			s.skipAfterHang(op)
-			continue
-		}
-		if err := s.testOperation(ctx, op); err != nil {
-			return report.Report{}, err
-		}
 	}
 
 	if len(created) > 0 {
@@ -154,6 +135,35 @@ func Run(ctx context.Context, specPath string, opts Options) (report.Report, err
 	rep := finish(spec, res.findings, res.notes, opts.FailOn)
 	rep.Matrix = res.matrix
 	return rep, nil
+}
+
+// testInOrder is steps 5 to 7 of Run, on ops in test order (inTestOrder):
+// every read and write, then the malformed pass, then every delete, unless
+// the server stopped answering during the malformed pass.
+func (s *session) testInOrder(ctx context.Context, ops []loader.Operation) error {
+	firstDelete := slices.IndexFunc(ops, func(op loader.Operation) bool { return op.Method == http.MethodDelete })
+	if firstDelete < 0 {
+		firstDelete = len(ops)
+	}
+	for _, op := range ops[:firstDelete] {
+		if err := s.testOperation(ctx, op); err != nil {
+			return err
+		}
+	}
+	noAnswer, err := s.malformedPass(ctx)
+	if err != nil {
+		return err
+	}
+	for _, op := range ops[firstDelete:] {
+		if noAnswer {
+			s.skipAfterHang(op)
+			continue
+		}
+		if err := s.testOperation(ctx, op); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // finish turns a run's findings and notes into its report, the way a lint
