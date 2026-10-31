@@ -13,7 +13,7 @@ import (
 // The general describing and reference words, for Matches.
 var (
 	// Describing words, right after a matched word, mean the field
-	// describes the secret instead of holding it: passwordPolicy,
+	// describes the value instead of holding it: passwordPolicy,
 	// tokenExpiresAt, apiKeyId, senhaValidade. Only the next word counts:
 	// senhaEmTextoPlano still holds a password.
 	Describing = []string{
@@ -28,7 +28,7 @@ var (
 	}
 
 	// Reference words, right before a matched word, make it something other
-	// than a credential: nextPageToken and syncToken are paging cursors,
+	// than the value: nextPageToken and syncToken are paging cursors,
 	// csrfToken is meant to be handed to the page.
 	Reference = []string{
 		"page", "next", "previous", "prev", "continuation", "sync", "cursor",
