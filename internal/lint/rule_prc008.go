@@ -103,6 +103,48 @@ const (
 	unboundedCountFix = "Add maximum with the largest value the operation really needs."
 )
 
+// The words of a count's name, and the words around one that make it a
+// value rather than an amount of work.
+var (
+	// countWords name numbers that set how much work one request makes
+	// the server do: how many items, repeats or retries. words.Split cannot
+	// split an all-lowercase name, so pagesize and perpage are listed too.
+	countWords = [][]string{
+		{"limit"}, {"count"}, {"repeat"}, {"retry"}, {"retries"}, {"attempt"},
+		{"iteration"}, {"per", "page"}, {"perpage"}, {"page", "size"},
+		{"pagesize"}, {"batch", "size"}, {"batchsize"}, {"max", "results"},
+		{"maxresults"},
+		{"limite"}, {"repeticao"}, {"repeticoes"}, {"tentativa"},
+		{"por", "pagina"}, {"tamanho", "pagina"},
+	}
+
+	// countQueryWords are count words only in a query parameter (?top=,
+	// ?size=); in a body they are usually something else (marginTop,
+	// waterDepth, shoe size).
+	countQueryWords = [][]string{{"top"}, {"take"}, {"depth"}, {"size"}}
+
+	// countOrQueryWords are both lists, what a query parameter is checked
+	// against, joined once rather than on every check.
+	countOrQueryWords = slices.Concat(countWords, countQueryWords)
+
+	// countDescribingWords, right after a count word, make the field a
+	// value rather than an amount of work: limitPrice, retryAfter,
+	// repeatEvery, depthMeters.
+	countDescribingWords = []string{
+		"price", "amount", "value", "date", "time", "type", "id", "order", "reached",
+		"after", "every", "interval", "delay", "seconds", "minutes", "meters", "speed",
+		"preco", "valor", "data", "tipo", "intervalo", "metros",
+	}
+
+	// countReferenceWords, right before a count word, make it a stored
+	// value: creditLimit, rateLimit, stockCount, viewCount, marginTop.
+	countReferenceWords = []string{
+		"credit", "spending", "spend", "overdraft", "budget", "rate", "margin",
+		"padding", "stock", "view", "like", "follower", "bit", "color", "water",
+		"credito", "gasto", "estoque",
+	}
+)
+
 // unboundedCount reports whether a field or parameter is a number that sets
 // how much work a request makes (countWords, and countQueryWords for a query
 // parameter) and has no maximum.

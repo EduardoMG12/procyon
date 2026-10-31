@@ -58,6 +58,35 @@ var (
 	credentialTypes = []string{"string"}
 )
 
+// The words of a secret's name, by how a response may hold it.
+var (
+	// secretWords name values that must never appear in a response.
+	secretWords = [][]string{
+		{"password"}, {"passwd"}, {"passphrase"}, {"senha"},
+		{"private", "key"}, {"chave", "privada"},
+	}
+
+	// issuedSecretWords name values a server generates and shows once, in
+	// the response that creates or rotates them (a webhook's signing
+	// secret, an OAuth app's client secret), and never again.
+	issuedSecretWords = [][]string{{"secret"}, {"segredo"}}
+
+	// credentialWords name values an API legitimately hands out once (a
+	// login returns a token, creating a key returns the key) but that must
+	// never be readable again afterwards.
+	credentialWords = [][]string{
+		{"token"}, {"apikey"}, {"api", "key"}, {"access", "key"},
+	}
+
+	// credentialReferenceWords, right before a credential word, make it
+	// something other than a credential, on top of the general
+	// words.Reference: an identifier (uniqueToken, idempotencyToken), or a
+	// token made for the client to hold (EC2's ClientToken, an idempotency
+	// key the client chose; a payment widget's client_token). They do not
+	// apply to secretWords: clientSecret is a secret.
+	credentialReferenceWords = append(slices.Clone(words.Reference), "unique", "idempotency", "client")
+)
+
 // holdsSecret reports whether a response field of the operation method
 // path holds a secret: a secret word and a value of secretTypes (an issued
 // secret word too, unless the POST creates or rotates it), or, in a GET, a
