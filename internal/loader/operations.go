@@ -42,6 +42,15 @@ type Operation struct {
 	// OptionalQuery are the other query parameters, in the same order and
 	// with the same exception.
 	OptionalQuery []QueryParam
+	// spec is the operation as kin-openapi loaded it, for InResponse.
+	spec *openapi3.Operation
+}
+
+// InResponse reports whether a response schema of the operation declares
+// the field at path ("reviews.email"): the only fields an x-procyon-ignore
+// on it may name.
+func (o Operation) InResponse(path string) bool {
+	return o.spec != nil && inResponse(o.spec, path)
 }
 
 // QueryParam is one query parameter.
@@ -95,6 +104,7 @@ func (s *Spec) Operations() []Operation {
 			Fields:        bodyFields(op),
 			Query:         required,
 			OptionalQuery: optional,
+			spec:          op,
 		})
 	})
 	return ops
