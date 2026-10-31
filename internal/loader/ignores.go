@@ -26,83 +26,123 @@ const maxFieldDepth = 32
 
 // parseIgnores reads every x-procyon-ignore in the spec. A malformed entry
 // is an error: a typo must never silently ignore something. They are read
-// in a stable order (what lives in a map, by key), so the notes about them
-// and the error for a malformed one are the same on every run.
-//
-// An ignore on a security scheme also covers its OAuth2 flows. In a spec
-// converted from Swagger 2.0, an ignore at the root also covers the servers
-// (built from schemes and host, which cannot carry extensions).
+// in a stable order (see ignoreSites), so the notes about them and the
+// error for a malformed one are the same on every run.
 func parseIgnores(doc *openapi3.T, asGiven func(report.Location) report.Location, swagger bool, known func(string) bool) ([]report.Ignore, error) {
 	var ignores []report.Ignore
-	var firstErr error
-	// add parses the ignores written on one element.
-	add := func(ext map[string]any, origin *openapi3.Origin, operation string, hasField func(string) bool, where string, about ...any) {
-		if firstErr != nil {
-			return
+	for _, site := range ignoreSites(doc, swagger) {
+		more, err := parseIgnoreList(site, asGiven(LocateField(site.origin, ignoreKey)), known)
+		if err != nil {
+			return nil, err
 		}
-		more, err := parseIgnoreList(ext[ignoreKey], operation, hasField, asGiven(LocateField(origin, ignoreKey)), known)
-		for i := range more {
-			more[i].Elements, more[i].Where = about, where
-		}
-		ignores, firstErr = append(ignores, more...), err
+		ignores = append(ignores, more...)
 	}
-	root := []any{doc}
+	return ignores, nil
+}
+
+// ignoreSite is one element an x-procyon-ignore can be written on.
+type ignoreSite struct {
+	ext    map[string]any // the element's extensions, where the ignore is
+	origin *openapi3.Origin
+	// operation is the operation's key ("GET /orders") when the element is
+	// one, else "". hasField then tells the fields of its response an
+	// ignore may name; it is nil on any other element.
+	operation string
+	hasField  func(field string) bool
+	// where names an element other than an operation, for notes, and
+	// covers are the elements whose findings its ignores cover.
+	where  string
+	covers []any
+}
+
+// ignoreSites lists every element an ignore can be written on, in a stable
+// order (what lives in a map, by key): the spec's root, its servers, each
+// path's servers, each operation followed by its own servers, then each
+// security scheme followed by its OAuth2 flows. An ignore on a security scheme also covers its flows. In a
+// spec converted from Swagger 2.0, an ignore at the root also covers the
+// servers (built from schemes and host, which cannot carry extensions).
+func ignoreSites(doc *openapi3.T, swagger bool) []ignoreSite {
+	root := ignoreSite{ext: doc.Extensions, origin: doc.Origin, where: "the spec", covers: []any{doc}}
 	if swagger {
 		for _, server := range doc.Servers {
-			root = append(root, server)
+			root.covers = append(root.covers, server)
 		}
 	}
-	addServers := func(servers openapi3.Servers) {
-		for _, server := range servers {
-			add(server.Extensions, server.Origin, "", nil, "server "+server.URL, server)
-		}
-	}
-	add(doc.Extensions, doc.Origin, "", nil, "the spec", root...)
-	addServers(doc.Servers)
+	sites := append([]ignoreSite{root}, serverSites(doc.Servers)...)
 	if doc.Paths != nil {
 		paths := doc.Paths.Map()
 		for _, path := range slices.Sorted(maps.Keys(paths)) {
-			addServers(paths[path].Servers)
+			sites = append(sites, serverSites(paths[path].Servers)...)
 		}
 	}
 	ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-		add(op.Extensions, op.Origin, OperationKey(method, path), func(field string) bool { return inResponse(op, field) }, "")
+		sites = append(sites, ignoreSite{ext: op.Extensions, origin: op.Origin, operation: OperationKey(method, path),
+			hasField: func(field string) bool { return inResponse(op, field) }})
 		if op.Servers != nil {
-			addServers(*op.Servers)
+			sites = append(sites, serverSites(*op.Servers)...)
 		}
 	})
 	ForEachScheme(doc, func(name string, scheme *openapi3.SecurityScheme) {
-		covered := []any{scheme}
-		var flows []*openapi3.OAuthFlow
-		if f := scheme.Flows; f != nil {
-			flows = []*openapi3.OAuthFlow{f.Implicit, f.Password, f.ClientCredentials, f.AuthorizationCode}
+		flows := oauthFlows(scheme)
+		site := ignoreSite{ext: scheme.Extensions, origin: scheme.Origin, where: "security scheme " + name, covers: []any{scheme}}
+		for _, f := range flows {
+			site.covers = append(site.covers, f.flow)
 		}
-		for _, flow := range flows {
-			if flow != nil {
-				covered = append(covered, flow)
-			}
-		}
-		add(scheme.Extensions, scheme.Origin, "", nil, "security scheme "+name, covered...)
-		names := []string{"implicit", "password", "clientCredentials", "authorizationCode"}
-		for i, flow := range flows {
-			if flow != nil {
-				add(flow.Extensions, flow.Origin, "", nil, "the "+names[i]+" flow of "+name, flow)
-			}
+		sites = append(sites, site)
+		for _, f := range flows {
+			sites = append(sites, ignoreSite{ext: f.flow.Extensions, origin: f.flow.Origin,
+				where: "the " + f.name + " flow of " + name, covers: []any{f.flow}})
 		}
 	})
-	return ignores, firstErr
+	return sites
 }
 
-func parseIgnoreList(value any, operation string, hasField func(string) bool, loc report.Location, known func(string) bool) ([]report.Ignore, error) {
-	// Errors name the operation when there is one; otherwise the location
-	// says where.
+// serverSites makes a site of each server, named by its URL in notes.
+func serverSites(servers openapi3.Servers) []ignoreSite {
+	var sites []ignoreSite
+	for _, server := range servers {
+		sites = append(sites, ignoreSite{ext: server.Extensions, origin: server.Origin, where: "server " + server.URL, covers: []any{server}})
+	}
+	return sites
+}
+
+// namedFlow is one OAuth2 flow of a scheme, with its name in the spec.
+type namedFlow struct {
+	name string
+	flow *openapi3.OAuthFlow
+}
+
+// oauthFlows returns the OAuth2 flows a scheme defines, always in the same
+// order.
+func oauthFlows(scheme *openapi3.SecurityScheme) []namedFlow {
+	f := scheme.Flows
+	if f == nil {
+		return nil
+	}
+	var flows []namedFlow
+	for _, nf := range []namedFlow{
+		{"implicit", f.Implicit}, {"password", f.Password},
+		{"clientCredentials", f.ClientCredentials}, {"authorizationCode", f.AuthorizationCode},
+	} {
+		if nf.flow != nil {
+			flows = append(flows, nf)
+		}
+	}
+	return flows
+}
+
+// parseIgnoreList parses the ignores written on one site, found at loc.
+func parseIgnoreList(site ignoreSite, loc report.Location, known func(string) bool) ([]report.Ignore, error) {
+	value := site.ext[ignoreKey]
 	if value == nil {
 		return nil, nil
 	}
+	// Errors name the operation when there is one; otherwise the location
+	// says where.
 	fail := func(format string, args ...any) error {
 		where := ""
-		if operation != "" {
-			where = operation + ": "
+		if site.operation != "" {
+			where = site.operation + ": "
 		}
 		return fmt.Errorf("%s:%d:%d: %s%s: %s", loc.File, loc.Line, loc.Column, where, ignoreKey, fmt.Sprintf(format, args...))
 	}
@@ -121,7 +161,7 @@ func parseIgnoreList(value any, operation string, hasField func(string) bool, lo
 				return nil, fail("entry %d has an unknown key %q (use rule, reason, expires, field)", i+1, key)
 			}
 		}
-		ig := report.Ignore{Operation: operation, Location: loc}
+		ig := report.Ignore{Operation: site.operation, Location: loc, Elements: site.covers, Where: site.where}
 		ig.Rule, _ = fields["rule"].(string)
 		if known == nil || !known(ig.Rule) {
 			return nil, fail("entry %d: unknown rule %q", i+1, ig.Rule)
@@ -141,9 +181,9 @@ func parseIgnoreList(value any, operation string, hasField func(string) bool, lo
 		if raw, set := fields["field"]; set {
 			ig.Field, _ = raw.(string)
 			switch {
-			case hasField == nil:
+			case site.hasField == nil:
 				return nil, fail("entry %d (%s): field names a field of an operation's response, so it is only for an ignore on an operation", i+1, ig.Rule)
-			case ig.Field == "" || !hasField(ig.Field):
+			case ig.Field == "" || !site.hasField(ig.Field):
 				return nil, fail("entry %d (%s): field %q is no field of the operation's response schema "+
 					"(a nested field is written reviews.email)", i+1, ig.Rule, fmt.Sprint(raw))
 			}
