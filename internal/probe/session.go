@@ -52,7 +52,7 @@ func (s *session) testOperation(ctx context.Context, op loader.Operation) error 
 		s.res.matrix = append(s.res.matrix, row)
 		return nil
 	}
-	f, err := s.ofA.fill(op.Path)
+	f, err := s.ofA.fill(op.Path, op.Query)
 	if err != nil {
 		s.res.note(op.Location, fmt.Sprintf("%s not tested: %v in A's responses; declare one under test.ids in .procyon.yaml", key, err))
 		s.res.matrix = append(s.res.matrix, skippedRow(key))

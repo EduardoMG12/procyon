@@ -61,6 +61,7 @@ func New(fixed bool) http.Handler {
 	mux.HandleFunc("GET /notes/{id}", s.get)
 	mux.HandleFunc("PUT /notes/{id}", s.update)
 	mux.HandleFunc("DELETE /notes/{id}", s.delete)
+	mux.HandleFunc("GET /owner-notes", s.ofOwner)
 	return mux
 }
 
@@ -123,14 +124,41 @@ func (s *server) list(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	writeJSON(w, http.StatusOK, s.notesOf(user))
+}
+
+// notesOf returns owner's notes, or every note when owner is "", in ID
+// order so responses are stable. The caller holds the lock.
+func (s *server) notesOf(owner string) []*note {
 	notes := []*note{}
-	for i := 1; i <= s.nextID; i++ { // in ID order, so responses are stable
+	for i := 1; i <= s.nextID; i++ {
 		n := s.notes[strconv.Itoa(i)]
-		if n != nil && (user == "" || n.Owner == user) {
+		if n != nil && (owner == "" || n.Owner == owner) {
 			notes = append(notes, n)
 		}
 	}
-	writeJSON(w, http.StatusOK, notes)
+	return notes
+}
+
+// ofOwner returns the notes of the user the owner query parameter names.
+//
+// Vulnerable (PRC102): any authenticated caller gets anyone's notes.
+func (s *server) ofOwner(w http.ResponseWriter, r *http.Request) {
+	user, owner := caller(r), r.URL.Query().Get("owner")
+	switch {
+	case user == "":
+		writeJSON(w, http.StatusUnauthorized, errorBody("missing or unknown token"))
+		return
+	case owner == "":
+		writeJSON(w, http.StatusBadRequest, errorBody("the owner query parameter is required"))
+		return
+	case s.fixed && owner != user:
+		writeJSON(w, http.StatusNotFound, errorBody("no such owner"))
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	writeJSON(w, http.StatusOK, s.notesOf(owner))
 }
 
 // create stores a note for the caller.

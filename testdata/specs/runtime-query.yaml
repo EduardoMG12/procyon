@@ -1,0 +1,32 @@
+openapi: 3.0.3
+info:
+  title: Required query parameters, and where their examples come from
+  version: "1"
+paths:
+  /search:
+    parameters:
+      - {name: owner, in: query, required: true, schema: {type: string}}
+    get:
+      parameters:
+        - {name: q, in: query, required: true, example: raccoon, schema: {type: string}}
+        - {name: page, in: query, required: true, schema: {type: integer, example: 2}}
+        - name: kind
+          in: query
+          required: true
+          examples:
+            zebra: {value: zebra}
+            alpha: {value: alpha}
+          schema: {type: string}
+        - {name: sort, in: query, schema: {type: string}, example: name}
+        - {name: api_key, in: query, required: true, schema: {type: string}}
+        - {name: X-Trace, in: header, required: true, schema: {type: string}}
+      responses: {"200": {description: ok}}
+  /signed:
+    get:
+      security: [{key: []}]
+      parameters:
+        - {name: key, in: query, required: true, schema: {type: string}}
+      responses: {"200": {description: ok}}
+components:
+  securitySchemes:
+    key: {type: apiKey, in: query, name: key}

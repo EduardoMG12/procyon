@@ -26,14 +26,15 @@ Two seeded test accounts, by bearer token:
 | PRC102 | `GET /notes/{id}` | B reads A's note | `404` |
 | PRC102 | `PUT /notes/{id}` | B changes A's note | `404` |
 | PRC102 | `DELETE /notes/{id}` | B deletes A's note | `404` |
+| PRC102 | `GET /owner-notes?owner=` | B lists A's notes by naming A in the query | `404` |
 | PRC103 | `POST`, `PUT /notes…` | a body that is not a note (`{"title": 42}`) gives a `500` | `400` |
 | PRC104 | `POST`, `PUT /notes…` | a missing `title`, or a `title` or `body` past its `maxLength`, is accepted | `400` |
 
 Not vulnerable in either: `GET /health` and `POST /login` (public on purpose), `GET /me`, and
 anonymous calls to every other operation (`401`).
 
-`procyon lint openapi.yaml` reports one low finding (PRC008: `GET /notes`
-has no paging), and nothing about the vulnerabilities above. That is the
+`procyon lint openapi.yaml` reports two low findings (PRC008: `GET /notes`
+and `GET /owner-notes` have no paging), and nothing about the vulnerabilities above. That is the
 point: none of them shows in the spec.
 
 ## Running it

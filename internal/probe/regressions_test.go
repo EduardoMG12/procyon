@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/EduardoMG12/procyon/internal/report"
 )
 
 // writeSpec writes a spec into a temporary directory and returns its path.
@@ -130,4 +132,25 @@ func TestBudgetGrowsWithTheSpec(t *testing.T) {
 		w.Write([]byte(`{}`))
 	})
 	runOn(t, writeSpec(t, b.String()), handler, Options{}) // runOn fails the test on an error
+}
+
+// A required query parameter no response shows and the spec gives no
+// example for is never sent missing: the operation is a note, and a
+// skipped row.
+func TestUnfilledQueryParameterIsANote(t *testing.T) {
+	spec := writeSpec(t, bearerSpec+`  /notes:
+    get:
+      parameters: [{name: owner, in: query, required: true, schema: {type: string}}]
+      responses: {"200": {description: ok}}
+`)
+	var sent []string
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sent = append(sent, r.URL.RequestURI())
+	})
+	rep := runOn(t, spec, handler, Options{})
+	want := "GET /notes not tested: no value for query parameter owner in A's responses; declare one under test.ids in .procyon.yaml"
+	if len(sent) != 0 || !slices.ContainsFunc(rep.Notes, func(n report.Note) bool { return n.Message == want }) ||
+		len(rep.Matrix) != 1 || rep.Matrix[0].A.Outcome != report.Skipped {
+		t.Errorf("sent %q, notes %v, matrix %+v; want nothing sent, the note and a skipped row", sent, rep.Notes, rep.Matrix)
+	}
 }

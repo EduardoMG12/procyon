@@ -71,7 +71,7 @@ func (s *session) readAsB(ctx context.Context, op loader.Operation, f filled) (v
 // holds ("active", a type, a year): they are not A's data. It only can when
 // Procyon knows which object is B's (B's identity marks one).
 func (s *session) withoutBsOwn(ctx context.Context, op loader.Operation, asked string, shared []string) ([]string, error) {
-	own, err := s.ofB.fill(op.Path)
+	own, err := s.ofB.fill(op.Path, op.Query)
 	if err != nil || !own.own || own.path == asked {
 		return shared, nil
 	}

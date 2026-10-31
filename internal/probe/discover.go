@@ -132,20 +132,20 @@ func identityMarks(mine, theirs *discovery) map[string]string {
 //
 // It also returns what each read got, by operation, for the matrix.
 //
-// With topLevel, only reads with nothing in their path are called: what a
-// caller sees without naming an object. B's discovery is that, so a value B
-// "saw" never comes from reading A's objects, which is the very thing being
-// tested.
+// With topLevel, only reads with nothing in their path and no required
+// query are called: what a caller sees without naming an object. B's
+// discovery is that, so a value B "saw" never comes from reading A's
+// objects, which is the very thing being tested.
 func (r *runner) discover(ctx context.Context, ops []loader.Operation, who caller, h *harvest, topLevel bool) (*discovery, error) {
 	d := &discovery{harvest: h, cells: map[string]report.Cell{}, bodies: map[string][]byte{}}
 	done := make([]bool, len(ops))
 	for progress := true; progress; {
 		progress = false
 		for i, op := range ops {
-			if done[i] || op.Method != http.MethodGet || (topLevel && strings.Contains(op.Path, "{")) || r.skip[op.Key()] {
+			if done[i] || op.Method != http.MethodGet || (topLevel && (strings.Contains(op.Path, "{") || len(op.Query) > 0)) || r.skip[op.Key()] {
 				continue
 			}
-			f, err := h.fill(op.Path)
+			f, err := h.fill(op.Path, op.Query)
 			if err != nil {
 				continue // not yet
 			}

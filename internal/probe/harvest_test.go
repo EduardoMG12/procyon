@@ -27,7 +27,7 @@ func TestHarvestFillsPathParameters(t *testing.T) {
 		{"/payments/{paymentId}", "", "no value for {paymentId}"},
 	}
 	for _, tt := range tests {
-		f, err := h.fill(tt.path)
+		f, err := h.fill(tt.path, nil)
 		got := f.path
 		if tt.err != "" {
 			if err == nil || err.Error() != tt.err {
@@ -41,12 +41,34 @@ func TestHarvestFillsPathParameters(t *testing.T) {
 	}
 }
 
+// A required query parameter is filled like a path parameter, else with
+// the spec's example; only a value from a response names an object.
+func TestHarvestFillsQueryParameters(t *testing.T) {
+	h := newHarvest(nil)
+	h.add("/notes", []byte(`[{"id": "7", "owner": "ana maria"}]`))
+	owner := loader.QueryParam{Name: "owner", Example: "someone"}
+	page := loader.QueryParam{Name: "page", Example: "1"}
+
+	f, err := h.fill("/notes/{id}/copies", []loader.QueryParam{page, owner})
+	if err != nil || f.path != "/notes/7/copies?owner=ana+maria&page=1" || !slices.Equal(f.values, []string{"7", "ana maria"}) {
+		t.Errorf("fill = %+v, %v; want owner from /notes, page from the example, and both path and owner as values", f, err)
+	}
+	// Not the parent collection's "id": a query parameter has none.
+	if f, err := h.fill("/notes", []loader.QueryParam{{Name: "noteId", Example: "x"}}); err != nil || f.path != "/notes?noteId=x" {
+		t.Errorf("fill = %+v, %v; want the example", f, err)
+	}
+	if _, err := h.fill("/search", []loader.QueryParam{{Name: "q"}}); err == nil || err.Error() != "no value for query parameter q" {
+		t.Errorf("err = %v, want no value for q", err)
+	}
+}
+
 // discover calls a read as soon as an earlier response gave it a value,
-// however the operations are ordered.
+// however the operations are ordered. A top-level discovery (B's) calls
+// only reads that name no object, in the path or the query.
 func TestDiscoverFollowsDependencies(t *testing.T) {
 	var calls []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls = append(calls, r.URL.Path)
+		calls = append(calls, r.URL.RequestURI())
 		switch r.URL.Path {
 		case "/projects":
 			w.Write([]byte(`[{"id": "p1"}]`))
@@ -60,6 +82,7 @@ func TestDiscoverFollowsDependencies(t *testing.T) {
 		{Method: "GET", Path: "/projects/{id}"},
 		{Method: "GET", Path: "/projects"},
 		{Method: "DELETE", Path: "/projects/{id}"}, // never called while discovering
+		{Method: "GET", Path: "/search", Query: []loader.QueryParam{{Name: "q", Example: "x"}}},
 	}
 	target, err := checkTarget(context.Background(), srv.URL, lookupHost)
 	if err != nil {
@@ -69,9 +92,16 @@ func TestDiscoverFollowsDependencies(t *testing.T) {
 	if _, err := r.discover(context.Background(), ops, caller{name: "A"}, newHarvest(nil), false); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"/projects", "/projects/p1", "/owners/u7"}
+	want := []string{"/projects", "/search?q=x", "/projects/p1", "/owners/u7"}
 	if !slices.Equal(calls, want) {
 		t.Errorf("calls = %q, want %q", calls, want)
+	}
+	calls = nil
+	if _, err := r.discover(context.Background(), ops, caller{name: "B"}, newHarvest(nil), true); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(calls, []string{"/projects"}) {
+		t.Errorf("top-level calls = %q, want only /projects", calls)
 	}
 }
 
@@ -80,7 +110,7 @@ func TestDiscoverFollowsDependencies(t *testing.T) {
 func TestDeclaredIDsAreDeterministic(t *testing.T) {
 	for range 20 {
 		h := newHarvest(map[string][]string{"order_id": {"a"}, "orderId": {"b"}})
-		if f, _ := h.fill("/o/{orderId}"); f.path != "/o/b" {
+		if f, _ := h.fill("/o/{orderId}", nil); f.path != "/o/b" {
 			t.Fatalf("fill = %q, want /o/b (orderId sorts before order_id)", f.path)
 		}
 	}
@@ -91,12 +121,12 @@ func TestDeclaredIDsAreDeterministic(t *testing.T) {
 func TestPickPrefersAsOwnObject(t *testing.T) {
 	h := newHarvest(nil)
 	h.add("/books", []byte(`[{"title": "bobs-book", "user": "bob"}, {"title": "alices-book", "user": "alice"}]`))
-	f, err := h.fill("/books/{title}")
+	f, err := h.fill("/books/{title}", nil)
 	if err != nil || f.path != "/books/bobs-book" || f.own {
 		t.Errorf("without an identity: %+v, %v; want the first book, not known to be own", f, err)
 	}
 	h.identity = map[string]string{"alice": "/me"}
-	if f, _ := h.fill("/books/{title}"); f.path != "/books/alices-book" || !f.own {
+	if f, _ := h.fill("/books/{title}", nil); f.path != "/books/alices-book" || !f.own {
 		t.Errorf("with A's identity: %+v; want alice's book, own", f)
 	}
 }
