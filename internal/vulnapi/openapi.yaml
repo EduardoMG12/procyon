@@ -177,6 +177,19 @@ paths:
           description: Deleted.
         "404":
           description: No such note, or not the caller's.
+  /notes/{id}/preview:
+    parameters:
+      - $ref: "#/components/parameters/NoteID"
+    get:
+      operationId: previewNote
+      responses:
+        "200":
+          description: The note's title and the start of its body.
+          content:
+            application/json:
+              schema: {type: object, properties: {id: {type: string, maxLength: 20}, title: {type: string, maxLength: 100}, start: {type: string, maxLength: 20}}}
+        "404":
+          description: No such note, or not the caller's.
   /owner-notes:
     get:
       operationId: listNotesOfOwner

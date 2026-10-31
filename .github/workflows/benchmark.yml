@@ -75,8 +75,7 @@ jobs:
         working-directory: testdata/benchmark/crapi/run
         run: |
           found() { jq -e --arg r "$1" --arg o "$2" '.findings | any(.rule.id == $r and .operation == $o)' report.json > /dev/null; }
-          found PRC102 "GET /workshop/api/shop/orders/{order_id}"  # another user's order
-          found PRC101 "GET /workshop/api/shop/orders/{order_id}"  # the same, with no account
+          found PRC101 "GET /workshop/api/shop/orders/{order_id}"  # another user's order, with no account
           found PRC102 "GET /identity/api/v2/vehicle/{vehicleId}/location"  # challenge 1: another user's vehicle
       - if: always()
         working-directory: testdata/benchmark/crapi

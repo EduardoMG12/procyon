@@ -59,6 +59,7 @@ func New(fixed bool) http.Handler {
 	mux.HandleFunc("GET /notes/{id}", s.get)
 	mux.HandleFunc("PUT /notes/{id}", s.update)
 	mux.HandleFunc("DELETE /notes/{id}", s.delete)
+	mux.HandleFunc("GET /notes/{id}/preview", s.preview)
 	mux.HandleFunc("GET /owner-notes", s.ofOwner)
 	mux.HandleFunc("GET /menu", s.menu)
 	mux.HandleFunc("GET /orders", s.listOrders)
@@ -152,6 +153,37 @@ func (s *server) get(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	writeJSON(w, http.StatusOK, n)
+}
+
+// preview returns a note's title and the start of its body.
+//
+// Vulnerable (PRC101): anyone gets any note's preview, with no token. B
+// gets it too, but that is no PRC102: the anonymous caller already did.
+func (s *server) preview(w http.ResponseWriter, r *http.Request) {
+	if s.fixed {
+		n, ok := s.find(w, r)
+		if !ok {
+			return
+		}
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		writeJSON(w, http.StatusOK, previewOf(n))
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := s.notes[r.PathValue("id")]
+	if n == nil {
+		writeJSON(w, http.StatusNotFound, errorBody("no such note"))
+		return
+	}
+	writeJSON(w, http.StatusOK, previewOf(n))
+}
+
+// previewOf is a note's title and the first 20 bytes of its body. The
+// caller holds the lock.
+func previewOf(n *note) map[string]string {
+	return map[string]string{"id": n.ID, "title": n.Title, "start": n.Body[:min(len(n.Body), 20)]}
 }
 
 // update replaces a note's title and body.

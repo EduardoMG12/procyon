@@ -20,9 +20,9 @@ problem · **✗ v0.2** needs the running API · **✗ spec** not visible in the
 nothing of their own; each creates a post, an order and a product first.
 It finds that **another account reads A's vehicle location** (challenge 1;
 PRC102 on `GET /identity/api/v2/vehicle/{vehicleId}/location`), that **an
-anonymous caller and another account both read A's order, with A's email
-and phone** (PRC101 and PRC102 on `GET
-/workshop/api/shop/orders/{order_id}`), and that several bodies the spec
+anonymous caller reads A's order, with A's email and phone** (PRC101 on
+`GET /workshop/api/shop/orders/{order_id}`; another account reads it too,
+which is no PRC102 when anyone can), and that several bodies the spec
 forbids are accepted (PRC104). The setup gives each account its vehicle
 with the code crAPI e-mails it, and declares A's vehicle ID: crAPI calls
 it `uuid` in its list, which the spec does not tie to `{vehicleId}`.

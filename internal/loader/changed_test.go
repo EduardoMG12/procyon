@@ -15,7 +15,7 @@ func TestChanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The base has no /health, and NoteInput's title allowed 200 characters.
+	// The base has no /health nor /notes/{id}/preview, and NoteInput's title allowed 200 characters.
 	base, err := Load("../../testdata/specs/runtime-notes-base.yaml", anyRule)
 	if err != nil {
 		t.Fatal(err)
@@ -29,7 +29,7 @@ func TestChanged(t *testing.T) {
 		}
 	})
 	// POST /notes and PUT /notes/{id} reference NoteInput through $ref.
-	want := []string{"GET /health", "POST /notes", "PUT /notes/{id}"}
+	want := []string{"GET /health", "GET /notes/{id}/preview", "POST /notes", "PUT /notes/{id}"}
 	if !slices.Equal(got, want) {
 		t.Errorf("changed = %q, want %q", got, want)
 	}

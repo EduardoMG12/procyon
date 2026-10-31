@@ -36,6 +36,7 @@ func TestRunFindsThePlantedVulnerabilities(t *testing.T) {
 		"PRC103 POST /notes", "PRC104 POST /notes",
 		"PRC102 GET /notes/{id}", "PRC102 PUT /notes/{id}", "PRC103 PUT /notes/{id}", "PRC104 PUT /notes/{id}",
 		"PRC102 DELETE /notes/{id}",
+		"PRC101 GET /notes/{id}/preview", // and no PRC102: the anonymous caller read it too
 		"PRC102 GET /owner-notes",
 		"PRC102 GET /orders/{orderId}", // though B saw its ID as a menu item's
 	}
@@ -257,6 +258,7 @@ func TestRunFillsTheAuthorizationMatrix(t *testing.T) {
 		"GET /menu A=allowed 200 B= 0 anon=denied 401",
 		"GET /notes A=allowed 200 B= 0 anon=finding 200",
 		"GET /notes/{id} A=allowed 200 B=finding 200 anon=denied 401",
+		"GET /notes/{id}/preview A=allowed 200 B=public 0 anon=finding 200",
 		"GET /orders A=allowed 200 B= 0 anon=denied 401",
 		"GET /orders/{orderId} A=allowed 200 B=finding 200 anon=denied 401",
 		"GET /owner-notes A=allowed 200 B=finding 200 anon=denied 401",
@@ -308,8 +310,9 @@ func TestRunWithABaseSpecTestsOnlyChangedOperations(t *testing.T) {
 	rep := runOn(t, vulnapiSpec, vulnapi.New(false), Options{BaseSpec: "../../testdata/specs/runtime-notes-base.yaml"})
 	got := findingKeys(rep)
 	// GET /notes (PRC101), GET and DELETE /notes/{id}, GET /owner-notes and
-	// the shop did not change.
-	want := []string{"PRC103 POST /notes", "PRC104 POST /notes", "PRC102 PUT /notes/{id}", "PRC103 PUT /notes/{id}", "PRC104 PUT /notes/{id}"}
+	// the shop did not change; GET /notes/{id}/preview is new.
+	want := []string{"PRC103 POST /notes", "PRC104 POST /notes", "PRC102 PUT /notes/{id}", "PRC103 PUT /notes/{id}", "PRC104 PUT /notes/{id}",
+		"PRC101 GET /notes/{id}/preview"}
 	if !slices.Equal(got, want) {
 		t.Errorf("findings %q, want %q", got, want)
 	}
@@ -319,7 +322,7 @@ func TestRunWithABaseSpecTestsOnlyChangedOperations(t *testing.T) {
 			skipped++
 		}
 	}
-	if skipped != 9 || !slices.ContainsFunc(rep.Notes, func(n report.Note) bool { return strings.Contains(n.Message, "9 of 12 operations unchanged") }) {
+	if skipped != 9 || !slices.ContainsFunc(rep.Notes, func(n report.Note) bool { return strings.Contains(n.Message, "9 of 13 operations unchanged") }) {
 		t.Errorf("skipped rows %d, notes %v; want 9 and the unchanged note", skipped, rep.Notes)
 	}
 }
@@ -401,7 +404,7 @@ func TestNoPRC102OnObjectsEveryoneMayRead(t *testing.T) {
 					w.WriteHeader(http.StatusUnauthorized)
 				case r.URL.Path == "/me":
 					fmt.Fprintf(w, `{"name": %q}`, user)
-				case !strings.HasPrefix(r.URL.Path, "/notes"): // this API has only notes
+				case !strings.HasPrefix(r.URL.Path, "/notes") || strings.HasSuffix(r.URL.Path, "/preview"): // this API has only notes
 					w.WriteHeader(http.StatusNotFound)
 				case r.URL.Path == "/notes" && strings.Contains(answer, "%s") && user == "bob":
 					w.Write([]byte(`[{"id": "3", "owner": "bob"}]`)) // A's IDs unseen by B: only the echo filter stops it
