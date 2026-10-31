@@ -152,7 +152,7 @@ const (
 	Denied    Outcome = "denied"    // not a 2xx, nor a 5xx
 	Failed    Outcome = "error"     // a 5xx: the server failed, which says nothing about who may call it
 	Reached   Outcome = "finding"   // a 2xx that is a finding (PRC101, PRC102)
-	Public    Outcome = "public"    // x-procyon-public, not called anonymously
+	Public    Outcome = "public"    // x-procyon-public, not called anonymously; for B, a read the anonymous caller got too, so B is not called
 	Skipped   Outcome = "skipped"   // could not be called; a note says why
 	Unchanged Outcome = "unchanged" // not tested: unchanged since --base-spec
 )

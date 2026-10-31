@@ -62,7 +62,13 @@ func (s *session) testOperation(ctx context.Context, op loader.Operation) error 
 		return err
 	}
 	s.queueMalformed(op, f.path)
-	if len(f.values) > 0 { // an object in the path: one of A's to reach
+	switch {
+	case len(f.values) == 0: // no object in the path: none of A's to reach
+	case op.Method == http.MethodGet && row.Anonymous.Status >= 200 && row.Anonymous.Status < 300:
+		// The anonymous caller read A's object: anyone may, so B reading
+		// it is no PRC102. B is not called, and its cell says why.
+		row.B = report.Cell{Outcome: report.Public}
+	default:
 		if row.B, err = s.asB(ctx, op, f); err != nil {
 			return err
 		}

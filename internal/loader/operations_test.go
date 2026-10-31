@@ -32,6 +32,7 @@ func TestLoadListsOperationsInOrder(t *testing.T) {
 		"DELETE /notes/{id}",
 		"GET /notes/{id}",
 		"PUT /notes/{id}",
+		"GET /notes/{id}/preview",
 		"GET /orders",
 		"GET /orders/{orderId}",
 		"GET /owner-notes",

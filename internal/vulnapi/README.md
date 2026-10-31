@@ -27,6 +27,7 @@ Two seeded test accounts, by bearer token:
 | PRC102 | `PUT /notes/{id}` | B changes A's note | `404` |
 | PRC102 | `DELETE /notes/{id}` | B deletes A's note | `404` |
 | PRC102 | `GET /orders/{orderId}` | B reads A's order `1`, though B sees `1` as a menu item's ID | `404` |
+| PRC101 | `GET /notes/{id}/preview` | an anonymous caller gets any note's preview; B gets it too, and that is no PRC102 | `401`, and `404` to B |
 | PRC102 | `GET /owner-notes?owner=` | B lists A's notes by naming A in the query | `404` |
 | PRC103 | `POST`, `PUT /notes…` | a body that is not a note (`{"title": 42}`) gives a `500` | `400` |
 | PRC104 | `POST`, `PUT /notes…` | a missing `title`, or a `title` or `body` past its `maxLength`, is accepted | `400` |
