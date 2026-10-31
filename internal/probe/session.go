@@ -69,7 +69,7 @@ func (s *session) testOperation(ctx context.Context, op loader.Operation) error 
 		// is a finding. B is not called, and its cell says why.
 		row.B = report.Cell{Outcome: report.Public}
 	case s.isList(op): // a list or search: A's objects in B's own list (PRC108)
-		if row.B, err = s.listLeak(ctx, op); err != nil {
+		if row.B, err = s.listLeak(ctx, op, f.path); err != nil {
 			return err
 		}
 		if row.B.Outcome != report.Reached && len(f.values) > 0 {
