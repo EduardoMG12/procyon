@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/EduardoMG12/procyon/internal/loader"
 	"github.com/EduardoMG12/procyon/internal/report"
@@ -103,21 +102,6 @@ func (r *runner) sendWith(ctx context.Context, op loader.Operation, path string,
 		exchange.Sent = r.excerpt(string(op.Body))
 	}
 	return exchange, got, resp, nil
-}
-
-// excerpt is the start of a body for evidence, every token masked. Masked
-// before it is cut: a token across the cut would otherwise leave its first
-// characters unmasked.
-func (r *runner) excerpt(body string) string {
-	masked := mask(body, r.tokens...)
-	if len(masked) <= maxBody {
-		return masked
-	}
-	end := maxBody
-	for end > 0 && !utf8.RuneStart(masked[end]) {
-		end-- // never cut a character in half
-	}
-	return masked[:end]
 }
 
 // urlFor is where path is sent: after the target's own base path. path is

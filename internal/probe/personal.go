@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
-	"strings"
 	"unicode"
 
 	"github.com/EduardoMG12/procyon/internal/lint"
@@ -46,26 +45,6 @@ func personalData(op loader.Operation, exchange report.Exchange, body []byte) []
 		})
 	}
 	return findings
-}
-
-// maskCut masks values in excerpt, the start of an answer already cut for
-// evidence. A token is masked before the cut (runner.excerpt), but a list
-// of a thousand customers would then be searched a thousand times; values
-// are masked in the excerpt only, and the start of a value the cut split
-// in two is dropped from its end.
-func maskCut(excerpt string, values []string) string {
-	excerpt = mask(excerpt, values...)
-	for _, v := range values {
-		for _, form := range forms(v) {
-			for n := len(form) - 1; n > 0; n-- { // a whole form is masked already
-				if strings.HasSuffix(excerpt, form[:n]) {
-					excerpt = excerpt[:len(excerpt)-n]
-					break
-				}
-			}
-		}
-	}
-	return excerpt
 }
 
 // personalValue is one value of an answer that is personal data.

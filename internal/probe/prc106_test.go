@@ -70,17 +70,3 @@ func TestPRC106OnAProtectedOperation(t *testing.T) {
 		}
 	}
 }
-
-// Values are masked in the excerpt, after the cut: a value the cut split
-// in two leaves nothing of itself, in any form.
-func TestMaskCut(t *testing.T) {
-	for excerpt, want := range map[string]string{
-		`{"email": "ana@example.com", "phone": "+55 11`: `{"email": "****", "phone": "`,
-		`{"cnpj": "12.345.678\/00`:                      `{"cnpj": "`,
-		`{"name": "Ana"}`:                               `{"name": "Ana"}`,
-	} {
-		if got := maskCut(excerpt, []string{"ana@example.com", "+55 11 3333-4444", "12.345.678/0001-90"}); got != want {
-			t.Errorf("maskCut(%s) = %s, want %s", excerpt, got, want)
-		}
-	}
-}
