@@ -5,7 +5,8 @@
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 **Automatic security QA for APIs, from their OpenAPI spec.** No test cases to
-write: Procyon already knows what every API must not allow.
+write: Procyon checks the rules every API must keep, such as who may call
+what and who may read whose data.
 
 - **`procyon lint`** reads the spec and reports holes in the API's design:
   operations without authentication, secrets in responses, personal data
@@ -17,6 +18,12 @@ write: Procyon already knows what every API must not allow.
 Both run in CI and fail the build before the problem ships. One Go binary,
 for an API written in any language: Procyon reads the spec and talks HTTP,
 never your source code.
+
+**What it is not.** Procyon checks authorization and exposure against what
+the spec describes. It does not know your business rules (that a search
+must filter by the phone the caller proved, that changing an e-mail must
+ask for it to be confirmed again), and it cannot test routes the spec
+leaves out. It complements a code review; it does not replace one.
 
 ## Why
 
