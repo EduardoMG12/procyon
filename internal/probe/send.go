@@ -25,6 +25,7 @@ func (e *requestError) Unwrap() error { return e.err }
 
 // runner holds what every request of a run shares.
 type runner struct {
+	spec   *loader.Spec // the spec under test, for what it documents
 	client *client
 	target *url.URL
 	tokens []string        // every token, to mask in evidence
