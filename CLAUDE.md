@@ -105,7 +105,7 @@ fixed a crash and a denial of service, and removed duplicated code
 (#137–#150), released as v0.2.2. Then local runs against 85 public specs,
 7 deliberately vulnerable APIs and the owner's APIs found 12 bugs
 (#153–#164), fixed in #165–#176, and the code was refactored again
-(#178–#192); v0.2.3 is not tagged yet. A pushed `v*` tag builds, and
+(#178–#192), released as v0.2.3. A pushed `v*` tag builds, and
 publishing waits for the owner's approval in the `release` environment
 (#152). Packages: `report` (model + engine),
 `loader` (specs, and the tests of what a spec may read), `lint` (rules),
