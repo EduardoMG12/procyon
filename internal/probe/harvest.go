@@ -126,43 +126,64 @@ func walk(v any, fn func(value string)) {
 // be own, and a declared value, when there is one, is preferred to it.
 func (h *harvest) pick(path, param string) (value string, own, ok bool) {
 	key := normalize(param)
-	choose := func(from string, fields ...string) (string, bool, bool) {
-		first := ""
-		for _, field := range fields {
-			for _, o := range h.byPath[from] {
-				v, has := o[field]
-				if !has {
-					continue
-				}
-				if first == "" {
-					first = v
-				}
-				for _, value := range o {
-					if source, mark := h.identity[value]; mark && source != from {
-						return v, true, true
-					}
-				}
-			}
-			if first != "" {
-				return first, false, true
-			}
-		}
-		return "", false, false
-	}
-	// A query parameter is not in the path: it has no parent collection.
-	if parent, _, inPath := strings.Cut(path, "/{"+param+"}"); inPath {
-		value, own, ok = choose(parent, key, "id")
+	if parent, inPath := parentOf(path, param); inPath {
+		value, own, ok = h.choose(parent, key, "id")
 	}
 	for _, p := range sortedKeys(h.byPath) {
 		if ok {
 			break
 		}
-		value, own, ok = choose(p, key)
+		value, own, ok = h.choose(p, key)
 	}
 	if declared := h.declared[key]; len(declared) > 0 && !own {
 		return declared[0], true, true
 	}
 	return value, own, ok
+}
+
+// parentOf is the collection above parameter param of path: /notes for
+// {id} in /notes/{id}. A query parameter is not in the path, and has none.
+func parentOf(path, param string) (parent string, inPath bool) {
+	parent, _, inPath = strings.Cut(path, "/{"+param+"}")
+	return parent, inPath
+}
+
+// choose is pick's choice among the objects seen at path from: the value
+// of the first of fields that any of them holds (an empty value is none),
+// taken from the account's own object (ownObject) when one has it, else
+// from the first object that has it.
+func (h *harvest) choose(from string, fields ...string) (value string, own, ok bool) {
+	for _, field := range fields {
+		first := ""
+		for _, o := range h.byPath[from] {
+			v, has := o[field]
+			if !has {
+				continue
+			}
+			if h.ownObject(o, from) {
+				return v, true, true
+			}
+			if first == "" {
+				first = v
+			}
+		}
+		if first != "" {
+			return first, false, true
+		}
+	}
+	return "", false, false
+}
+
+// ownObject reports whether o, seen at path from, holds an identity value
+// that came from another path: a book whose "user" is the username GET /me
+// showed is the account's own.
+func (h *harvest) ownObject(o object, from string) bool {
+	for _, value := range o {
+		if source, mark := h.identity[value]; mark && source != from {
+			return true
+		}
+	}
+	return false
 }
 
 func sortedKeys[V any](m map[string]V) []string {
@@ -187,6 +208,10 @@ type filled struct {
 // spec's example.
 func (h *harvest) fill(path string, query []loader.QueryParam) (filled, error) {
 	f := filled{own: true}
+	use := func(v string, own bool) {
+		f.values = append(f.values, v)
+		f.own = f.own && own
+	}
 	var missing string
 	f.path = pathParam.ReplaceAllStringFunc(path, func(m string) string {
 		name := m[1 : len(m)-1]
@@ -194,8 +219,7 @@ func (h *harvest) fill(path string, query []loader.QueryParam) (filled, error) {
 		if !ok && missing == "" {
 			missing = name
 		}
-		f.values = append(f.values, v)
-		f.own = f.own && own
+		use(v, own)
 		return url.PathEscape(v)
 	})
 	if missing != "" {
@@ -206,8 +230,7 @@ func (h *harvest) fill(path string, query []loader.QueryParam) (filled, error) {
 		v, own, ok := h.pick(path, q.Name)
 		switch {
 		case ok:
-			f.values = append(f.values, v)
-			f.own = f.own && own
+			use(v, own)
 		case q.Example != "":
 			v = q.Example
 		default:
@@ -252,7 +275,7 @@ func (h *harvest) sawFor(path, param, value string) bool {
 		v, has := o[field]
 		return has && v == value
 	}
-	parent, _, _ := strings.Cut(path, "/{"+param+"}")
+	parent, _ := parentOf(path, param) // param is one of path's: sawAllFor
 	for _, o := range h.byPath[parent] {
 		if holds(o, key) || holds(o, "id") {
 			return true
