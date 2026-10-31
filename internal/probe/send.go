@@ -46,6 +46,22 @@ func (r *runner) send(ctx context.Context, op loader.Operation, path string, who
 
 // sendFull is send, also returning the response body (up to maxResponse).
 func (r *runner) sendFull(ctx context.Context, op loader.Operation, path string, who caller) (report.Exchange, []byte, error) {
+	exchange, got, resp, err := r.sendWith(ctx, op, path, who, "application/json")
+	if err == nil && resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		r.redirects++
+		if r.firstRedirect == "" {
+			r.firstRedirect = fmt.Sprintf("%s %s answered %d to %s", op.Method, exchange.URL,
+				resp.StatusCode, mask(resp.Header.Get("Location"), r.tokens...))
+		}
+	}
+	return exchange, got, err
+}
+
+// sendWith is sendFull with the media type of the request body, also
+// returning the response, its body already read, for its cookies. It does
+// not count redirects: a login that redirects is not one of the run's
+// calls, and must not make the note about redirects blame the spec.
+func (r *runner) sendWith(ctx context.Context, op loader.Operation, path string, who caller, contentType string) (report.Exchange, []byte, *http.Response, error) {
 	u := r.urlFor(path)
 	var body io.Reader
 	if op.Method != http.MethodGet && op.Body != nil {
@@ -53,28 +69,21 @@ func (r *runner) sendFull(ctx context.Context, op loader.Operation, path string,
 	}
 	req, err := http.NewRequestWithContext(ctx, op.Method, u.String(), body)
 	if err != nil {
-		return report.Exchange{}, nil, fmt.Errorf("%s %s: %w", op.Method, op.Path, err)
+		return report.Exchange{}, nil, nil, fmt.Errorf("%s %s: %w", op.Method, op.Path, err)
 	}
 	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", contentType)
 	}
 	authorize(req, op.Credential, who.token)
 	resp, err := r.client.do(req)
 	if err != nil {
 		// The error may quote the URL, and a query-string token with it.
-		return report.Exchange{}, nil, &requestError{msg: fmt.Sprintf("%s %s: %s", op.Method, op.Path, mask(err.Error(), r.tokens...)), err: err}
+		return report.Exchange{}, nil, nil, &requestError{msg: fmt.Sprintf("%s %s: %s", op.Method, op.Path, mask(err.Error(), r.tokens...)), err: err}
 	}
 	defer resp.Body.Close()
 	got, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse))
 	if err != nil {
-		return report.Exchange{}, nil, fmt.Errorf("%s %s: reading the response: %w", op.Method, op.Path, err)
-	}
-	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
-		r.redirects++
-		if r.firstRedirect == "" {
-			r.firstRedirect = fmt.Sprintf("%s %s answered %d to %s", op.Method, mask(req.URL.RequestURI(), r.tokens...),
-				resp.StatusCode, mask(resp.Header.Get("Location"), r.tokens...))
-		}
+		return report.Exchange{}, nil, nil, fmt.Errorf("%s %s: reading the response: %w", op.Method, op.Path, err)
 	}
 	exchange := report.Exchange{
 		Caller: who.name,
@@ -86,7 +95,7 @@ func (r *runner) sendFull(ctx context.Context, op loader.Operation, path string,
 	if body != nil {
 		exchange.Sent = r.excerpt(string(op.Body))
 	}
-	return exchange, got, nil
+	return exchange, got, resp, nil
 }
 
 // excerpt is the start of a body for evidence, every token masked. Masked

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strconv"
@@ -22,10 +23,16 @@ import (
 //	        operation: POST /login
 //	        body: {username: alice, password: "${PROCYON_A_PASSWORD}"}
 //	        token: /session/token
+//
+// form replaces body for a login that takes a form (FastAPI's OAuth2
+// password flow), and cookie replaces token when the answer sets the token
+// as a cookie instead of returning it.
 type Login struct {
-	Operation string `yaml:"operation"` // "POST /login", as in the spec
-	Body      any    `yaml:"body"`      // sent as JSON; ${VAR} in strings reads the environment
-	Token     string `yaml:"token"`     // JSON pointer to the token in the response
+	Operation string            `yaml:"operation"` // "POST /login", as in the spec
+	Body      any               `yaml:"body"`      // sent as JSON; ${VAR} in strings reads the environment
+	Form      map[string]string `yaml:"form"`      // or sent form-encoded; ${VAR} too
+	Token     string            `yaml:"token"`     // JSON pointer to the token in the response
+	Cookie    string            `yaml:"cookie"`    // or the name of the cookie the response sets
 }
 
 // signIn returns the two test accounts with their tokens: from the
@@ -68,27 +75,32 @@ func (r *runner) login(ctx context.Context, spec *loader.Spec, who string, l *Lo
 		return fail("the spec has no operation %q", l.Operation)
 	case strings.Contains(op.Path, "{"):
 		return fail("%s needs a value in its path; use a login operation without one", l.Operation)
-	case op.Method == http.MethodGet && l.Body != nil:
+	case op.Method == http.MethodGet && (l.Body != nil || l.Form != nil):
 		return fail("%s is a GET, which sends no body", l.Operation)
 	}
-	expanded, secrets, err := expand(l.Body)
+	body, contentType, err := r.loginBody(l)
 	if err != nil {
 		return "", fmt.Errorf("login of test account %s: %w", who, err)
-	}
-	// The password is masked like a token, in case the API echoes it.
-	r.tokens = append(r.tokens, secrets...)
-	body, err := json.Marshal(expanded)
-	if err != nil {
-		return fail("body: %v", err)
 	}
 	signIn := *op
 	signIn.Body, signIn.Credential = body, nil
-	exchange, got, err := r.sendFull(ctx, signIn, op.Path, anonymous)
+	exchange, got, resp, err := r.sendWith(ctx, signIn, op.Path, anonymous, contentType)
 	if err != nil {
 		return "", fmt.Errorf("login of test account %s: %w", who, err)
 	}
+	redirect := exchange.Status >= 300 && exchange.Status < 400
+	// A login that sets a cookie often redirects to the app's start page;
+	// the cookie comes with the redirect.
+	if l.Cookie != "" && (success(exchange) || redirect) {
+		for _, c := range resp.Cookies() {
+			if c.Name == l.Cookie && c.Value != "" {
+				return c.Value, nil
+			}
+		}
+		return fail("%s answered %d with no cookie %s", l.Operation, exchange.Status, l.Cookie)
+	}
 	if !success(exchange) {
-		if exchange.Status >= 300 && exchange.Status < 400 {
+		if redirect {
 			return fail("%s answered %d: redirects are not followed, and the token must be in the JSON answer", l.Operation, exchange.Status)
 		}
 		return fail("%s answered %d", l.Operation, exchange.Status)
@@ -102,6 +114,36 @@ func (r *runner) login(ctx context.Context, spec *loader.Spec, who string, l *Lo
 		return fail("no string at %s in the response", l.Token)
 	}
 	return token, nil
+}
+
+// loginBody is what a login sends, and its media type: its form,
+// form-encoded, or else its body as JSON. ${PROCYON_...} values are read
+// from the environment and masked like tokens, in case the API echoes them.
+func (r *runner) loginBody(l *Login) (body []byte, contentType string, err error) {
+	fields := l.Body
+	if l.Form != nil {
+		form := map[string]any{}
+		for name, value := range l.Form {
+			form[name] = value
+		}
+		fields = form
+	}
+	expanded, secrets, err := expand(fields)
+	if err != nil {
+		return nil, "", err
+	}
+	r.tokens = append(r.tokens, secrets...)
+	if l.Form != nil {
+		values := url.Values{}
+		for name, value := range expanded.(map[string]any) {
+			values.Set(name, value.(string))
+		}
+		return []byte(values.Encode()), "application/x-www-form-urlencoded", nil
+	}
+	if body, err = json.Marshal(expanded); err != nil {
+		return nil, "", fmt.Errorf("body: %w", err)
+	}
+	return body, "application/json", nil
 }
 
 // envVar is ${NAME}, the only form expand replaces: a bare $ in a literal
