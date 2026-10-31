@@ -38,7 +38,8 @@ func TestLoginGivesTheSameFindingsAsTokens(t *testing.T) {
 	want := []string{"PRC101 GET /notes", "PRC103 POST /notes", "PRC104 POST /notes", "PRC102 GET /notes/{id}",
 		"PRC102 PUT /notes/{id}", "PRC103 PUT /notes/{id}", "PRC104 PUT /notes/{id}", "PRC102 DELETE /notes/{id}",
 		"PRC101 GET /notes/{id}/preview", "PRC108 GET /notes-search",
-		"PRC102 GET /owner-notes", "PRC106 GET /shop", "PRC106 GET /shop", "PRC102 GET /orders/{orderId}", "PRC109 POST /reviews"}
+		"PRC102 GET /owner-notes", "PRC106 GET /shop", "PRC106 GET /shop", "PRC102 GET /orders/{orderId}",
+		"PRC109 POST /reviews", "PRC107 GET /tracking/{trackingId}"}
 	if !slices.Equal(got, want) {
 		t.Errorf("findings %q, want %q", got, want)
 	}

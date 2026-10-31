@@ -39,6 +39,7 @@ func TestLoadListsOperationsInOrder(t *testing.T) {
 		"GET /owner-notes",
 		"POST /reviews",
 		"GET /shop public",
+		"GET /tracking/{trackingId} public",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("operations = %q, want %q", got, want)

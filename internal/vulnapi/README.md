@@ -33,6 +33,7 @@ Two seeded test accounts, by bearer token:
 | PRC103 | `POST`, `PUT /notes…` | a body that is not a note (`{"title": 42}`) gives a `500` | `400` |
 | PRC104 | `POST`, `PUT /notes…` | a missing `title`, or a `title` or `body` past its `maxLength`, is accepted | `400` |
 | PRC106 | `GET /shop` (public) | the review shows its author's e-mail and phone to anyone (its 11-digit `orderNumber` is not reported) | only `author`, `text` and `orderNumber` |
+| PRC107 | `GET /tracking/{trackingId}` (public) | an order's tracking ID is its number (`1`), so anyone can track every order | a random tracking ID (`trk_7Hq2mX9vLp4cW1sD`) |
 | PRC109 | `POST /reviews` | a review that is not valid gets a `400` with a Python stack trace | `400` with a plain message |
 
 Not vulnerable in either: `GET /health` and `POST /login` (public on purpose), `GET /me`,
@@ -41,7 +42,8 @@ anonymous calls to every other operation (`401`).
 
 `procyon lint openapi.yaml` reports five low findings (PRC008: `GET /notes`,
 `GET /notes-search`, `GET /menu`, `GET /orders` and `GET /owner-notes` have no paging), and nothing about the vulnerabilities above. That is the
-point: none of them shows in the spec.
+point: none of them shows in the spec. It also lists PRC007 on `GET /tracking/{trackingId}` as
+ignored: tracking links are public on purpose, and only PRC107, at runtime, sees whether their IDs can be guessed.
 
 ## Running it
 

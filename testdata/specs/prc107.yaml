@@ -1,0 +1,45 @@
+openapi: 3.0.3
+info:
+  title: A car's public page, by an ID that may be guessable
+  version: "1"
+security:
+  - bearer: []
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+paths:
+  /services:
+    get:
+      responses:
+        "200":
+          description: The business's services.
+  /cars:
+    get:
+      responses:
+        "200":
+          description: The business's cars.
+  /cars/{id}:
+    get:
+      x-procyon-public: "A car's page, linked from the business's site"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The car.
+  /cars/{id}/owner:
+    get:
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Who owns the car; needs a login.
