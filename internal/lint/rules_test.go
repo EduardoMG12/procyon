@@ -253,6 +253,15 @@ func TestRules(t *testing.T) {
 			"PRC010 prc010-admin.yaml:28:5 DELETE /debug-tools/cache",
 			"PRC001 prc010-admin.yaml:38:5 GET /management",
 		}},
+		// superAdmin also guards a regular-looking path (/api/status/details),
+		// but its name says it is for admins: /api/admin/tenants is not
+		// reported. /api/admin/exports lets in a plain bearer token too, like
+		// /api/reports/billing, and /api/admin/users inherits the bearer
+		// default: both reported.
+		{"prc010-admin-scheme.yaml", []string{"PRC010"}, []string{
+			"PRC010 prc010-admin-scheme.yaml:36:5 GET /api/admin/exports",
+			"PRC010 prc010-admin-scheme.yaml:44:5 GET /api/admin/users",
+		}},
 		{"prc008-limits.yaml", []string{"PRC008"}, []string{
 			"PRC008 prc008-limits.yaml:9:5 GET /orders",
 			"PRC008 prc008-limits.yaml:26:17 POST /orders",
