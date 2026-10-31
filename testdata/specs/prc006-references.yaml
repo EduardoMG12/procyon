@@ -1,0 +1,29 @@
+openapi: 3.0.3
+info:
+  title: Code hosting
+  version: 1.0.0
+paths:
+  /repositories:
+    get:
+      responses:
+        "200":
+          description: Public repositories and their sponsors
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  repository_full_name:
+                    type: string
+                  repoFullNames:
+                    type: array
+                    items:
+                      type: string
+                  softDescriptorPhone:
+                    type: string
+                  full_name:
+                    type: string
+                  ownerFullName:
+                    type: string
+                  sponsorPhone:
+                    type: string

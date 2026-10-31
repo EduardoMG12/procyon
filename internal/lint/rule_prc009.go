@@ -186,16 +186,25 @@ var privilegeSuffixes = []string{
 	"key", "keys", "slug", "type", "level", "list",
 }
 
+// privilegeReferenceWords, right before a privileged word, make it a
+// network setting instead: IpPermissions are firewall rules, an IpamScopeId
+// names a pool of IP addresses.
+var privilegeReferenceWords = []string{"ip", "ipam"}
+
 // privilegeWord returns the privileged word a field name is about, or "":
 // a privileged word (or its plural) that is the head of the name, followed
-// by nothing or by an identifier suffix. userRole, isAdmin, roleIDs and
-// tenantUuid are privileges; adminNotes is not.
+// by nothing or by an identifier suffix, and not right after a reference
+// word. userRole, isAdmin, roleIDs and tenantUuid are privileges;
+// adminNotes and IpPermissions are not.
 func privilegeWord(name string) string {
 	parts := words.Split(name)
 	for i := range parts {
 		for _, entry := range privilegedWords {
 			end := i + len(entry)
 			if end > len(parts) || !slices.EqualFunc(parts[i:end], entry, words.Same) {
+				continue
+			}
+			if i > 0 && slices.Contains(privilegeReferenceWords, parts[i-1]) {
 				continue
 			}
 			if !slices.ContainsFunc(parts[end:], func(w string) bool { return !slices.Contains(privilegeSuffixes, w) }) {
