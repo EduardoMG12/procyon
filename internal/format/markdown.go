@@ -84,7 +84,7 @@ func matrix(b *strings.Builder, rows []report.MatrixRow) {
 		return
 	}
 	b.WriteString("\n### Authorization matrix\n\n" +
-		"What each caller got: ✅ allowed · 🚫 denied · ❌ finding · 🌐 public · ⏭️ skipped (see notes) · 💤 unchanged since the base spec · – not tested\n\n" +
+		"What each caller got: ✅ allowed · 🚫 denied · 💥 server error · ❌ finding · 🌐 public · ⏭️ skipped (see notes) · 💤 unchanged since the base spec · – not tested\n\n" +
 		"| Operation | A | B (A's objects) | Anonymous |\n|---|---|---|---|\n")
 	for _, row := range rows {
 		// A | splits a table cell even inside a code span: escape it.
@@ -94,7 +94,7 @@ func matrix(b *strings.Builder, rows []report.MatrixRow) {
 
 // icons draw the matrix's outcomes; NotCalled has none and is drawn "–".
 var icons = map[report.Outcome]string{
-	report.Allowed: "✅", report.Denied: "🚫", report.Reached: "❌", report.Public: "🌐", report.Skipped: "⏭️", report.Unchanged: "💤",
+	report.Allowed: "✅", report.Denied: "🚫", report.Failed: "💥", report.Reached: "❌", report.Public: "🌐", report.Skipped: "⏭️", report.Unchanged: "💤",
 }
 
 func cell(c report.Cell) string {

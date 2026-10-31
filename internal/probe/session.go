@@ -164,13 +164,15 @@ func (s *session) skipAfterHang(op loader.Operation) {
 }
 
 // cellOf is the matrix cell of a call: a finding when reached, otherwise
-// allowed or denied by its status.
+// allowed, failed or denied by its status.
 func cellOf(exchange report.Exchange, reached bool) report.Cell {
 	switch {
 	case reached:
 		return report.Cell{Outcome: report.Reached, Status: exchange.Status}
 	case success(exchange):
 		return report.Cell{Outcome: report.Allowed, Status: exchange.Status}
+	case exchange.Status >= 500:
+		return report.Cell{Outcome: report.Failed, Status: exchange.Status}
 	}
 	return report.Cell{Outcome: report.Denied, Status: exchange.Status}
 }
