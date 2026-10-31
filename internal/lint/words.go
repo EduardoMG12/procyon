@@ -28,6 +28,14 @@ var (
 		{"token"}, {"apikey"}, {"api", "key"}, {"access", "key"},
 	}
 
+	// credentialReferenceWords, right before a credential word, make it
+	// something other than a credential, on top of the general
+	// words.Reference: an identifier (uniqueToken, idempotencyToken), or a
+	// token made for the client to hold (EC2's ClientToken, an idempotency
+	// key the client chose; a payment widget's client_token). They do not
+	// apply to secretWords: clientSecret is a secret.
+	credentialReferenceWords = append(slices.Clone(words.Reference), "unique", "idempotency", "client")
+
 	// countWords name numbers that set how much work one request makes
 	// the server do: how many items, repeats or retries. words.Split cannot
 	// split an all-lowercase name, so pagesize and perpage are listed too.

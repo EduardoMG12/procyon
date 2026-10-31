@@ -119,6 +119,19 @@ func TestRules(t *testing.T) {
 			"PRC005 prc005-references.yaml:68:19 GET /volumes",
 			"PRC005 prc005-references.yaml:70:19 GET /volumes",
 		}},
+		// A token or an API key is text: numbers named after tokens count
+		// them (total_tokens, a {value: integer}). A token the client holds
+		// or that identifies something (ClientToken, uniqueToken,
+		// idempotency_token) is not a credential. Still reported: a list of
+		// tokens, a token wrapped in {value}, clientSecret and an integer
+		// pinPassword (a secret, not a credential).
+		{"prc005-counts-and-ids.yaml", []string{"PRC005"}, []string{
+			"PRC005 prc005-counts-and-ids.yaml:37:19 GET /usage",
+			"PRC005 prc005-counts-and-ids.yaml:41:19 GET /usage",
+			"PRC005 prc005-counts-and-ids.yaml:46:19 GET /usage",
+			"PRC005 prc005-counts-and-ids.yaml:48:19 GET /usage",
+			"PRC005 prc005-counts-and-ids.yaml:50:19 GET /usage",
+		}},
 		// A role on /memberships/{username} is what the operation assigns,
 		// and an enum of only low values (guestRole: viewer | commenter)
 		// cannot grant anything. Everything else still counts: tenantId or

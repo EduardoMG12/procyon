@@ -1,0 +1,57 @@
+openapi: 3.0.3
+info:
+  title: Completions
+  version: 1.0.0
+security:
+  - key: []
+paths:
+  /usage:
+    get:
+      responses:
+        "200":
+          description: Usage
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_tokens:
+                    type: integer
+                  num_tokens_per_chunk:
+                    type: integer
+                  estimated_input_tokens:
+                    type: number
+                  token_estimate:
+                    type: integer
+                  activeNetworkTokens:
+                    type: object
+                    properties:
+                      value:
+                        type: integer
+                  ClientToken:
+                    type: string
+                  uniqueToken:
+                    type: string
+                  idempotency_token:
+                    type: string
+                  refresh_tokens:
+                    type: array
+                    items:
+                      type: string
+                  sessionToken:
+                    type: object
+                    properties:
+                      value:
+                        type: string
+                  apiKey:
+                    type: string
+                  clientSecret:
+                    type: string
+                  pinPassword:
+                    type: integer
+components:
+  securitySchemes:
+    key:
+      type: apiKey
+      in: header
+      name: X-Key

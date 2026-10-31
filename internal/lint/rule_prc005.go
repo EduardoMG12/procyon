@@ -34,13 +34,9 @@ var prc005 = lintRule{
 func checkPRC005(doc *openapi3.T) []report.Finding {
 	var found onePerPlace
 	loader.ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-		lists := [][][]string{secretWords}
-		if method == "GET" {
-			lists = append(lists, credentialWords)
-		}
 		forEachResponseProperty(op, func(name string, prop *openapi3.SchemaRef) {
-			if !holdsValue(prop.Value, map[*openapi3.Schema]bool{}) || !matchesAny(name, lists) {
-				return // hasPassword (a flag), secretRef (an object): about the secret, not the secret
+			if !holdsSecret(method, name, prop.Value) {
+				return
 			}
 			loc := propertyLocation(prop)
 			found.add(report.Finding{
@@ -55,8 +51,28 @@ func checkPRC005(doc *openapi3.T) []report.Finding {
 	return found.findings
 }
 
-// holdsValue reports whether a schema can hold a secret's value: text, a
-// number, a list or a map of them, or an object wrapping one ({value: ...}).
+// The types a secret's value can have. A password can be a number (a PIN
+// typed integer), but a token or an API key is always text: a number named
+// after tokens counts them (total_tokens, num_tokens_per_chunk).
+var (
+	secretTypes     = []string{"string", "integer", "number"}
+	credentialTypes = []string{"string"}
+)
+
+// holdsSecret reports whether a response field of an operation with this
+// method holds a secret: a secret word and a value of secretTypes, or, in
+// a GET, a credential word and a value of credentialTypes. hasPassword (a
+// flag) and secretRef (an object) are about a secret, not the secret.
+func holdsSecret(method, name string, s *openapi3.Schema) bool {
+	if words.Matches(name, secretWords) && holdsValue(s, secretTypes, map[*openapi3.Schema]bool{}) {
+		return true
+	}
+	return method == "GET" && words.Match(name, credentialWords, words.Describing, credentialReferenceWords) &&
+		holdsValue(s, credentialTypes, map[*openapi3.Schema]bool{})
+}
+
+// holdsValue reports whether a schema can hold a secret's value: one of
+// types, a list or a map of them, or an object wrapping one ({value: ...}).
 // A flag (hasPassword) only says a secret exists, an enum of several values
 // is a choice (a permission: secrets: read | write), and other objects
 // (secretRef: {name, key}) point at a secret or group fields checked on
@@ -69,14 +85,14 @@ func checkPRC005(doc *openapi3.T) []report.Finding {
 // would otherwise be checked forever. A schema already seen adds nothing:
 // it is either still being checked further up, or was checked and holds no
 // value (a value found anywhere returns true at once).
-func holdsValue(s *openapi3.Schema, seen map[*openapi3.Schema]bool) bool {
+func holdsValue(s *openapi3.Schema, types []string, seen map[*openapi3.Schema]bool) bool {
 	if s == nil || seen[s] || len(s.Enum) > 1 {
 		return false
 	}
 	seen[s] = true
 	if s.Type == nil || len(s.Type.Slice()) == 0 {
 		if len(s.Properties) > 0 {
-			return wrapsValue(s, seen)
+			return wrapsValue(s, types, seen)
 		}
 		// Parts that only modify the others (allOf: [{$ref}, {nullable: true}])
 		// say nothing about what the value is.
@@ -89,19 +105,19 @@ func holdsValue(s *openapi3.Schema, seen map[*openapi3.Schema]bool) bool {
 		if len(parts) == 0 {
 			return true
 		}
-		return slices.ContainsFunc(parts, func(p *openapi3.SchemaRef) bool { return holdsValue(p.Value, seen) })
+		return slices.ContainsFunc(parts, func(p *openapi3.SchemaRef) bool { return holdsValue(p.Value, types, seen) })
 	}
-	for _, t := range []string{"string", "integer", "number"} {
+	for _, t := range types {
 		if s.Type.Includes(t) {
 			return true
 		}
 	}
 	if s.Type.Includes("array") {
-		return s.Items != nil && holdsValue(s.Items.Value, seen)
+		return s.Items != nil && holdsValue(s.Items.Value, types, seen)
 	}
 	if s.Type.Includes("object") {
-		return wrapsValue(s, seen) ||
-			(s.AdditionalProperties.Schema != nil && holdsValue(s.AdditionalProperties.Schema.Value, seen)) // a map of secrets
+		return wrapsValue(s, types, seen) ||
+			(s.AdditionalProperties.Schema != nil && holdsValue(s.AdditionalProperties.Schema.Value, types, seen)) // a map of secrets
 	}
 	return false
 }
@@ -111,9 +127,9 @@ var valueFields = []string{"value", "data", "plaintext", "content"}
 
 // wrapsValue reports whether an object wraps its value in a field such as
 // value or data: password: {value: "..."} holds a password.
-func wrapsValue(s *openapi3.Schema, seen map[*openapi3.Schema]bool) bool {
+func wrapsValue(s *openapi3.Schema, types []string, seen map[*openapi3.Schema]bool) bool {
 	for name, prop := range s.Properties {
-		if slices.Contains(valueFields, strings.ToLower(name)) && prop != nil && holdsValue(prop.Value, seen) {
+		if slices.Contains(valueFields, strings.ToLower(name)) && prop != nil && holdsValue(prop.Value, types, seen) {
 			return true
 		}
 	}
@@ -137,15 +153,6 @@ func propertyLocation(prop *openapi3.SchemaRef) report.Location {
 		}
 	}
 	return loader.Locate(prop.Value.Origin)
-}
-
-func matchesAny(name string, lists [][][]string) bool {
-	for _, list := range lists {
-		if words.Matches(name, list) {
-			return true
-		}
-	}
-	return false
 }
 
 // forEachResponseProperty calls fn for every property of every schema an
