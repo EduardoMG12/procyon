@@ -34,8 +34,8 @@ var prc005 = lintRule{
 func checkPRC005(doc *openapi3.T) []report.Finding {
 	var found onePerPlace
 	loader.ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-		forEachResponseProperty(op, func(name string, prop *openapi3.SchemaRef) {
-			if !holdsSecret(method, path, name, prop.Value) {
+		forEachResponseProperty(op, func(name string, prop *openapi3.SchemaRef, parent *openapi3.Schema) {
+			if !holdsSecret(method, path, name, prop.Value) || modelToken(name, parent) {
 				return
 			}
 			found.add(report.Finding{
@@ -66,6 +66,19 @@ var (
 		{"private", "key"}, {"chave", "privada"},
 	}
 
+	// secretSettingWords, right after a secret word, make it a setting of
+	// a password policy instead of a password, on top of the general
+	// words.Describing: passwordIncludeDigit, passwordStrengthType,
+	// minimumPasswordAgeDays, PasswordReusePrevention, the text of a
+	// forgottenPasswordQuestion (its answer is still a secret).
+	secretSettingWords = append(slices.Clone(words.Describing),
+		"include", "strength", "rule", "protected", "age", "days",
+		"question", "questions", "reuse", "change")
+
+	// secretSettingBefore, right before a secret word, does the same, on
+	// top of the general words.Reference: expirePassword is a setting.
+	secretSettingBefore = append(slices.Clone(words.Reference), "expire")
+
 	// issuedSecretWords name values a server generates and shows once, in
 	// the response that creates or rotates them (a webhook's signing
 	// secret, an OAuth app's client secret), and never again.
@@ -93,13 +106,31 @@ var (
 // credential word and a value of credentialTypes. hasPassword (a flag) and
 // secretRef (an object) are about a secret, not the secret.
 func holdsSecret(method, path, name string, s *openapi3.Schema) bool {
-	secret := words.Matches(name, secretWords) ||
+	secret := words.Match(name, secretWords, secretSettingWords, secretSettingBefore) ||
 		words.Matches(name, issuedSecretWords) && (method != "POST" || !createsOrRotates(path))
 	if secret && holdsValue(s, secretTypes, map[*openapi3.Schema]bool{}) {
 		return true
 	}
 	return method == "GET" && words.Match(name, credentialWords, words.Describing, credentialReferenceWords) &&
 		holdsValue(s, credentialTypes, map[*openapi3.Schema]bool{})
+}
+
+// modelToken reports whether a field named token is a piece of a language
+// model's output text: its object also holds the token's log probability
+// (logprob, log_prob), as in OpenAI's logprobs. No credential sits next to
+// a log probability, and a token named otherwise (accessToken) is not
+// excused.
+func modelToken(name string, parent *openapi3.Schema) bool {
+	if !slices.Equal(words.Split(name), []string{"token"}) {
+		return false
+	}
+	for sibling := range parent.Properties {
+		if slices.Equal(words.Split(sibling), []string{"logprob"}) ||
+			slices.Equal(words.Split(sibling), []string{"log", "prob"}) {
+			return true
+		}
+	}
+	return false
 }
 
 // createsOrRotates reports whether a POST to path makes something new: its

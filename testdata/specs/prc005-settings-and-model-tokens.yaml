@@ -1,0 +1,83 @@
+openapi: 3.0.3
+info:
+  title: Account settings and completions
+  version: 1.0.0
+security:
+  - key: []
+paths:
+  /account/settings:
+    get:
+      responses:
+        "200":
+          description: The account's password policy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  expirePassword:
+                    type: string
+                  expirePasswordDays:
+                    type: string
+                  minimumPasswordAgeDays:
+                    type: string
+                  MaxPasswordAge:
+                    type: integer
+                  PasswordReusePrevention:
+                    type: integer
+                  passwordIncludeDigit:
+                    type: string
+                  passwordStrengthType:
+                    type: string
+                  passwordRuleText:
+                    type: string
+                  passwordProtected:
+                    type: string
+                  passwordChangeDate:
+                    type: string
+                  forgottenPasswordQuestion1:
+                    type: string
+                  forgottenPasswordQuestionsCount:
+                    type: string
+                  forgottenPasswordAnswer1:
+                    type: string
+                  newPassword:
+                    type: string
+  /completions/{id}:
+    get:
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A completion with the log probability of each token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logprobs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        token:
+                          type: string
+                        logprob:
+                          type: number
+                  session:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+                      expires_in:
+                        type: integer
+components:
+  securitySchemes:
+    key:
+      type: apiKey
+      in: header
+      name: X-Key

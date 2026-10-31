@@ -66,7 +66,7 @@ func checkPRC008(doc *openapi3.T) []report.Finding {
 				check(root.Value, loader.Locate(root.Value.Origin)) // the body itself is a list or a text
 			}
 		}
-		walkProperties(roots, func(name string, prop *openapi3.SchemaRef) bool {
+		walkProperties(roots, func(name string, prop *openapi3.SchemaRef, _ *openapi3.Schema) bool {
 			if readOnly(prop.Value) {
 				return false
 			}

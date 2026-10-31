@@ -306,6 +306,16 @@ func TestRules(t *testing.T) {
 			"PRC005 prc005-secrets.yaml:108:9 GET /sessions",
 			"PRC005 prc005-secrets.yaml:115:13 GET /sessions",
 		}},
+		// A password policy's settings (expirePassword,
+		// passwordIncludeDigit, MaxPasswordAge) are about passwords, not
+		// passwords, and a token next to a logprob is a piece of a model's
+		// output text. Still reported: a security question's answer, a new
+		// password, and a session's token.
+		{"prc005-settings-and-model-tokens.yaml", []string{"PRC005"}, []string{
+			"PRC005 prc005-settings-and-model-tokens.yaml:42:19 GET /account/settings",
+			"PRC005 prc005-settings-and-model-tokens.yaml:44:19 GET /account/settings",
+			"PRC005 prc005-settings-and-model-tokens.yaml:74:23 GET /completions/{id}",
+		}},
 		{"prc005-nullable-boolean-3.1.yaml", []string{"PRC005"}, []string{}},
 		// Schemas that refer to themselves end: a map of maps, a list of
 		// lists, an allOf of itself and a value wrapping itself hold no
