@@ -37,7 +37,7 @@ Flags always win over the file. One `--output` flag replaces the file's whole
 | `output` | `--output` | A list of `format=path`: other formats to write to files |
 | `test.accounts.a.login`, `test.accounts.b.login` | | For `procyon test`: how test account A or B logs in, when `PROCYON_USER_A_TOKEN` / `PROCYON_USER_B_TOKEN` is not set. `operation` (`POST /login`, as in the spec), `body` (sent as JSON; `${PROCYON_…}` reads an environment variable, so no password is written in the file; only names starting with `PROCYON_` can be read, so a changed config cannot send CI's other secrets to the target) and `token` (a JSON pointer to the token in the response, such as `/token` or `/session/token`) |
 | `test.skip` | | For `procyon test`: operations never called, by anyone (`["GET /createdb"]`): a "read" that resets the database would spoil the run |
-| `test.ids` | | For `procyon test`: values of test account A's objects by path parameter name (`orderId: ["42"]`): used when A's responses show none, or none Procyon can tell is A's |
+| `test.ids` | | For `procyon test`: values of test account A's objects by path or query parameter name (`orderId: ["42"]`): used when A's responses show none, or none Procyon can tell is A's |
 
 ```yaml
 test:

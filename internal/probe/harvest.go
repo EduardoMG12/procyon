@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/EduardoMG12/procyon/internal/loader"
 )
 
 // harvest is what one test account's responses showed: for each path that
@@ -112,8 +114,9 @@ func walk(v any, fn func(value string)) {
 // pick returns a value for parameter param of path, and whether it is
 // known to be the account's own. In order:
 //
-//  1. the parent collection's objects' field of the same name, then their
-//     "id": GET /notes fills /notes/{id} and /notes/{noteId};
+//  1. for a path parameter, the parent collection's objects' field of the
+//     same name, then their "id": GET /notes fills /notes/{id} and
+//     /notes/{noteId};
 //  2. a field of the same name in any path's objects, paths by name;
 //  3. a value declared in .procyon.yaml, which is the account's own.
 //
@@ -146,18 +149,20 @@ func (h *harvest) pick(path, param string) (value string, own, ok bool) {
 		}
 		return "", false, false
 	}
-	parent, _, _ := strings.Cut(path, "/{"+param+"}")
-	v, own, ok := choose(parent, key, "id")
+	// A query parameter is not in the path: it has no parent collection.
+	if parent, _, inPath := strings.Cut(path, "/{"+param+"}"); inPath {
+		value, own, ok = choose(parent, key, "id")
+	}
 	for _, p := range sortedKeys(h.byPath) {
 		if ok {
 			break
 		}
-		v, own, ok = choose(p, key)
+		value, own, ok = choose(p, key)
 	}
 	if declared := h.declared[key]; len(declared) > 0 && !own {
 		return declared[0], true, true
 	}
-	return v, own, ok
+	return value, own, ok
 }
 
 func sortedKeys[V any](m map[string]V) []string {
@@ -169,14 +174,18 @@ var pathParam = regexp.MustCompile(`\{([^}]+)\}`)
 
 // filled is a path with every parameter given a value.
 type filled struct {
-	path   string   // escaped, ready to send: /notes/1
-	values []string // the values used, unescaped
-	own    bool     // every value is known to be the account's own
+	path string // escaped, ready to send: /notes/1, or /notes?owner=alice
+	// values are the values used that name an object, unescaped: not a
+	// query parameter's example, which names none of the account's.
+	values []string
+	own    bool // every value is known to be the account's own
 }
 
-// fill replaces every parameter of path with a value, or reports the first
-// one it has none for.
-func (h *harvest) fill(path string) (filled, error) {
+// fill replaces every parameter of path with a value, and adds the
+// required query parameters, or reports the first one it has none for. A
+// query parameter is filled like a path parameter (pick), else with the
+// spec's example.
+func (h *harvest) fill(path string, query []loader.QueryParam) (filled, error) {
 	f := filled{own: true}
 	var missing string
 	f.path = pathParam.ReplaceAllStringFunc(path, func(m string) string {
@@ -191,6 +200,23 @@ func (h *harvest) fill(path string) (filled, error) {
 	})
 	if missing != "" {
 		return filled{}, fmt.Errorf("no value for {%s}", missing)
+	}
+	values := url.Values{}
+	for _, q := range query {
+		v, own, ok := h.pick(path, q.Name)
+		switch {
+		case ok:
+			f.values = append(f.values, v)
+			f.own = f.own && own
+		case q.Example != "":
+			v = q.Example
+		default:
+			return filled{}, fmt.Errorf("no value for query parameter %s", q.Name)
+		}
+		values.Set(q.Name, v)
+	}
+	if len(values) > 0 {
+		f.path += "?" + values.Encode() // sorted by name, the same on every run
 	}
 	return f, nil
 }

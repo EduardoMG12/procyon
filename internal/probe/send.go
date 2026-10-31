@@ -106,9 +106,13 @@ func (r *runner) excerpt(body string) string {
 
 // urlFor is where path is sent: after the target's own base path. path is
 // already escaped (harvest.fill), so it is set as the raw path, or
-// "Ana Maria" would go out as Ana%2520Maria.
+// "Ana Maria" would go out as Ana%2520Maria. What follows a "?" (the
+// required query parameters) is the query.
 func (r *runner) urlFor(path string) url.URL {
 	u := *r.target
+	if p, query, hasQuery := strings.Cut(path, "?"); hasQuery {
+		path, u.RawQuery = p, query
+	}
 	u.RawPath = strings.TrimSuffix(r.target.EscapedPath(), "/") + path
 	u.Path, _ = url.PathUnescape(u.RawPath)
 	return u

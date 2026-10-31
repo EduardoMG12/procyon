@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/EduardoMG12/procyon/internal/report"
+	"github.com/EduardoMG12/procyon/internal/words"
 
 	"github.com/getkin/kin-openapi/openapi3"
 )
@@ -42,6 +44,19 @@ type Operation struct {
 	// Fields are the top-level properties of the JSON request body's
 	// schema, by name, for building malformed requests.
 	Fields []Field
+	// Query are the query parameters the spec marks required, in the
+	// spec's order. The credential parameter is not one of them: the token
+	// fills it.
+	Query []QueryParam
+}
+
+// QueryParam is one required query parameter.
+type QueryParam struct {
+	Name string
+	// Example is the spec's example for it, as text, or "" when it gives
+	// none: the parameter's example, else its first named example (by
+	// name), else its schema's example.
+	Example string
 }
 
 // Field is one top-level property of a request body's schema.
@@ -129,6 +144,7 @@ func (s *Spec) Operations() []Operation {
 			Body:       exampleBody(op),
 			NeedsBody:  op.RequestBody != nil && op.RequestBody.Value != nil && op.RequestBody.Value.Required,
 			Fields:     bodyFields(op),
+			Query:      requiredQuery(s.doc, path, op),
 		})
 	})
 	return ops
@@ -178,6 +194,49 @@ func schemeCredential(scheme *openapi3.SecurityScheme) *Credential {
 		return &Credential{In: scheme.In, Name: scheme.Name}
 	}
 	return nil
+}
+
+// requiredQuery lists an operation's required query parameters, but
+// credentials: the one the token goes in, and any named like one (api_key).
+// A value Procyon made up for a credential would go out even on anonymous
+// calls.
+func requiredQuery(doc *openapi3.T, path string, op *openapi3.Operation) []QueryParam {
+	token := ""
+	if c := credentialOf(doc, path, op); c != nil && c.In == openapi3.ParameterInQuery {
+		token = c.Name
+	}
+	var query []QueryParam
+	for _, p := range OperationParameters(doc, path, op) {
+		credential := p.Name == token || words.Matches(p.Name, credentialParameterWords)
+		if p.In == openapi3.ParameterInQuery && p.Required && !credential {
+			query = append(query, QueryParam{Name: p.Name, Example: parameterExample(p)})
+		}
+	}
+	return query
+}
+
+// parameterExample is a parameter's example as text, or "" when the spec
+// gives none, or one that is not a string, a number or a boolean.
+func parameterExample(p *openapi3.Parameter) string {
+	example := p.Example
+	if example == nil && len(p.Examples) > 0 {
+		names := slices.Sorted(maps.Keys(p.Examples))
+		if ref := p.Examples[names[0]]; ref != nil && ref.Value != nil {
+			example = ref.Value.Value
+		}
+	}
+	if example == nil && p.Schema != nil && p.Schema.Value != nil {
+		example = p.Schema.Value.Example
+	}
+	switch v := example.(type) {
+	case string:
+		return v
+	case float64: // how a YAML or JSON number decodes
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case bool:
+		return strconv.FormatBool(v)
+	}
+	return ""
 }
 
 // jsonBody is the application/json media type of an operation's request

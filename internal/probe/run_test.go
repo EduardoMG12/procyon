@@ -36,6 +36,7 @@ func TestRunFindsThePlantedVulnerabilities(t *testing.T) {
 		"PRC103 POST /notes", "PRC104 POST /notes",
 		"PRC102 GET /notes/{id}", "PRC102 PUT /notes/{id}", "PRC103 PUT /notes/{id}", "PRC104 PUT /notes/{id}",
 		"PRC102 DELETE /notes/{id}",
+		"PRC102 GET /owner-notes",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("vulnerable API: findings %q, want %q", got, want)
@@ -237,6 +238,9 @@ func TestEvidenceURLWithAnEscapedBasePath(t *testing.T) {
 	if exchange.URL != want || r.requestURI("/notes/a%20b") != want {
 		t.Errorf("answered %q, unanswered %q; want both %q", exchange.URL, r.requestURI("/notes/a%20b"), want)
 	}
+	if got := r.requestURI("/notes?owner=a+b"); got != "/my%20api/notes?owner=a+b" {
+		t.Errorf("with a query: %q, want it after the base path", got)
+	}
 }
 
 func TestRunFillsTheAuthorizationMatrix(t *testing.T) {
@@ -251,6 +255,7 @@ func TestRunFillsTheAuthorizationMatrix(t *testing.T) {
 		"GET /me A=allowed 200 B= 0 anon=denied 401",
 		"GET /notes A=allowed 200 B= 0 anon=finding 200",
 		"GET /notes/{id} A=allowed 200 B=finding 200 anon=denied 401",
+		"GET /owner-notes A=allowed 200 B=finding 200 anon=denied 401",
 		"POST /login A= 0 B= 0 anon=public 0",
 		"POST /notes A= 0 B= 0 anon=denied 401",
 		"PUT /notes/{id} A= 0 B=finding 200 anon=denied 401",
@@ -298,7 +303,8 @@ func TestRunOverHTTPS(t *testing.T) {
 func TestRunWithABaseSpecTestsOnlyChangedOperations(t *testing.T) {
 	rep := runOn(t, vulnapiSpec, vulnapi.New(false), Options{BaseSpec: "../../testdata/specs/runtime-notes-base.yaml"})
 	got := findingKeys(rep)
-	// GET /notes (PRC101), GET and DELETE /notes/{id} did not change.
+	// GET /notes (PRC101), GET and DELETE /notes/{id}, GET /owner-notes did
+	// not change.
 	want := []string{"PRC103 POST /notes", "PRC104 POST /notes", "PRC102 PUT /notes/{id}", "PRC103 PUT /notes/{id}", "PRC104 PUT /notes/{id}"}
 	if !slices.Equal(got, want) {
 		t.Errorf("findings %q, want %q", got, want)
@@ -309,8 +315,8 @@ func TestRunWithABaseSpecTestsOnlyChangedOperations(t *testing.T) {
 			skipped++
 		}
 	}
-	if skipped != 5 || !slices.ContainsFunc(rep.Notes, func(n report.Note) bool { return strings.Contains(n.Message, "5 of 8 operations unchanged") }) {
-		t.Errorf("skipped rows %d, notes %v; want 5 and the unchanged note", skipped, rep.Notes)
+	if skipped != 6 || !slices.ContainsFunc(rep.Notes, func(n report.Note) bool { return strings.Contains(n.Message, "6 of 9 operations unchanged") }) {
+		t.Errorf("skipped rows %d, notes %v; want 6 and the unchanged note", skipped, rep.Notes)
 	}
 }
 

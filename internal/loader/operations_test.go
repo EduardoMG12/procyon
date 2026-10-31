@@ -31,6 +31,7 @@ func TestLoadListsOperationsInOrder(t *testing.T) {
 		"DELETE /notes/{id}",
 		"GET /notes/{id}",
 		"PUT /notes/{id}",
+		"GET /owner-notes",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("operations = %q, want %q", got, want)
@@ -137,6 +138,27 @@ func TestExampleBodyFromPropertyExamples(t *testing.T) {
 				t.Error("GET /users has no security, NeedsAuth is true")
 			}
 		}
+	}
+}
+
+// Only required query parameters are listed, credentials left out, each
+// with the spec's example when it gives one.
+func TestOperationRequiredQuery(t *testing.T) {
+	spec, err := Load("../../testdata/specs/runtime-query.yaml", anyRule)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string][]string{}
+	for _, op := range spec.Operations() {
+		for _, q := range op.Query {
+			got[op.Path] = append(got[op.Path], q.Name+"="+q.Example)
+		}
+	}
+	// The operation's own parameters come before the path's; /signed's
+	// only one is where its security scheme puts the token.
+	want := []string{"q=raccoon", "page=2", "kind=alpha", "owner="}
+	if !slices.Equal(got["/search"], want) || len(got["/signed"]) != 0 {
+		t.Errorf("query = %q, want /search %q and nothing for /signed", got, want)
 	}
 }
 

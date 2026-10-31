@@ -177,3 +177,28 @@ paths:
           description: Deleted.
         "404":
           description: No such note, or not the caller's.
+  /owner-notes:
+    get:
+      operationId: listNotesOfOwner
+      parameters:
+        - name: owner
+          in: query
+          required: true
+          description: Whose notes, by name.
+          schema:
+            type: string
+            maxLength: 50
+      responses:
+        "200":
+          description: The owner's notes.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 100
+                items:
+                  $ref: "#/components/schemas/Note"
+        "400":
+          description: No owner given.
+        "404":
+          description: No such owner, or not the caller.
