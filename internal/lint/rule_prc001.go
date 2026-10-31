@@ -27,7 +27,7 @@ func checkPRC001(doc *openapi3.T) []report.Finding {
 		}
 		findings = append(findings, report.Finding{
 			Location:  loader.Locate(op.Origin),
-			Operation: method + " " + path,
+			Operation: loader.OperationKey(method, path),
 			Why:       "Anyone who can reach the API can call this operation, without proving who they are.",
 			Fix:       "Add a security requirement to the operation or to the whole spec.",
 		})

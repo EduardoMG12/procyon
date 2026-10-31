@@ -103,6 +103,14 @@ func ForEachOperation(doc *openapi3.T, fn func(method, path string, op *openapi3
 	}
 }
 
+// OperationKey names an operation as findings, ignores and reports do:
+// "GET /orders/{id}". An ignore written on an operation covers a finding
+// when their keys are equal, so lint rules and the ignores they are matched
+// against build them here, the same way.
+func OperationKey(method, path string) string {
+	return method + " " + path
+}
+
 // Locate turns kin-openapi's origin of an element into a Location.
 func Locate(origin *openapi3.Origin) report.Location {
 	if origin == nil || origin.Key == nil {

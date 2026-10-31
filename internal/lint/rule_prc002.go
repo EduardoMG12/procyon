@@ -43,7 +43,7 @@ func checkPRC002(doc *openapi3.T) []report.Finding {
 	flag(doc.Security, doc.Origin, "", doc)
 	loader.ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		if op.Security != nil {
-			flag(*op.Security, op.Origin, method+" "+path, op)
+			flag(*op.Security, op.Origin, loader.OperationKey(method, path), op)
 		}
 	})
 	return findings

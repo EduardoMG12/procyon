@@ -66,7 +66,7 @@ func parseIgnores(doc *openapi3.T, asGiven func(report.Location) report.Location
 		}
 	}
 	ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-		add(op.Extensions, op.Origin, method+" "+path, func(field string) bool { return inResponse(op, field) }, "")
+		add(op.Extensions, op.Origin, OperationKey(method, path), func(field string) bool { return inResponse(op, field) }, "")
 		if op.Servers != nil {
 			addServers(*op.Servers)
 		}

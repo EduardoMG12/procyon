@@ -40,7 +40,7 @@ func checkPRC005(doc *openapi3.T) []report.Finding {
 			}
 			found.add(report.Finding{
 				Location:  propertyLocation(prop),
-				Operation: method + " " + path,
+				Operation: loader.OperationKey(method, path),
 				Why: fmt.Sprintf("The response includes %q, which holds a secret. Anyone allowed to read this response gets it, "+
 					"and responses end up in logs, caches, browser tools and client apps.", name),
 				Fix: "Remove the field from the response schema. Check secrets on the server and return only what the client needs.",

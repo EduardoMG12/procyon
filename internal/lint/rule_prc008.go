@@ -43,7 +43,7 @@ func checkPRC008(doc *openapi3.T) []report.Finding {
 	var found onePerPlace
 	loader.ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
 		add := func(loc report.Location, why, fix string) {
-			found.add(report.Finding{Location: loc, Operation: method + " " + path, Why: why, Fix: fix})
+			found.add(report.Finding{Location: loc, Operation: loader.OperationKey(method, path), Why: why, Fix: fix})
 		}
 		if method == "GET" && returnsList(op) && !paged(doc, path, op) {
 			add(loader.Locate(op.Origin),
