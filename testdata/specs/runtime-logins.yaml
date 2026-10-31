@@ -1,0 +1,54 @@
+openapi: 3.0.3
+info:
+  title: Two ways to sign in, and a session in a cookie
+  version: "1"
+security:
+  - session: []
+paths:
+  /me:
+    get:
+      responses:
+        "200":
+          description: The caller.
+        "401":
+          description: No session.
+  /token:
+    post:
+      summary: Signs in with a form; the token is in the JSON answer (FastAPI's OAuth2 form).
+      security: []
+      x-procyon-public: Signing in
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                username: {type: string}
+                password: {type: string}
+      responses:
+        "200":
+          description: The token, as access_token.
+  /session:
+    post:
+      summary: Signs in with JSON; the token comes back as a cookie and a redirect.
+      security: []
+      x-procyon-public: Signing in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username: {type: string}
+                password: {type: string}
+      responses:
+        "303":
+          description: Signed in; the session is the sid cookie.
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: sid

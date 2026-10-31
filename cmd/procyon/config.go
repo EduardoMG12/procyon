@@ -97,9 +97,17 @@ func loadConfig() (config, error) {
 		name  string
 		login *probe.Login
 	}{{"a", cfg.Test.Accounts.A.Login}, {"b", cfg.Test.Accounts.B.Login}} {
-		if l := account.login; l != nil && (l.Operation == "" || l.Token == "") {
-			key := "test.accounts." + account.name + ".login"
-			return cfg, fmt.Errorf("%s: %s needs operation (\"POST /login\") and token (a JSON pointer such as /token)",
+		l := account.login
+		if l == nil {
+			continue
+		}
+		key := "test.accounts." + account.name + ".login"
+		switch {
+		case l.Operation == "" || (l.Token == "") == (l.Cookie == ""):
+			return cfg, fmt.Errorf("%s: %s needs operation (\"POST /login\") and either token (a JSON pointer such as /token) "+
+				"or cookie (the name of the cookie the answer sets)", positionOf(data, "$."+key), key)
+		case l.Body != nil && l.Form != nil:
+			return cfg, fmt.Errorf("%s: %s has both body (sent as JSON) and form (sent form-encoded); keep one",
 				positionOf(data, "$."+key), key)
 		}
 	}
