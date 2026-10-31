@@ -1,0 +1,37 @@
+openapi: 3.0.3
+info:
+  title: Objects named by optional query parameters
+  version: "1"
+security: [{bearer: []}]
+paths:
+  /pictures:
+    get:
+      responses: {"200": {description: The caller's pictures.}}
+  /picture:
+    get:
+      parameters:
+        - {name: picture_id, in: query, schema: {type: string}} # named like an ID: filled from /pictures
+      responses: {"200": {description: One picture.}}
+  /note:
+    get:
+      parameters:
+        - {name: username, in: query, schema: {type: string}} # not named like an ID: filled from test.ids
+      responses: {"200": {description: One user's note.}}
+  /report:
+    get:
+      parameters:
+        - {name: reportId, in: query, schema: {type: string}} # named like an ID, but no value anywhere
+      responses: {"200": {description: One report.}}
+  /mechanic-report:
+    get:
+      parameters:
+        - {name: report_id, in: query, required: true, example: "1", schema: {type: string}} # only the example: B not tested
+      responses: {"200": {description: One report.}}
+  /products:
+    get:
+      parameters:
+        - {name: status, in: query, schema: {type: string}, example: sold} # a filter, never sent
+      responses: {"200": {description: The products.}}
+components:
+  securitySchemes:
+    bearer: {type: http, scheme: bearer}
