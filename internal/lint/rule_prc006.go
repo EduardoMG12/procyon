@@ -4,10 +4,8 @@ import (
 	"fmt"
 
 	"github.com/EduardoMG12/procyon/internal/loader"
-
-	"github.com/EduardoMG12/procyon/internal/words"
-
 	"github.com/EduardoMG12/procyon/internal/report"
+	"github.com/EduardoMG12/procyon/internal/words"
 
 	"github.com/getkin/kin-openapi/openapi3"
 )
@@ -39,9 +37,8 @@ func checkPRC006(doc *openapi3.T) []report.Finding {
 			if !textual(prop.Value) || !words.Match(name, piiWords, piiDescribingWords, piiReferenceWords) {
 				return // emailVerified, emailSettings: about the data, not the data
 			}
-			loc := propertyLocation(prop)
 			found.add(report.Finding{
-				Location:  loc,
+				Location:  propertyLocation(prop),
 				Operation: method + " " + path,
 				Why: fmt.Sprintf("This operation needs no authentication and returns %q, personal data. "+
 					"Anyone can collect it, for every record they can reach, which breaks privacy laws such as the GDPR and LGPD.", name),
@@ -56,7 +53,7 @@ func checkPRC006(doc *openapi3.T) []report.Finding {
 // data is a value such as an address, never a flag or an object of
 // settings. A schema without a type counts, to stay on the safe side.
 func textual(s *openapi3.Schema) bool {
-	if s.Type == nil || len(s.Type.Slice()) == 0 {
+	if untyped(s) {
 		return len(s.Properties) == 0
 	}
 	if s.Type.Includes("string") {
