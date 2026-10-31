@@ -88,8 +88,7 @@ var (
 
 // menu lists what the shop sells, the same for every signed-in user.
 func (s *server) menu(w http.ResponseWriter, r *http.Request) {
-	if caller(r) == "" {
-		writeJSON(w, http.StatusUnauthorized, errorBody("missing or unknown token"))
+	if _, ok := authenticated(w, r); !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, menuItems)
@@ -97,9 +96,8 @@ func (s *server) menu(w http.ResponseWriter, r *http.Request) {
 
 // listOrders returns the caller's orders.
 func (s *server) listOrders(w http.ResponseWriter, r *http.Request) {
-	user := caller(r)
-	if user == "" {
-		writeJSON(w, http.StatusUnauthorized, errorBody("missing or unknown token"))
+	user, ok := authenticated(w, r)
+	if !ok {
 		return
 	}
 	mine := []order{}
@@ -116,9 +114,8 @@ func (s *server) listOrders(w http.ResponseWriter, r *http.Request) {
 // Vulnerable (PRC102): any authenticated caller gets any order, though
 // every user sees its ID on the menu.
 func (s *server) getOrder(w http.ResponseWriter, r *http.Request) {
-	user := caller(r)
-	if user == "" {
-		writeJSON(w, http.StatusUnauthorized, errorBody("missing or unknown token"))
+	user, ok := authenticated(w, r)
+	if !ok {
 		return
 	}
 	for _, o := range shopOrders {
@@ -151,6 +148,16 @@ func caller(r *http.Request) string {
 	return ""
 }
 
+// authenticated returns the user a request comes from. When its token is
+// missing or unknown, it answers 401 and returns false.
+func authenticated(w http.ResponseWriter, r *http.Request) (user string, ok bool) {
+	if user = caller(r); user == "" {
+		writeJSON(w, http.StatusUnauthorized, errorBody("missing or unknown token"))
+		return "", false
+	}
+	return user, true
+}
+
 // passwords are the seeded accounts' passwords, for POST /login.
 var passwords = map[string]string{"alice": "alice-password", "bob": "bob-password"}
 
@@ -169,10 +176,10 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"session": map[string]string{"token": token}})
 }
 
+// me returns the caller's name.
 func (s *server) me(w http.ResponseWriter, r *http.Request) {
-	user := caller(r)
-	if user == "" {
-		writeJSON(w, http.StatusUnauthorized, errorBody("missing or unknown token"))
+	user, ok := authenticated(w, r)
+	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"name": user})
@@ -209,11 +216,12 @@ func (s *server) notesOf(owner string) []*note {
 //
 // Vulnerable (PRC102): any authenticated caller gets anyone's notes.
 func (s *server) ofOwner(w http.ResponseWriter, r *http.Request) {
-	user, owner := caller(r), r.URL.Query().Get("owner")
-	switch {
-	case user == "":
-		writeJSON(w, http.StatusUnauthorized, errorBody("missing or unknown token"))
+	user, ok := authenticated(w, r)
+	if !ok {
 		return
+	}
+	owner := r.URL.Query().Get("owner")
+	switch {
 	case owner == "":
 		writeJSON(w, http.StatusBadRequest, errorBody("the owner query parameter is required"))
 		return
@@ -231,9 +239,8 @@ func (s *server) ofOwner(w http.ResponseWriter, r *http.Request) {
 // Vulnerable (PRC103, PRC104): a body that is not a note gives a 500, and a
 // title longer than the spec's maxLength is accepted.
 func (s *server) create(w http.ResponseWriter, r *http.Request) {
-	user := caller(r)
-	if user == "" {
-		writeJSON(w, http.StatusUnauthorized, errorBody("missing or unknown token"))
+	user, ok := authenticated(w, r)
+	if !ok {
 		return
 	}
 	in, ok := s.readNote(w, r)
@@ -292,9 +299,8 @@ func (s *server) delete(w http.ResponseWriter, r *http.Request) {
 // authenticated and, in the fixed API, owns it. Otherwise it writes the
 // error response and returns false.
 func (s *server) find(w http.ResponseWriter, r *http.Request) (*note, bool) {
-	user := caller(r)
-	if user == "" {
-		writeJSON(w, http.StatusUnauthorized, errorBody("missing or unknown token"))
+	user, ok := authenticated(w, r)
+	if !ok {
 		return nil, false
 	}
 	s.mu.Lock()
