@@ -79,6 +79,9 @@ type specFiles struct {
 	overLimit error
 	// specAbs is the spec's absolute path, for $refs back into it.
 	specAbs string
+	// escaped holds, by path, the escapes withLocations wrote into each
+	// file kin-openapi was given, so columns can be mapped back.
+	escaped map[string]escapes
 }
 
 func newSpecFiles(path, refRoot string, data []byte) *specFiles {
@@ -86,6 +89,7 @@ func newSpecFiles(path, refRoot string, data []byte) *specFiles {
 		spec: path, refRoot: refRoot,
 		paths: map[string]string{}, lines: map[string][]string{},
 		cache: map[string][]byte{}, cacheOwner: map[string]string{}, specData: data,
+		escaped: map[string]escapes{},
 		// kin-openapi's document cache starts with the spec, loaded first.
 		loaded: map[string]bool{specURL(path).String(): true},
 	}
@@ -105,6 +109,7 @@ func (f *specFiles) add(location *url.URL, path string, data []byte) {
 func (f *specFiles) asGiven(loc report.Location) report.Location {
 	if given, ok := f.paths[loc.File]; ok {
 		loc.File = given
+		loc.Column = f.escaped[given].original(loc.Line, loc.Column)
 		if given == f.spec && f.back != nil {
 			if p, ok := f.back(position{loc.Line, loc.Column}); ok {
 				loc.Line, loc.Column = p.line, p.column
@@ -173,7 +178,7 @@ func (f *specFiles) read(_ *openapi3.Loader, location *url.URL) ([]byte, error) 
 		// A $ref back into the spec, written another way (./api.yaml vs
 		// api.yaml): it is the spec, already read.
 		f.paths[location.String()] = f.spec
-		f.cache[path], f.cacheOwner[path] = withLocations(f.specData), f.spec
+		f.cache[path], f.cacheOwner[path] = f.withLocations(f.spec, f.specData), f.spec
 		return f.handOver(location, path, f.cache[path], false) // the spec was parsed first
 	}
 	if f.root == nil {
@@ -200,7 +205,7 @@ func (f *specFiles) read(_ *openapi3.Loader, location *url.URL) ([]byte, error) 
 		return nil, fmt.Errorf("$ref %q: the spec's $refs read more than %d MiB in total", path, maxRefTotal>>20)
 	}
 	f.add(location, path, data)
-	f.cache[path], f.cacheOwner[path] = withLocations(data), path
+	f.cache[path], f.cacheOwner[path] = f.withLocations(path, data), path
 	return f.handOver(location, path, f.cache[path], true)
 }
 
@@ -444,11 +449,14 @@ func evalSymlinks(path string) string {
 	return path
 }
 
-// withLocations returns data with a trailing YAML comment. kin-openapi
+// withLocations returns the file at path, whose content is data, as
+// kin-openapi is given it: with a trailing YAML comment. kin-openapi
 // records locations only on its YAML path, and it tries JSON first; the
 // comment makes the JSON attempt fail while the file stays valid YAML (JSON
-// is YAML) with every line and column unchanged.
-func withLocations(data []byte) []byte {
+// is YAML) with every line unchanged. Characters YAML cannot hold are
+// escaped first (see escapeForYAML), and where is kept for asGiven.
+func (f *specFiles) withLocations(path string, data []byte) []byte {
+	data, f.escaped[path] = escapeForYAML(data)
 	return append(data[:len(data):len(data)], "\n# procyon\n"...)
 }
 

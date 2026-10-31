@@ -1,0 +1,20 @@
+openapi: 3.0.3
+info:
+  title: Shop
+  version: 1.0.0
+paths:
+  /orders:
+    get:
+      responses:
+        "200":
+          description: Orders
+          content:
+            application/json:
+              schema:
+                type: string
+                # A block that keeps its line breaks and holds nothing but
+                # a blank line: valid YAML that goccy/go-yaml refuses.
+                example: |+
+
+        "404":
+          description: Not found
