@@ -134,10 +134,7 @@ func loadParsed(path string, opts Options, data []byte, file *ast.File, swagger 
 	// A requirement naming an undefined scheme is a security finding
 	// (PRC002), with a location and a fix, not a reason to refuse the spec.
 	if err = withoutTolerated(err); err != nil {
-		// Some validation errors append the schema and value on extra lines;
-		// the first line says what is wrong.
-		msg, _, _ := strings.Cut(err.Error(), "\n")
-		return nil, nil, fmt.Errorf("%s: invalid spec: %s", path, msg)
+		return nil, nil, invalidSpec(path, err, files.asGiven)
 	}
 	if err := checkExtensions(doc, files.asGiven); err != nil {
 		return nil, nil, err
