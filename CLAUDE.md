@@ -112,7 +112,8 @@ publishing waits for the owner's approval in the `release` environment
 `probe` (runtime tests), `words`, `format`, `cmd/procyon`;
 `internal/arch` tests the import directions. It runs against vulnapi
 (ours, every PR) and weekly against VAmPI and crAPI
-(`.github/workflows/benchmark.yml`). Next: v0.3, more runtime checks ([PRD 0003](docs/prds/0003-v0.3-more-runtime-checks.md), a draft).
+(`.github/workflows/benchmark.yml`). v0.3 ([PRD 0003](docs/prds/0003-v0.3-more-runtime-checks.md)) is built,
+not released: PRC106–PRC109 and the PRC102 fix for public reads (#202–#210).
 The automatic `/code-review` skips paths containing "test" or "spec": give
 a separate review agent the file list for test files.
 Before every push, run the tests on a clean `git archive` of the commit:
