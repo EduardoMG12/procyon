@@ -120,6 +120,11 @@ procyon test openapi.yaml --compose docker-compose.yml --service api --port 8080
 - `--base-url http://127.0.0.1:8080` tests a copy you started yourself.
   Procyon only ever calls loopback and private addresses: never a system on
   the internet, and there is no flag to change that.
+- The spec's paths are relative to its first server. When the base URL
+  has no path, as with `--compose`, the server's path is kept: with
+  `servers: [{url: /api/v2}]`, `GET /orders` goes to
+  `http://127.0.0.1:8080/api/v2/orders`. A path in `--base-url`
+  (`http://127.0.0.1:8080/v2-staging`) replaces it.
 - `--base-spec base.yaml` tests only the operations new or changed since
   that spec, a shared schema included. A spec split across files is not
   compared yet: everything is tested, and a note says so.

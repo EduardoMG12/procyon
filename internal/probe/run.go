@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -62,7 +63,8 @@ const (
 // order:
 //
 //  1. load the spec, and the base spec for --base-spec (loadSpecs);
-//  2. check the target is loopback or private, and its TLS (checkTLS);
+//  2. check the target is loopback or private, add the spec's server path
+//     when it has none (withServerPath), and check its TLS (checkTLS);
 //  3. sign the test accounts in (signIn);
 //  4. read as A and as B to find their objects (discoverAccounts);
 //  5. test every read and write: anonymously, then B on A's objects
@@ -85,11 +87,13 @@ func Run(ctx context.Context, specPath string, opts Options) (report.Report, err
 	if err != nil {
 		return report.Report{}, err
 	}
+	pathNote := withServerPath(target, spec.ServerPath())
 	timeout := cmp.Or(opts.Timeout, defaultTimeout)
 	budget := max(minBudget, budgetPerOperation*len(spec.Operations()))
 	r := &runner{client: newClient(timeout, budget), target: target}
 	defer r.client.http.CloseIdleConnections()
 	res := &results{root: report.Location{File: specPath, Line: 1, Column: 1}}
+	res.note(res.root, pathNote)
 
 	// TLS first: a server that speaks only an old protocol is reported
 	// before anything else can fail on it.
@@ -193,6 +197,19 @@ func (res *results) skipSet(ops []loader.Operation, skip []string) map[string]bo
 		set[name] = true
 	}
 	return set
+}
+
+// withServerPath puts the spec's server path (/b2b/v2) on a target that
+// has no path of its own, since the spec's paths are relative to it, and
+// returns a note that says where requests go. A target with a path keeps
+// it: that is how a copy served under another path is tested.
+func withServerPath(target *url.URL, serverPath string) (note string) {
+	if serverPath == "" || (target.Path != "" && target.Path != "/") {
+		return ""
+	}
+	target.Path, target.RawPath = serverPath, ""
+	return fmt.Sprintf("requests go to %s: the base URL has no path, so the path of the spec's first server (%s) is kept",
+		target, serverPath)
 }
 
 // loadSpecs loads the spec and, for --base-spec, which of its operations

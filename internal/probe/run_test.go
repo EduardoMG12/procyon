@@ -507,3 +507,53 @@ func TestBWritesTheExampleWhenTheChangedOneIsRefused(t *testing.T) {
 		t.Errorf("findings %q, want PRC102 on PUT /profiles/{id}", findingKeys(rep))
 	}
 }
+
+// A spec whose server has a path (/b2b/v2, as Juice Shop's) is tested
+// under it when the base URL has none; a base URL with a path of its own
+// keeps it. Every other path gets the server's web page, as from a
+// single-page app: calling one of those was a PRC101.
+func TestTheSpecsServerPathIsKept(t *testing.T) {
+	spec := writeSpec(t, strings.Replace(bearerSpec, "paths:", "servers: [{url: /b2b/v2}]\npaths:", 1)+`  /orders:
+    get:
+      responses: {"200": {description: ok}}
+`)
+	var mu sync.Mutex
+	var api string // where the server's API is
+	var others []string
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case r.URL.Path != api+"/orders":
+			others = append(others, r.URL.Path)
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte("<!doctype html><title>shop</title>"))
+		case userOf(r) == "":
+			w.WriteHeader(http.StatusUnauthorized)
+		default:
+			w.Write([]byte(`[]`))
+		}
+	})
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+	for _, tt := range []struct{ baseURL, api string }{
+		{srv.URL, "/b2b/v2"},
+		{srv.URL + "/", "/b2b/v2"},
+		{srv.URL + "/shop", "/shop"},
+	} {
+		api, others = tt.api, nil
+		rep, err := Run(context.Background(), spec, Options{BaseURL: tt.baseURL, TokenA: vulnapi.TokenA, TokenB: vulnapi.TokenB})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(rep.Findings) != 0 || len(others) != 0 {
+			t.Errorf("--base-url %s: findings %q, calls outside %s: %q; want none", tt.baseURL, findingKeys(rep), tt.api, others)
+		}
+		noted := slices.ContainsFunc(rep.Notes, func(n report.Note) bool {
+			return n.Message == "requests go to "+srv.URL+"/b2b/v2: the base URL has no path, so the path of the spec's first server (/b2b/v2) is kept"
+		})
+		if noted != (tt.api == "/b2b/v2") {
+			t.Errorf("--base-url %s: notes %v; want the server path noted only when it is used", tt.baseURL, rep.Notes)
+		}
+	}
+}
