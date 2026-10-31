@@ -33,6 +33,7 @@ func TestPlantedVulnerabilities(t *testing.T) {
 		{"PRC102: B lists A's notes", "GET", "/owner-notes?owner=alice", TokenB, "", 200, 404},
 		{"the owner is required", "GET", "/owner-notes", TokenA, "", 400, 400},
 		{"every user sees the menu", "GET", "/menu", TokenB, "", 200, 200},
+		{"anyone sees the shop's page", "GET", "/shop", "", "", 200, 200},
 		{"owner reads own order", "GET", "/orders/1", TokenA, "", 200, 200},
 		{"PRC102: B reads A's order", "GET", "/orders/1", TokenB, "", 200, 404},
 		{"anonymous read is refused", "GET", "/notes/1", "", "", 401, 401},
@@ -67,6 +68,27 @@ func TestPlantedVulnerabilities(t *testing.T) {
 			if resp.StatusCode != want {
 				t.Errorf("fixed=%v %s: %s %s = %d, want %d", fixed, tt.name, tt.method, tt.path, resp.StatusCode, want)
 			}
+		}
+	}
+}
+
+// The shop's page shows its reviewer's e-mail only in the vulnerable API
+// (PRC106).
+func TestShopPageShowsTheReviewersContact(t *testing.T) {
+	for _, fixed := range []bool{false, true} {
+		srv := httptest.NewServer(New(fixed))
+		resp, err := http.Get(srv.URL + "/shop")
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		srv.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if shown := strings.Contains(string(body), "alice@example.com"); shown == fixed {
+			t.Errorf("fixed=%v: GET /shop = %s, e-mail shown %v", fixed, body, shown)
 		}
 	}
 }

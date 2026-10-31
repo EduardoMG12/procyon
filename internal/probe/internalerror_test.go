@@ -80,7 +80,7 @@ func TestPRC109OncePerOperation(t *testing.T) {
 		// What A's discovery, the anonymous calls and the malformed pass
 		// reach; the answers hold no IDs, so nothing with one in its path
 		// or query is called.
-		{"", []string{"GET /health", "GET /me", "GET /notes", "POST /notes", "GET /menu", "GET /orders", "POST /reviews"}},
+		{"", []string{"GET /health", "GET /me", "GET /notes", "POST /notes", "GET /shop", "GET /menu", "GET /orders", "POST /reviews"}},
 		{"../../testdata/specs/runtime-notes-base.yaml", []string{"GET /health", "POST /notes"}},
 	}
 	for _, tt := range tests {

@@ -91,9 +91,11 @@ func (s *session) testOperation(ctx context.Context, op loader.Operation) error 
 // anonymous calls op with no credentials. Only an operation the spec
 // protects can be reached by mistake (PRC101); one it leaves open is
 // PRC001's business. Whatever the call reached must not show personal
-// data (PRC106). Public operations are not called.
+// data (PRC106). Of the public operations only the reads are called:
+// being public says an operation is meant to be open, not that anything
+// it shows is.
 func (s *session) anonymous(ctx context.Context, op loader.Operation, path string) (report.Cell, error) {
-	if op.Public {
+	if op.Public && op.Method != http.MethodGet {
 		return report.Cell{Outcome: report.Public}, nil
 	}
 	exchange, body, err := s.sendFull(ctx, op, path, anonymous)
@@ -106,12 +108,15 @@ func (s *session) anonymous(ctx context.Context, op loader.Operation, path strin
 		if len(personal) > 0 {
 			exchange = personal[0].Evidence[0] // the personal values masked, for PRC101 too
 		}
-		if op.NeedsAuth {
+		if op.NeedsAuth && !op.Public {
 			found = append(found, anonymousAccess(op, exchange))
 		}
 		found = append(found, personal...)
 	}
 	s.res.findings = append(s.res.findings, found...)
+	if op.Public && len(found) == 0 {
+		return report.Cell{Outcome: report.Public, Status: exchange.Status}, nil
+	}
 	return cellOf(exchange, len(found) > 0), nil
 }
 

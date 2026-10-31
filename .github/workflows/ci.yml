@@ -80,6 +80,7 @@ jobs:
           set -e
           test "$code" = 1
           test "$(jq '.summary.critical' vulnerable.json)" = 8
+          test "$(jq '.summary.high' vulnerable.json)" = 2
           test "$(jq '.summary.medium' vulnerable.json)" = 3  # PRC103 twice, PRC109 once
           jq -e '.findings | any(.rule.id == "PRC109" and .operation == "POST /reviews")' vulnerable.json > /dev/null
       - name: The fixed twin passes

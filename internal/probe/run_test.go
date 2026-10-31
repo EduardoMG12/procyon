@@ -39,6 +39,7 @@ func TestRunFindsThePlantedVulnerabilities(t *testing.T) {
 		"PRC101 GET /notes/{id}/preview", // and no PRC102: the anonymous caller read it too
 		"PRC108 GET /notes-search",       // B's own search still returns A's notes
 		"PRC102 GET /owner-notes",
+		"PRC106 GET /shop", "PRC106 GET /shop", // the review's email and phone, not its orderNumber
 		"PRC102 GET /orders/{orderId}", // though B saw its ID as a menu item's
 		"PRC109 POST /reviews",
 	}
@@ -259,7 +260,7 @@ func TestRunFillsTheAuthorizationMatrix(t *testing.T) {
 			row.A.Outcome, row.A.Status, row.B.Outcome, row.B.Status, row.Anonymous.Outcome, row.Anonymous.Status))
 	}
 	want := []string{
-		"GET /health A=allowed 200 B= 0 anon=public 0",
+		"GET /health A=allowed 200 B= 0 anon=public 200", // a public read is called anonymously, for PRC106
 		"GET /me A=allowed 200 B= 0 anon=denied 401",
 		"GET /menu A=allowed 200 B=allowed 200 anon=denied 401",
 		"GET /notes A=allowed 200 B=public 0 anon=finding 200",
@@ -269,6 +270,7 @@ func TestRunFillsTheAuthorizationMatrix(t *testing.T) {
 		"GET /orders A=allowed 200 B=allowed 200 anon=denied 401",
 		"GET /orders/{orderId} A=allowed 200 B=finding 200 anon=denied 401",
 		"GET /owner-notes A=allowed 200 B=finding 200 anon=denied 401",
+		"GET /shop A=allowed 200 B= 0 anon=finding 200", // public, and it shows personal data (PRC106)
 		"POST /login A= 0 B= 0 anon=public 0",
 		"POST /notes A= 0 B= 0 anon=denied 401",
 		"PUT /notes/{id} A= 0 B=finding 200 anon=denied 401",
@@ -318,7 +320,8 @@ func TestRunWithABaseSpecTestsOnlyChangedOperations(t *testing.T) {
 	rep := runOn(t, vulnapiSpec, vulnapi.New(false), Options{BaseSpec: "../../testdata/specs/runtime-notes-base.yaml"})
 	got := findingKeys(rep)
 	// GET /notes (PRC101), GET and DELETE /notes/{id}, GET /owner-notes,
-	// the shop and the reviews did not change; GET /notes/{id}/preview is new.
+	// the shop (its menu, orders and page) and the reviews did not change;
+	// GET /notes/{id}/preview is new.
 	want := []string{"PRC103 POST /notes", "PRC104 POST /notes", "PRC102 PUT /notes/{id}", "PRC103 PUT /notes/{id}", "PRC104 PUT /notes/{id}",
 		"PRC101 GET /notes/{id}/preview", "PRC108 GET /notes-search"}
 	if !slices.Equal(got, want) {
@@ -330,8 +333,8 @@ func TestRunWithABaseSpecTestsOnlyChangedOperations(t *testing.T) {
 			skipped++
 		}
 	}
-	if skipped != 10 || !slices.ContainsFunc(rep.Notes, func(n report.Note) bool { return strings.Contains(n.Message, "10 of 15 operations unchanged") }) {
-		t.Errorf("skipped rows %d, notes %v; want 10 and the unchanged note", skipped, rep.Notes)
+	if skipped != 11 || !slices.ContainsFunc(rep.Notes, func(n report.Note) bool { return strings.Contains(n.Message, "11 of 16 operations unchanged") }) {
+		t.Errorf("skipped rows %d, notes %v; want 11 and the unchanged note", skipped, rep.Notes)
 	}
 }
 
