@@ -33,7 +33,7 @@ func checkPRC006(doc *openapi3.T) []report.Finding {
 		if method != "GET" || !loader.Unauthenticated(doc, path, op) {
 			return
 		}
-		forEachResponseProperty(op, func(name string, prop *openapi3.SchemaRef) {
+		forEachResponseProperty(op, func(name string, prop *openapi3.SchemaRef, _ *openapi3.Schema) {
 			if !textual(prop.Value) || !words.Match(name, piiWords, piiDescribingWords, piiReferenceWords) {
 				return // emailVerified, emailSettings: about the data, not the data
 			}

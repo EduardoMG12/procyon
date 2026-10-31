@@ -23,8 +23,8 @@ func requestSchemas(op *openapi3.Operation) []*openapi3.SchemaRef {
 }
 
 // forEachResponseProperty calls fn for every property of every schema an
-// operation's responses can return.
-func forEachResponseProperty(op *openapi3.Operation, fn func(name string, prop *openapi3.SchemaRef)) {
+// operation's responses can return, with the object it is a property of.
+func forEachResponseProperty(op *openapi3.Operation, fn func(name string, prop *openapi3.SchemaRef, parent *openapi3.Schema)) {
 	if op.Responses == nil {
 		return
 	}
@@ -34,8 +34,8 @@ func forEachResponseProperty(op *openapi3.Operation, fn func(name string, prop *
 			roots = append(roots, mediaSchemas(response.Value.Content)...)
 		}
 	}
-	walkProperties(roots, func(name string, prop *openapi3.SchemaRef) bool {
-		fn(name, prop)
+	walkProperties(roots, func(name string, prop *openapi3.SchemaRef, parent *openapi3.Schema) bool {
+		fn(name, prop, parent)
 		return true
 	})
 }
@@ -54,10 +54,11 @@ func mediaSchemas(content openapi3.Content) []*openapi3.SchemaRef {
 
 // walkProperties calls fn for every property of the schemas under roots,
 // following nested objects, array items, allOf/oneOf/anyOf and
-// additionalProperties. fn returns whether to look inside the property.
+// additionalProperties, with the object the property belongs to (parent).
+// fn returns whether to look inside the property.
 // Each schema is visited once, so recursive schemas (a User with a manager
 // User) terminate.
-func walkProperties(roots []*openapi3.SchemaRef, fn func(name string, prop *openapi3.SchemaRef) bool) {
+func walkProperties(roots []*openapi3.SchemaRef, fn func(name string, prop *openapi3.SchemaRef, parent *openapi3.Schema) bool) {
 	visited := map[*openapi3.Schema]bool{}
 	var walk func(ref *openapi3.SchemaRef)
 	walk = func(ref *openapi3.SchemaRef) {
@@ -72,7 +73,7 @@ func walkProperties(roots []*openapi3.SchemaRef, fn func(name string, prop *open
 		}
 		sort.Strings(names)
 		for _, name := range names {
-			if prop := s.Properties[name]; prop != nil && prop.Value != nil && fn(name, prop) {
+			if prop := s.Properties[name]; prop != nil && prop.Value != nil && fn(name, prop, s) {
 				walk(prop)
 			}
 		}

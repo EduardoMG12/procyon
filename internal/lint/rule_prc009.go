@@ -41,7 +41,7 @@ func checkPRC009(doc *openapi3.T) []report.Finding {
 		if tokenRequest(roots) {
 			return
 		}
-		walkProperties(roots, func(name string, prop *openapi3.SchemaRef) bool {
+		walkProperties(roots, func(name string, prop *openapi3.SchemaRef, _ *openapi3.Schema) bool {
 			if readOnly(prop.Value) {
 				return false // the client cannot send it, nor anything inside it
 			}
