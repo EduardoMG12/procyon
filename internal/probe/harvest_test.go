@@ -41,6 +41,35 @@ func TestHarvestFillsPathParameters(t *testing.T) {
 	}
 }
 
+// What B saw counts only for the resource it was shown as: the parent
+// collection, or a field named like the parameter.
+func TestSawAllForIsPerResource(t *testing.T) {
+	h := newHarvest(nil)
+	h.add("/menu", []byte(`[{"id": "4", "name": "Pizza"}]`))
+	h.add("/books", []byte(`[{"id": "9", "title": "Dune"}]`))
+	h.add("/invoices", []byte(`[{"id": "1", "orderId": "77"}]`))
+
+	tests := []struct {
+		path   string
+		values []string
+		want   bool
+	}{
+		{"/orders/{orderId}", []string{"4"}, false}, // menu item 4, not order 4
+		{"/orders/{id}", []string{"4"}, false},      // a bare "id" elsewhere says nothing
+		{"/books/{id}", []string{"9"}, true},        // the parent collection's
+		{"/books/{title}", []string{"Dune"}, true},  // the parent's field of that name
+		{"/orders/{orderId}", []string{"77"}, true}, // named like the parameter, anywhere
+		{"/books/{id}/orders/{orderId}", []string{"9", "77"}, true},
+		{"/books/{id}/orders/{orderId}", []string{"9", "4"}, false}, // every value must be seen
+		{"/books/{id}/orders/{orderId}", []string{"9", "9"}, false}, // book 9, not order 9: each for its own parameter
+	}
+	for _, tt := range tests {
+		if got := h.sawAllFor(tt.path, tt.values); got != tt.want {
+			t.Errorf("sawAllFor(%s, %q) = %v, want %v", tt.path, tt.values, got, tt.want)
+		}
+	}
+}
+
 // discover calls a read as soon as an earlier response gave it a value,
 // however the operations are ordered.
 func TestDiscoverFollowsDependencies(t *testing.T) {

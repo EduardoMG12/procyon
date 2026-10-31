@@ -61,7 +61,72 @@ func New(fixed bool) http.Handler {
 	mux.HandleFunc("GET /notes/{id}", s.get)
 	mux.HandleFunc("PUT /notes/{id}", s.update)
 	mux.HandleFunc("DELETE /notes/{id}", s.delete)
+	mux.HandleFunc("GET /menu", s.menu)
+	mux.HandleFunc("GET /orders", s.listOrders)
+	mux.HandleFunc("GET /orders/{orderId}", s.getOrder)
 	return mux
+}
+
+// order is a shop order. Nothing in what it shows marks whose it is.
+type order struct {
+	ID      string `json:"id"`
+	Owner   string `json:"-"`
+	Item    string `json:"item"`
+	Address string `json:"address"`
+}
+
+// The shop, never changed: a menu every signed-in user sees, and each
+// user's orders. Their IDs overlap on purpose: menu item 1 is not order 1.
+var (
+	menuItems  = []map[string]string{{"id": "1", "name": "Lamp"}, {"id": "2", "name": "Desk"}}
+	shopOrders = []order{
+		{ID: "1", Owner: "alice", Item: "Lamp", Address: "12 Elm Street"},
+		{ID: "2", Owner: "bob", Item: "Desk", Address: "34 Oak Avenue"},
+	}
+)
+
+// menu lists what the shop sells, the same for every signed-in user.
+func (s *server) menu(w http.ResponseWriter, r *http.Request) {
+	if caller(r) == "" {
+		writeJSON(w, http.StatusUnauthorized, errorBody("missing or unknown token"))
+		return
+	}
+	writeJSON(w, http.StatusOK, menuItems)
+}
+
+// listOrders returns the caller's orders.
+func (s *server) listOrders(w http.ResponseWriter, r *http.Request) {
+	user := caller(r)
+	if user == "" {
+		writeJSON(w, http.StatusUnauthorized, errorBody("missing or unknown token"))
+		return
+	}
+	mine := []order{}
+	for _, o := range shopOrders {
+		if o.Owner == user {
+			mine = append(mine, o)
+		}
+	}
+	writeJSON(w, http.StatusOK, mine)
+}
+
+// getOrder returns one order.
+//
+// Vulnerable (PRC102): any authenticated caller gets any order, though
+// every user sees its ID on the menu.
+func (s *server) getOrder(w http.ResponseWriter, r *http.Request) {
+	user := caller(r)
+	if user == "" {
+		writeJSON(w, http.StatusUnauthorized, errorBody("missing or unknown token"))
+		return
+	}
+	for _, o := range shopOrders {
+		if o.ID == r.PathValue("orderId") && (!s.fixed || o.Owner == user) {
+			writeJSON(w, http.StatusOK, o)
+			return
+		}
+	}
+	writeJSON(w, http.StatusNotFound, errorBody("no such order"))
 }
 
 // add stores a new note and returns it. The caller holds no lock.

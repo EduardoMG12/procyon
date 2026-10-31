@@ -12,8 +12,8 @@ Two seeded test accounts, by bearer token:
 
 | Account | Token | Owns |
 |---|---|---|
-| A (alice) | `token-alice` | notes `1`, `2` |
-| B (bob) | `token-bob` | note `3` |
+| A (alice) | `token-alice` | notes `1`, `2`; order `1` |
+| B (bob) | `token-bob` | note `3`; order `2` |
 
 `POST /login` with `{"username": "alice", "password": "alice-password"}`
 (or bob's, `bob-password`) answers `{"session": {"token": "token-alice"}}`.
@@ -26,14 +26,16 @@ Two seeded test accounts, by bearer token:
 | PRC102 | `GET /notes/{id}` | B reads A's note | `404` |
 | PRC102 | `PUT /notes/{id}` | B changes A's note | `404` |
 | PRC102 | `DELETE /notes/{id}` | B deletes A's note | `404` |
+| PRC102 | `GET /orders/{orderId}` | B reads A's order `1`, though B sees `1` as a menu item's ID | `404` |
 | PRC103 | `POST`, `PUT /notes…` | a body that is not a note (`{"title": 42}`) gives a `500` | `400` |
 | PRC104 | `POST`, `PUT /notes…` | a missing `title`, or a `title` or `body` past its `maxLength`, is accepted | `400` |
 
-Not vulnerable in either: `GET /health` and `POST /login` (public on purpose), `GET /me`, and
+Not vulnerable in either: `GET /health` and `POST /login` (public on purpose), `GET /me`,
+`GET /menu` (the same for every user), `GET /orders` (the caller's own), and
 anonymous calls to every other operation (`401`).
 
-`procyon lint openapi.yaml` reports one low finding (PRC008: `GET /notes`
-has no paging), and nothing about the vulnerabilities above. That is the
+`procyon lint openapi.yaml` reports three low findings (PRC008: `GET /notes`,
+`GET /menu` and `GET /orders` have no paging), and nothing about the vulnerabilities above. That is the
 point: none of them shows in the spec.
 
 ## Running it
