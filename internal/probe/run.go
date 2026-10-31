@@ -90,7 +90,7 @@ func Run(ctx context.Context, specPath string, opts Options) (report.Report, err
 	pathNote := withServerPath(target, spec.ServerPath())
 	timeout := cmp.Or(opts.Timeout, defaultTimeout)
 	budget := max(minBudget, budgetPerOperation*len(spec.Operations()))
-	r := &runner{client: newClient(timeout, budget), target: target, withInternalError: map[string]bool{}}
+	r := &runner{spec: spec, client: newClient(timeout, budget), target: target, withInternalError: map[string]bool{}}
 	defer r.client.http.CloseIdleConnections()
 	res := &results{root: report.Location{File: specPath, Line: 1, Column: 1}}
 	res.note(res.root, pathNote)

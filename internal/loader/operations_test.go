@@ -216,3 +216,31 @@ basePath: /api`: "/api",
 		}
 	}
 }
+
+// A 2xx is an error answer only when the operation documents another 2xx
+// and this one's description says it is an error.
+func TestErrorAnswer(t *testing.T) {
+	spec, err := Load("../../testdata/specs/prc104-error-answers.yaml", anyRule)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		path   string
+		status int
+		want   bool
+	}{
+		{"/login", 202, true},    // "Successful request, but invalid password."
+		{"/login", 200, false},   // the success
+		{"/register", 202, true}, // "already registered, or a field is missing"
+		{"/notes", 202, false},   // "accepted and saved later"
+		{"/upload", 200, false},  // "or an error message", but the only 2xx
+		{"/upload", 202, false},  // not documented
+		{"/login", 422, false},   // not a 2xx
+		{"/nowhere", 202, false}, // no such operation
+	}
+	for _, tt := range tests {
+		if got := spec.ErrorAnswer("POST", tt.path, tt.status); got != tt.want {
+			t.Errorf("ErrorAnswer(POST %s, %d) = %v, want %v", tt.path, tt.status, got, tt.want)
+		}
+	}
+}
