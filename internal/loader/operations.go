@@ -13,15 +13,6 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-// Spec is a loaded spec, for callers that need its operations rather than a
-// lint report: `procyon test` loads the spec it tests through it, so both
-// commands read specs, and refuse bad ones, the same way.
-type Spec struct {
-	doc     *openapi3.T
-	files   *specFiles
-	ignores []report.Ignore
-}
-
 // Operation is one operation of a spec.
 type Operation struct {
 	Method   string // "GET"
@@ -83,52 +74,6 @@ type Credential struct {
 	Prefix string // "Bearer " for bearer tokens, "" for API keys
 }
 
-// Load reads and validates the spec at path, and parses its ignores: a
-// typo in one stops the run.
-func Load(path string, opts Options) (*Spec, error) {
-	doc, files, err := load(path, opts)
-	if err != nil {
-		return nil, err
-	}
-	ignores, err := parseIgnores(doc, files.asGiven, files.back != nil, opts.KnownRule)
-	if err != nil {
-		return nil, err
-	}
-	return &Spec{doc: doc, files: files, ignores: ignores}, nil
-}
-
-// Doc is the spec as kin-openapi loaded it, for lint rules.
-func (s *Spec) Doc() *openapi3.T {
-	return s.doc
-}
-
-// ServerPath is the path of the spec's first server ("/b2b/v2" in
-// "https://shop.example/b2b/v2", or a Swagger 2.0 basePath), with its
-// variables at their defaults: the spec's paths are relative to it. It is
-// "" when the spec has no server, the server has no path, or its URL does
-// not parse.
-func (s *Spec) ServerPath() string {
-	if len(s.doc.Servers) == 0 {
-		return ""
-	}
-	path, err := s.doc.Servers[0].BasePath()
-	if err != nil || path == "/" {
-		return ""
-	}
-	return path
-}
-
-// AsGiven turns a location as kin-openapi records it into one in the file
-// as the user gave it (the original Swagger 2.0 file, a path with spaces).
-func (s *Spec) AsGiven(loc report.Location) report.Location {
-	return s.files.asGiven(loc)
-}
-
-// Ignores are the spec's x-procyon-ignore entries.
-func (s *Spec) Ignores() []report.Ignore {
-	return s.ignores
-}
-
 // Operations returns every operation, sorted by path and then method, so
 // the order is the same on every run.
 func (s *Spec) Operations() []Operation {
@@ -150,13 +95,8 @@ func (s *Spec) Operations() []Operation {
 	return ops
 }
 
-// Sources returns the lines of every spec file read, for Report.Sources.
-func (s *Spec) Sources() map[string][]string {
-	return s.files.lines
-}
-
 // credentialOf returns how a token is sent to an operation: a credential
-// parameter (see credentialParameter) wins, then the first security
+// parameter (see CredentialParameter) wins, then the first security
 // requirement made of one scheme Procyon can fill.
 func credentialOf(doc *openapi3.T, path string, op *openapi3.Operation) *Credential {
 	if name := CredentialParameter(doc, path, op); name != "" {
