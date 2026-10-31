@@ -19,9 +19,9 @@ import (
 // Each test here guards one decision of the oracle: removing the code it
 // names makes it fail.
 
-// asB: when A's only note is the one it created from the example, B must
-// write something else, or A's note "already holds" what B sent and the
-// overwrite is never seen.
+// markedAsB: when A's only note is the one it created from the example, B
+// must write something else, or A's note "already holds" what B sent and
+// the overwrite is never seen.
 func TestBWritesSomethingAsObjectDoesNotHold(t *testing.T) {
 	var mu sync.Mutex
 	notes := map[string]map[string]string{} // id → fields
