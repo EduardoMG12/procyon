@@ -40,6 +40,8 @@ func forEachResponseProperty(op *openapi3.Operation, fn func(name string, prop *
 	})
 }
 
+// mediaSchemas returns the schema of each media type of a body (some may be
+// nil).
 func mediaSchemas(content openapi3.Content) []*openapi3.SchemaRef {
 	var schemas []*openapi3.SchemaRef
 	for _, media := range content {
