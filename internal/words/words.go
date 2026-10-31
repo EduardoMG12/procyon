@@ -74,7 +74,7 @@ func Same(word, listed string) bool {
 }
 
 // OneOf reports whether word is one of list, or the plural of one (see
-// Same): admins is one of [admin internal].
+// Same): admins and addresses are one of [admin address].
 func OneOf(word string, list []string) bool {
 	return slices.ContainsFunc(list, func(listed string) bool { return Same(word, listed) })
 }
