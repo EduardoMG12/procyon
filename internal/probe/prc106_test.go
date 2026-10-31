@@ -70,3 +70,28 @@ func TestPRC106OnAProtectedOperation(t *testing.T) {
 		}
 	}
 }
+
+// PRC106's fix suggests an ignore that works when followed: a field ignore
+// when the response schema declares the field (an ignore may name no
+// other), otherwise declaring it first.
+func TestPRC106FixSuggestsAnIgnoreTheSpecAccepts(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"phone": "+55 11 3333-4444", "reviews": [{"email": "ana@example.com"}]}`))
+	})
+	rep := runOn(t, "../../testdata/specs/prc106.yaml", handler, Options{})
+	fixes := map[string]string{}
+	for _, f := range findingsOf(rep, "PRC106") {
+		fixes[f.Field] = f.Fix
+	}
+	for _, ig := range rep.Ignored {
+		fixes[ig.Finding.Field] = ig.Finding.Fix
+	}
+	declared, undeclared := fixes["phone"], fixes["reviews.email"]
+	if !strings.Contains(declared, "field: phone") || strings.Contains(declared, "response schema") {
+		t.Errorf("fix for phone, which the schema declares: %q, want only the field ignore", declared)
+	}
+	if !strings.Contains(undeclared, "declare reviews.email in the operation's response schema") ||
+		!strings.Contains(undeclared, "field: reviews.email") {
+		t.Errorf("fix for reviews.email, which the schema does not declare: %q, want both steps", undeclared)
+	}
+}
