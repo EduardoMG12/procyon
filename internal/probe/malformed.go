@@ -11,9 +11,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/EduardoMG12/procyon/internal/loader"
-
 	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/loader"
 	"github.com/EduardoMG12/procyon/internal/report"
 )
 
