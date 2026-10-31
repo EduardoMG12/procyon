@@ -110,6 +110,8 @@ const usage = `Usage:
     --port <port>             The API's port inside that container.
     --base-url <url>          Or test a copy you started. Must be a loopback or
                               private address: never a system on the internet.
+                              With no path, the path of the spec's first
+                              server (/api/v2) is kept; a path replaces it.
     --base-spec <file>        The spec before the change (git show
                               origin/main:openapi.yaml > base.yaml): test only
                               operations new or changed since it.

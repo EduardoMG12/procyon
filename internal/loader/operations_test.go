@@ -155,3 +155,32 @@ func TestLoadSkipsAByteOrderMark(t *testing.T) {
 		t.Errorf("Load: %v", err)
 	}
 }
+
+func TestServerPath(t *testing.T) {
+	tests := map[string]string{
+		`openapi: 3.0.3
+servers: [{url: /b2b/v2}]`: "/b2b/v2",
+		`openapi: 3.0.3
+servers: [{url: "https://shop.example/{version}", variables: {version: {default: v1}}}, {url: /other}]`: "/v1",
+		`openapi: 3.0.3
+servers: [{url: "http://localhost:8080"}]`: "",
+		`openapi: 3.0.3`: "",
+		`swagger: "2.0"
+host: shop.example
+basePath: /api`: "/api",
+	}
+	for head, want := range tests {
+		path := filepath.Join(t.TempDir(), "openapi.yaml")
+		text := head + "\ninfo: {title: t, version: \"1\"}\npaths: {}\n"
+		if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		spec, err := Load(path, anyRule)
+		if err != nil {
+			t.Fatalf("%s: %v", head, err)
+		}
+		if got := spec.ServerPath(); got != want {
+			t.Errorf("%s: ServerPath() = %q, want %q", head, got, want)
+		}
+	}
+}
