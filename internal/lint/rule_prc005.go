@@ -7,9 +7,8 @@ import (
 	"strings"
 
 	"github.com/EduardoMG12/procyon/internal/loader"
-	"github.com/EduardoMG12/procyon/internal/words"
-
 	"github.com/EduardoMG12/procyon/internal/report"
+	"github.com/EduardoMG12/procyon/internal/words"
 
 	"github.com/getkin/kin-openapi/openapi3"
 )

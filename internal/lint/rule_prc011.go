@@ -3,6 +3,7 @@ package lint
 import (
 	"github.com/EduardoMG12/procyon/internal/loader"
 	"github.com/EduardoMG12/procyon/internal/report"
+
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
