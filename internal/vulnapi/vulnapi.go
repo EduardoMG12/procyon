@@ -3,6 +3,11 @@
 // API must produce exactly the findings planted in it (see README.md), and
 // the fixed one none.
 //
+// Each planted vulnerability is marked "Vulnerable (PRC…)" in its handler's
+// doc comment, and the fixed twin's behavior is the s.fixed check beside
+// it. The notes are in this file, the shop in shop.go, and the accounts and
+// their tokens in accounts.go.
+//
 // Never run it anywhere but a test or a disposable container.
 package vulnapi
 
@@ -10,14 +15,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
-)
-
-// The two seeded test accounts and their bearer tokens.
-const (
-	TokenA = "token-alice"
-	TokenB = "token-bob"
 )
 
 // maxTitle and maxBody are the spec's maxLength for a note's fields.
@@ -68,65 +66,6 @@ func New(fixed bool) http.Handler {
 	return mux
 }
 
-// order is a shop order. Nothing in what it shows marks whose it is.
-type order struct {
-	ID      string `json:"id"`
-	Owner   string `json:"-"`
-	Item    string `json:"item"`
-	Address string `json:"address"`
-}
-
-// The shop, never changed: a menu every signed-in user sees, and each
-// user's orders. Their IDs overlap on purpose: menu item 1 is not order 1.
-var (
-	menuItems  = []map[string]string{{"id": "1", "name": "Lamp"}, {"id": "2", "name": "Desk"}}
-	shopOrders = []order{
-		{ID: "1", Owner: "alice", Item: "Lamp", Address: "12 Elm Street"},
-		{ID: "2", Owner: "bob", Item: "Desk", Address: "34 Oak Avenue"},
-	}
-)
-
-// menu lists what the shop sells, the same for every signed-in user.
-func (s *server) menu(w http.ResponseWriter, r *http.Request) {
-	if _, ok := authenticated(w, r); !ok {
-		return
-	}
-	writeJSON(w, http.StatusOK, menuItems)
-}
-
-// listOrders returns the caller's orders.
-func (s *server) listOrders(w http.ResponseWriter, r *http.Request) {
-	user, ok := authenticated(w, r)
-	if !ok {
-		return
-	}
-	mine := []order{}
-	for _, o := range shopOrders {
-		if o.Owner == user {
-			mine = append(mine, o)
-		}
-	}
-	writeJSON(w, http.StatusOK, mine)
-}
-
-// getOrder returns one order.
-//
-// Vulnerable (PRC102): any authenticated caller gets any order, though
-// every user sees its ID on the menu.
-func (s *server) getOrder(w http.ResponseWriter, r *http.Request) {
-	user, ok := authenticated(w, r)
-	if !ok {
-		return
-	}
-	for _, o := range shopOrders {
-		if o.ID == r.PathValue("orderId") && (!s.fixed || o.Owner == user) {
-			writeJSON(w, http.StatusOK, o)
-			return
-		}
-	}
-	writeJSON(w, http.StatusNotFound, errorBody("no such order"))
-}
-
 // add stores a new note and returns it. The caller holds no lock.
 func (s *server) add(owner, title, body string) *note {
 	s.mu.Lock()
@@ -135,54 +74,6 @@ func (s *server) add(owner, title, body string) *note {
 	n := &note{ID: strconv.Itoa(s.nextID), Owner: owner, Title: title, Body: body}
 	s.notes[n.ID] = n
 	return n
-}
-
-// caller returns the user a request's bearer token belongs to, or "".
-func caller(r *http.Request) string {
-	switch strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ") {
-	case TokenA:
-		return "alice"
-	case TokenB:
-		return "bob"
-	}
-	return ""
-}
-
-// authenticated returns the user a request comes from. When its token is
-// missing or unknown, it answers 401 and returns false.
-func authenticated(w http.ResponseWriter, r *http.Request) (user string, ok bool) {
-	if user = caller(r); user == "" {
-		writeJSON(w, http.StatusUnauthorized, errorBody("missing or unknown token"))
-		return "", false
-	}
-	return user, true
-}
-
-// passwords are the seeded accounts' passwords, for POST /login.
-var passwords = map[string]string{"alice": "alice-password", "bob": "bob-password"}
-
-// login trades a username and password for the account's token.
-func (s *server) login(w http.ResponseWriter, r *http.Request) {
-	var in struct{ Username, Password string }
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&in); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorBody("want {username, password}"))
-		return
-	}
-	if want, ok := passwords[in.Username]; !ok || in.Password != want {
-		writeJSON(w, http.StatusUnauthorized, errorBody("wrong username or password"))
-		return
-	}
-	token := map[string]string{"alice": TokenA, "bob": TokenB}[in.Username]
-	writeJSON(w, http.StatusOK, map[string]any{"session": map[string]string{"token": token}})
-}
-
-// me returns the caller's name.
-func (s *server) me(w http.ResponseWriter, r *http.Request) {
-	user, ok := authenticated(w, r)
-	if !ok {
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"name": user})
 }
 
 // list returns the caller's notes.
