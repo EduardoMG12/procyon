@@ -1,15 +1,19 @@
 package probe
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/EduardoMG12/procyon/internal/report"
+	"github.com/EduardoMG12/procyon/internal/vulnapi"
 )
 
 // Each test here guards one decision of the oracle: removing the code it
@@ -160,5 +164,33 @@ func TestAnUnboundedLongStringAcceptedIsNoPRC104(t *testing.T) {
 	rep := runOn(t, spec, handler, Options{})
 	if got := findingKeys(rep); len(got) != 0 {
 		t.Errorf("findings %q, want none: the spec sets no maxLength", got)
+	}
+}
+
+// testInOrder: once a malformed body gets no answer, the deletes that come
+// after the malformed pass are noted, never sent.
+func TestNoDeleteIsSentAfterTheServerHangs(t *testing.T) {
+	api := vulnapi.New(false)
+	var mu sync.Mutex
+	deleted := false
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if bytes.Contains(body, []byte(`"title":42`)) {
+			time.Sleep(time.Second) // the title-as-a-number mutation hangs the server
+			return
+		}
+		mu.Lock()
+		deleted = deleted || r.Method == http.MethodDelete
+		mu.Unlock()
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		api.ServeHTTP(w, r)
+	})
+	rep := runOn(t, vulnapiSpec, handler, Options{Timeout: 300 * time.Millisecond})
+	if deleted {
+		t.Error("a DELETE was sent after the server stopped answering")
+	}
+	want := "DELETE /notes/{id} not tested: the server stopped answering after a malformed request"
+	if !slices.ContainsFunc(rep.Notes, func(n report.Note) bool { return n.Message == want }) {
+		t.Errorf("no note %q in %v", want, rep.Notes)
 	}
 }
