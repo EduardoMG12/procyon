@@ -64,9 +64,9 @@ found below is lost.
 | Lack of rate limiting | ✗ | ✗ | Out of scope |
 | JWT with a weak signing key | ✗ | ✗ | Out of scope for v0.2 |
 
-`test` also reports PRC104 on `POST /users/v1/register`, `POST
-/users/v1/login` and `POST /books/v1`: VAmPI accepts bodies its spec
-forbids. Running it changed four oracles (PRD 0002, *Discoveries*).
+`test` reports no PRC104: VAmPI accepts a 100 000-character email at
+sign-up and password at login, but its spec sets no `maxLength`, so it
+allows them. Running it changed four oracles (PRD 0002, *Discoveries*).
 
 ## Pixi (OWASP DevSlop)
 

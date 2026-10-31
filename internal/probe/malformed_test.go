@@ -41,6 +41,9 @@ func TestMutations(t *testing.T) {
 		var got []string
 		for _, m := range mutations([]byte(tt.example), tt.fields) {
 			got = append(got, m.what, string(m.body))
+			if m.allowed {
+				t.Errorf("%s: %q is allowed, want forbidden by the spec", tt.name, m.what)
+			}
 		}
 		if len(got) != len(tt.want) {
 			t.Errorf("%s: got %q, want %q", tt.name, got, tt.want)
@@ -53,9 +56,9 @@ func TestMutations(t *testing.T) {
 			}
 		}
 	}
-	// No maxLength: one very long string instead.
+	// No maxLength: one very long string instead, which the spec allows.
 	got := mutations([]byte(`{"note": "x"}`), []loader.Field{{Name: "note", Types: str}})
-	if len(got) != 2 || got[1].what != "note of 100000 characters" || len(got[1].body) < 100000 {
+	if len(got) != 2 || got[1].what != "note of 100000 characters" || len(got[1].body) < 100000 || !got[1].allowed {
 		t.Errorf("very long string: %d mutations, last %q", len(got), got[len(got)-1].what)
 	}
 }
