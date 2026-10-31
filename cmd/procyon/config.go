@@ -93,23 +93,11 @@ func loadConfig() (config, error) {
 	if cfg.Format != "" && formats[cfg.Format] == nil {
 		return cfg, fmt.Errorf("%s: format: unknown format %q (use %s)", configFile, cfg.Format, formatNames())
 	}
-	for _, account := range []struct {
-		name  string
-		login *probe.Login
-	}{{"a", cfg.Test.Accounts.A.Login}, {"b", cfg.Test.Accounts.B.Login}} {
-		l := account.login
-		if l == nil {
-			continue
-		}
-		key := "test.accounts." + account.name + ".login"
-		switch {
-		case l.Operation == "" || (l.Token == "") == (l.Cookie == ""):
-			return cfg, fmt.Errorf("%s: %s needs operation (\"POST /login\") and either token (a JSON pointer such as /token) "+
-				"or cookie (the name of the cookie the answer sets)", positionOf(data, "$."+key), key)
-		case l.Body != nil && l.Form != nil:
-			return cfg, fmt.Errorf("%s: %s has both body (sent as JSON) and form (sent form-encoded); keep one",
-				positionOf(data, "$."+key), key)
-		}
+	if err := checkLogin(data, "a", cfg.Test.Accounts.A.Login); err != nil {
+		return cfg, err
+	}
+	if err := checkLogin(data, "b", cfg.Test.Accounts.B.Login); err != nil {
+		return cfg, err
 	}
 	for _, value := range cfg.Output {
 		o, err := parseOutput(value)
@@ -119,4 +107,23 @@ func loadConfig() (config, error) {
 		cfg.outputs = append(cfg.outputs, o)
 	}
 	return cfg, nil
+}
+
+// checkLogin refuses account's login (test.accounts.a.login), if it has
+// one, when it is incomplete or contradicts itself, pointing at it in the
+// config file's data.
+func checkLogin(data []byte, account string, l *probe.Login) error {
+	if l == nil {
+		return nil
+	}
+	key := "test.accounts." + account + ".login"
+	switch {
+	case l.Operation == "" || (l.Token == "") == (l.Cookie == ""):
+		return fmt.Errorf("%s: %s needs operation (\"POST /login\") and either token (a JSON pointer such as /token) "+
+			"or cookie (the name of the cookie the answer sets)", positionOf(data, "$."+key), key)
+	case l.Body != nil && l.Form != nil:
+		return fmt.Errorf("%s: %s has both body (sent as JSON) and form (sent form-encoded); keep one",
+			positionOf(data, "$."+key), key)
+	}
+	return nil
 }
