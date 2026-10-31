@@ -117,6 +117,10 @@ From the [fixed twin of vulnapi](../internal/vulnapi/README.md):
 | `DELETE /notes/{id}` | – | 🚫 404 | 🚫 401 |
 ```
 
+A's cell is A's own read of the same request B was sent: A's object in the
+path, and an optional query ID (`?picture_id=`) when one was sent to B. A
+write has no A cell: A only reads.
+
 [CI usage](ci.md#procyon-test-as-a-pr-comment) posts it as a PR comment.
 
 ## What it cannot find (yet)

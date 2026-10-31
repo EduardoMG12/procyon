@@ -93,6 +93,10 @@ func (s *session) testOperation(ctx context.Context, op loader.Operation) error 
 				"declare one of A's under test.ids in .procyon.yaml")
 		}
 	}
+	// Testing B may have read the operation again as A, on A's own object
+	// or with an optional query ID discovery did not send (answerToA): A's
+	// cell is that call, the request B got.
+	row.A = s.ofA.cells[key]
 	s.res.matrix = append(s.res.matrix, row)
 	return nil
 }
