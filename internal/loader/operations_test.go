@@ -151,17 +151,20 @@ func TestExampleBodyFromPropertyExamples(t *testing.T) {
 	}
 }
 
-// Only required query parameters are listed, credentials left out, each
-// with the spec's example when it gives one.
-func TestOperationRequiredQuery(t *testing.T) {
+// Required and optional query parameters are listed apart, credentials
+// left out, each with the spec's example when it gives one.
+func TestOperationQuery(t *testing.T) {
 	spec, err := Load("../../testdata/specs/runtime-query.yaml", anyRule)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := map[string][]string{}
+	got, optional := map[string][]string{}, map[string][]string{}
 	for _, op := range spec.Operations() {
 		for _, q := range op.Query {
 			got[op.Path] = append(got[op.Path], q.Name+"="+q.Example)
+		}
+		for _, q := range op.OptionalQuery {
+			optional[op.Path] = append(optional[op.Path], q.Name+"="+q.Example)
 		}
 	}
 	// The operation's own parameters come before the path's; /signed's
@@ -169,6 +172,9 @@ func TestOperationRequiredQuery(t *testing.T) {
 	want := []string{"q=raccoon", "page=2", "kind=alpha", "owner="}
 	if !slices.Equal(got["/search"], want) || len(got["/signed"]) != 0 {
 		t.Errorf("query = %q, want /search %q and nothing for /signed", got, want)
+	}
+	if want := []string{"sort=name"}; !slices.Equal(optional["/search"], want) || len(optional) != 1 {
+		t.Errorf("optional query = %q, want /search %q only", optional, want)
 	}
 }
 

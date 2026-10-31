@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/EduardoMG12/procyon/internal/loader"
+	"github.com/EduardoMG12/procyon/internal/words"
 )
 
 // How an account's harvest gives an operation's parameters values, so the
@@ -87,6 +88,14 @@ func (h *harvest) ownObject(o object, from string) bool {
 	return false
 }
 
+// namesObject reports whether a parameter's name says it names one object:
+// its last word is id or uuid (picture_id, reportId, orderUUID). A
+// filter (status, sort, page) names none.
+func namesObject(name string) bool {
+	parts := words.Split(name)
+	return len(parts) > 0 && words.OneOf(parts[len(parts)-1], []string{"id", "uuid"})
+}
+
 // pathParam matches a path parameter: {id}, {orderId}.
 var pathParam = regexp.MustCompile(`\{([^}]+)\}`)
 
@@ -98,13 +107,23 @@ type filled struct {
 	values []string
 	params []string // the parameter each of values fills, in the same order
 	own    bool     // every value is known to be the account's own
+	// examples are the required query parameters filled with the spec's
+	// example, and unfilled the optional ones that name an object but got
+	// no value, for notes.
+	examples, unfilled []string
 }
 
 // fill replaces every parameter of path with a value, and adds the
 // required query parameters, or reports the first one it has none for. A
 // query parameter is filled like a path parameter (pick), else with the
 // spec's example.
-func (h *harvest) fill(path string, query []loader.QueryParam) (filled, error) {
+//
+// An optional query parameter is added only when it names an object
+// (namesObject) or has a value declared in .procyon.yaml, and only with a
+// value pick finds, never the spec's example: GET /picture?picture_id= is
+// then tested on A's picture, and an optional filter (?status=sold) is
+// never sent.
+func (h *harvest) fill(path string, query []loader.QueryParam, optional ...loader.QueryParam) (filled, error) {
 	f := filled{own: true}
 	use := func(param, v string, own bool) {
 		f.values, f.params = append(f.values, v), append(f.params, param)
@@ -131,9 +150,22 @@ func (h *harvest) fill(path string, query []loader.QueryParam) (filled, error) {
 			use(q.Name, v, own)
 		case q.Example != "":
 			v = q.Example
+			f.examples = append(f.examples, q.Name)
 		default:
 			return filled{}, fmt.Errorf("no value for query parameter %s", q.Name)
 		}
+		values.Set(q.Name, v)
+	}
+	for _, q := range optional {
+		if !namesObject(q.Name) && len(h.declared[normalize(q.Name)]) == 0 {
+			continue
+		}
+		v, own, ok := h.pick(path, q.Name)
+		if !ok {
+			f.unfilled = append(f.unfilled, q.Name)
+			continue
+		}
+		use(q.Name, v, own)
 		values.Set(q.Name, v)
 	}
 	if len(values) > 0 {
