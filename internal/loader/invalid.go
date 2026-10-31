@@ -1,6 +1,7 @@
 package loader
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"reflect"
@@ -22,20 +23,27 @@ func invalidSpec(path string, err error, hint string, asGiven func(report.Locati
 		errs = multi
 	}
 	if len(errs) == 1 {
-		where := path
-		if loc := asGiven(Locate(errorOrigin(err))); loc.Line > 0 {
-			where = fmt.Sprintf("%s:%d:%d", loc.File, loc.Line, loc.Column)
-		}
+		where := cmp.Or(errorPlace(err, asGiven), path)
 		return fmt.Errorf("%s: invalid spec%s: %s", where, hint, firstLine(err))
 	}
 	lines := make([]string, len(errs))
 	for i, e := range errs {
 		lines[i] = firstLine(e)
-		if loc := asGiven(Locate(errorOrigin(e))); loc.Line > 0 {
-			lines[i] = fmt.Sprintf("%s:%d:%d: %s", loc.File, loc.Line, loc.Column, lines[i])
+		if at := errorPlace(e, asGiven); at != "" {
+			lines[i] = at + ": " + lines[i]
 		}
 	}
 	return fmt.Errorf("%s: invalid spec%s, %d errors:\n  %s", path, hint, len(errs), strings.Join(lines, "\n  "))
+}
+
+// errorPlace is "file:line:column", the place in the original file where
+// kin-openapi says err is, or "" when it recorded none.
+func errorPlace(err error, asGiven func(report.Location) report.Location) string {
+	loc := asGiven(Locate(errorOrigin(err)))
+	if loc.Line <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s:%d:%d", loc.File, loc.Line, loc.Column)
 }
 
 // firstLine is what an error says is wrong: some validation errors append
