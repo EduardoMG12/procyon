@@ -78,11 +78,38 @@ Ignores of runtime rules (PRC1xx, found by `procyon test`) are written the
 same way, on the operation. `procyon lint` checks they are well formed but
 never calls them unused, and `procyon test` does the same for lint rules.
 
+## One field of a response
+
+A runtime finding about one field of an answer (PRC106, personal data in a
+public answer) can be ignored for that field only, with `field`. A shop's
+page shows the shop's own phone on purpose; a customer's phone in the same
+answer is still reported:
+
+```yaml
+/shop:
+  get:
+    x-procyon-ignore:
+      - rule: PRC106
+        field: phone
+        reason: "The shop's own phone, published on purpose"
+```
+
+`field` is the field's place in the answer: property names joined by dots,
+lists left out. `reviews.author.email` is the email of every review's
+author in `{"reviews": [{"author": {"email": ...}}]}`. The field must be in
+one of the operation's response schemas (through `$ref`, `allOf`, `oneOf`,
+`anyOf` and list items), so what is excused is written down in the spec.
+`field` is only for an ignore on an operation. Without it, the ignore
+covers every field. Findings about no single field (every other rule) are
+never covered by an ignore with a `field`: it is reported as matching
+nothing.
+
 ## Mistakes are errors
 
 A missing reason, an unknown rule ID (`PRC01`), a date that is not a date,
-or an unknown key stops the run (exit code `2`) and points at the
-`x-procyon-ignore` key. A typo must never ignore something by accident.
+a `field` the response schema does not have, or an unknown key stops the
+run (exit code `2`) and points at the `x-procyon-ignore` key. A typo must
+never ignore something by accident.
 
 An ignore that matches nothing is reported under **Notes**, so dead ignores
 get cleaned up. Notes never fail the run.

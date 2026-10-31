@@ -1,0 +1,21 @@
+openapi: 3.0.3
+info:
+  title: An ignore whose field is not a string
+  version: "1"
+paths:
+  /shop:
+    get:
+      x-procyon-ignore:
+        - rule: PRC106
+          field: [phone]
+          reason: "A list is not a field"
+      responses:
+        "200":
+          description: The shop.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  phone:
+                    type: string

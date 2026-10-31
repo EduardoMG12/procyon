@@ -49,3 +49,21 @@ func TestNew(t *testing.T) {
 		t.Errorf("fail on %v, failed %v; want the default high, and failed", rep.FailOn, rep.Failed)
 	}
 }
+
+// An ignore that names a field covers the findings about that field only:
+// the shop's own phone is kept, a customer's phone on the same operation
+// is still reported.
+func TestIgnoreOfOneField(t *testing.T) {
+	rule := Rule{ID: "PRC106", Severity: High}
+	findings := []Finding{
+		{Rule: rule, Operation: "GET /shop", Field: "phone"},
+		{Rule: rule, Operation: "GET /shop", Field: "reviews.phone"},
+	}
+	ignores := []Ignore{{Rule: "PRC106", Reason: "the shop's own", Operation: "GET /shop", Field: "phone"}}
+	rep := New(findings, nil, ignores, Options{})
+	if len(rep.Findings) != 1 || rep.Findings[0].Field != "reviews.phone" ||
+		len(rep.Ignored) != 1 || rep.Ignored[0].Finding.Field != "phone" || len(rep.Notes) != 0 {
+		t.Errorf("findings %+v, ignored %+v, notes %v; want reviews.phone reported and phone ignored",
+			rep.Findings, rep.Ignored, rep.Notes)
+	}
+}
