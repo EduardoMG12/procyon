@@ -96,7 +96,7 @@ func (s *session) asB(ctx context.Context, op loader.Operation, f filled) (repor
 		// nothing says which object is A's: B reaching it proves nothing.
 		// Only an ID shown for this path's own parameters counts: B seeing
 		// "4" as a menu item's ID is no reason to skip A's order 4.
-		s.res.note(op.Location, op.Key()+": not tested as B: every user is shown this object's ID and nothing marks it as A's; "+
+		s.res.noteOn(op, "not tested as B: every user is shown this object's ID and nothing marks it as A's; "+
 			"declare one of A's under test.ids in .procyon.yaml")
 		return skipped, nil
 	}
@@ -108,7 +108,7 @@ func (s *session) asB(ctx context.Context, op loader.Operation, f filled) (repor
 		s.res.findings = append(s.res.findings, *v.finding)
 	}
 	if v.note != "" {
-		s.res.note(op.Location, op.Key()+": "+v.note)
+		s.res.noteOn(op, v.note)
 	}
 	return v.cell, nil
 }
@@ -123,11 +123,11 @@ func (s *session) queueMalformed(op loader.Operation, path string) {
 	case op.Body != nil && s.broken:
 		// The malformed pass runs once, before the deletes; inTestOrder
 		// keeps every write ahead of it.
-		s.res.note(op.Location, op.Key()+": malformed input not tested: it came after the malformed pass")
+		s.res.noteOn(op, "malformed input not tested: it came after the malformed pass")
 	case op.Body != nil:
 		s.toBreak = append(s.toBreak, filledOp{op, path})
 	case op.NeedsBody:
-		s.res.note(op.Location, op.Key()+": malformed input not tested: it needs a request body and the spec gives no example")
+		s.res.noteOn(op, "malformed input not tested: it needs a request body and the spec gives no example")
 	}
 }
 
@@ -144,12 +144,11 @@ func (s *session) malformedPass(ctx context.Context) (noAnswer bool, err error) 
 		}
 		s.res.findings = append(s.res.findings, bad...)
 		if note != "" {
-			s.res.note(f.op.Location, f.op.Key()+": "+note)
+			s.res.noteOn(f.op, note)
 		}
 		if hung {
 			for _, rest := range s.toBreak[i+1:] {
-				s.res.note(rest.op.Location, rest.op.Key()+
-					": malformed input not tested: the server stopped answering after an earlier malformed request")
+				s.res.noteOn(rest.op, "malformed input not tested: the server stopped answering after an earlier malformed request")
 			}
 			return true, nil
 		}

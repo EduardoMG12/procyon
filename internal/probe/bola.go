@@ -8,9 +8,8 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/EduardoMG12/procyon/internal/loader"
-
 	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/loader"
 	"github.com/EduardoMG12/procyon/internal/report"
 )
 
@@ -24,7 +23,20 @@ type verdict struct {
 
 // cannotTell is a verdict with no finding: a note, and a skipped cell.
 func cannotTell(note string) verdict {
-	return verdict{note: note, cell: report.Cell{Outcome: report.Skipped}}
+	return verdict{note: note, cell: skipped}
+}
+
+// notReached is the verdict of a call of B's that did not reach A's
+// object: no finding, and the cell its status gives.
+func notReached(exchange report.Exchange) verdict {
+	return verdict{cell: cellOf(exchange, false)}
+}
+
+// reached is the verdict of a call of B's that reached A's object: a
+// PRC102 finding. evidence starts with B's call, then what proves it
+// worked (A's read after B's write).
+func reached(op loader.Operation, evidence ...report.Exchange) verdict {
+	return verdict{finding: bolaFinding(op, evidence), cell: cellOf(evidence[0], true)}
 }
 
 // otherAccount calls op as B with A's object in the path (f) and tells
@@ -53,7 +65,7 @@ func (s *session) readAsB(ctx context.Context, op loader.Operation, f filled) (v
 	}
 	exchange, toB, err := s.sendFull(ctx, op, f.path, s.b)
 	if err != nil || !success(exchange) {
-		return verdict{cell: cellOf(exchange, false)}, err
+		return notReached(exchange), err
 	}
 	shared := sharedUnseen(toB, toA, s.ofB.harvest, f.values)
 	if len(shared) > 0 {
@@ -62,9 +74,9 @@ func (s *session) readAsB(ctx context.Context, op loader.Operation, f filled) (v
 		}
 	}
 	if len(shared) == 0 {
-		return verdict{cell: cellOf(exchange, false)}, nil
+		return notReached(exchange), nil
 	}
-	return verdict{finding: bolaFinding(op, exchange, []report.Exchange{exchange}), cell: cellOf(exchange, true)}, nil
+	return reached(op, exchange), nil
 }
 
 // withoutBsOwn drops the values B's own object on the same operation also
@@ -119,31 +131,27 @@ func (s *session) writeAsB(ctx context.Context, op loader.Operation, f filled) (
 		exchange, _, err = s.sendFull(ctx, op, f.path, s.b)
 	}
 	if err != nil || !success(exchange) {
-		return verdict{cell: cellOf(exchange, false)}, err
+		return notReached(exchange), err
 	}
 	after, afterBody, err := s.sendFull(ctx, reader, f.path, s.a)
 	if err != nil {
 		return verdict{}, err
 	}
-	var reached bool
 	switch {
 	case op.Method == http.MethodDelete && (after.Status == http.StatusNotFound || after.Status == http.StatusGone):
-		reached = true // gone
+		return reached(op, exchange, after), nil // gone
 	case op.Method == http.MethodDelete && !success(after):
 		// A 429 or a 503 says nothing about the object.
 		return cannotTell(fmt.Sprintf("not confirmed: after B's delete, A's read got %d", after.Status)), nil
 	case op.Method == http.MethodDelete:
-		reached = false // still there
-	default:
+		return notReached(exchange), nil // still there
+	case success(after) && hasAllValuesOf(afterBody, op.Body):
 		// Only the fields B sent count: a timestamp or a view counter
 		// changes on every read. readBefore made sure they were not
 		// there yet.
-		reached = success(after) && hasAllValuesOf(afterBody, op.Body)
+		return reached(op, exchange, after), nil
 	}
-	if !reached {
-		return verdict{cell: cellOf(exchange, false)}, nil
-	}
-	return verdict{finding: bolaFinding(op, exchange, []report.Exchange{exchange, after}), cell: cellOf(exchange, true)}, nil
+	return notReached(exchange), nil
 }
 
 // readBefore is A's read of its object before B's write or delete. Its note
@@ -170,10 +178,10 @@ func (s *session) readBefore(ctx context.Context, op, reader loader.Operation, p
 func (s *session) unreadableWrite(ctx context.Context, op loader.Operation, f filled) (verdict, error) {
 	exchange, body, err := s.sendFull(ctx, op, f.path, s.b)
 	if err != nil || !success(exchange) {
-		return verdict{cell: cellOf(exchange, false)}, err
+		return notReached(exchange), err
 	}
 	if mentionsAny(body, unseen(f.values, s.ofB.harvest)) {
-		return verdict{finding: bolaFinding(op, exchange, []report.Exchange{exchange}), cell: cellOf(exchange, true)}, nil
+		return reached(op, exchange), nil
 	}
 	return verdict{
 		note: fmt.Sprintf("not confirmed: B got %d, and without a GET on the same path Procyon cannot tell whether "+
@@ -183,8 +191,8 @@ func (s *session) unreadableWrite(ctx context.Context, op loader.Operation, f fi
 }
 
 // bolaFinding is a PRC102 finding: what B did to A's object, and the
-// requests that prove it.
-func bolaFinding(op loader.Operation, exchange report.Exchange, evidence []report.Exchange) *report.Finding {
+// requests that prove it, B's call first.
+func bolaFinding(op loader.Operation, evidence []report.Exchange) *report.Finding {
 	var what string
 	switch op.Method {
 	case http.MethodGet:
@@ -199,7 +207,7 @@ func bolaFinding(op loader.Operation, exchange report.Exchange, evidence []repor
 		Location:  op.Location,
 		Operation: op.Key(),
 		Why: fmt.Sprintf("Test account B called this operation on an object of test account A and got %d: "+
-			"any user can %s other users' objects by changing the ID in the path.", exchange.Status, what),
+			"any user can %s other users' objects by changing the ID in the path.", evidence[0].Status, what),
 		Fix: "On the server, check that the object belongs to the caller (or that the caller may " + what +
 			" it) before acting, and answer 404 otherwise.",
 		Evidence: evidence,

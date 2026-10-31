@@ -186,6 +186,11 @@ func (res *results) note(where report.Location, message string) {
 	}
 }
 
+// noteOn adds a note about op, after its name: "PUT /notes/{id}: ...".
+func (res *results) noteOn(op loader.Operation, message string) {
+	res.note(op.Location, op.Key()+": "+message)
+}
+
 // skipSet is test.skip as a set. An entry that names no operation is a
 // note: a typo must not quietly call what was meant to be skipped.
 func (res *results) skipSet(ops []loader.Operation, skip []string) map[string]bool {
