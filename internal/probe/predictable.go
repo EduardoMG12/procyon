@@ -1,14 +1,40 @@
 package probe
 
 import (
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/loader"
+	"github.com/EduardoMG12/procyon/internal/report"
 )
 
 // maxGuessable is where an integer ID stops being small: a script tries
 // every one below it, a million requests, in hours.
 const maxGuessable = 1_000_000
+
+// predictableID is the PRC107 finding of an operation the anonymous caller
+// reached with f, or nil: when one of the IDs in its path or query is one
+// anyone could guess (guessable), the ID is all that keeps a stranger from
+// every other object it serves.
+func (h *harvest) predictableID(op loader.Operation, f filled, exchange report.Exchange) *report.Finding {
+	param, value, why, ok := h.guessable(f)
+	if !ok {
+		return nil
+	}
+	return &report.Finding{
+		Rule:      lint.RuntimeRule("PRC107"),
+		Location:  op.Location,
+		Operation: op.Key(),
+		Why: fmt.Sprintf("A request with no credentials got %d with %s = %q, %s: anyone can try the next ones "+
+			"and read every object this operation serves, with no account.", exchange.Status, param, value, why),
+		Fix: "Give objects anyone can reach without an account IDs nobody can guess (a random UUID, or a random " +
+			"token of 128 bits), or require authentication for the operation.",
+		Evidence: []report.Exchange{exchange},
+	}
+}
 
 // guessable returns the first ID f fills that anyone could guess, the
 // parameter it fills and why: a small integer, or a value h's responses

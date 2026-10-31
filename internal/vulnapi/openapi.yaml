@@ -243,7 +243,7 @@ paths:
               schema:
                 type: array
                 maxItems: 100
-                items: {type: object, properties: {id: {type: string, maxLength: 20}, item: {type: string, maxLength: 100}, address: {type: string, maxLength: 200}}}
+                items: {type: object, properties: {id: {type: string, maxLength: 20}, item: {type: string, maxLength: 100}, address: {type: string, maxLength: 200}, trackingId: {type: string, maxLength: 40}}}
   /orders/{orderId}:
     get:
       operationId: getOrder
@@ -259,6 +259,27 @@ paths:
           description: The order.
           content:
             application/json:
-              schema: {type: object, properties: {id: {type: string, maxLength: 20}, item: {type: string, maxLength: 100}, address: {type: string, maxLength: 200}}}
+              schema: {type: object, properties: {id: {type: string, maxLength: 20}, item: {type: string, maxLength: 100}, address: {type: string, maxLength: 200}, trackingId: {type: string, maxLength: 40}}}
         "404":
           description: No such order, or not the caller's.
+  /tracking/{trackingId}:
+    get:
+      x-procyon-public: "The tracking link the shop e-mails its customer"
+      x-procyon-ignore:
+        - rule: PRC007
+          reason: "Tracking links are public on purpose; PRC107 checks at runtime that their IDs cannot be guessed"
+      operationId: trackOrder
+      security: []
+      parameters:
+        - name: trackingId
+          in: path
+          required: true
+          schema: {type: string, maxLength: 40}
+      responses:
+        "200":
+          description: Where the order is.
+          content:
+            application/json:
+              schema: {type: object, properties: {item: {type: string, maxLength: 100}, delivered: {type: boolean}}}
+        "404":
+          description: No such tracking ID.

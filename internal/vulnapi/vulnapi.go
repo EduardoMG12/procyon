@@ -64,6 +64,7 @@ func New(fixed bool) http.Handler {
 	mux.HandleFunc("GET /menu", s.menu)
 	mux.HandleFunc("GET /orders", s.listOrders)
 	mux.HandleFunc("GET /orders/{orderId}", s.getOrder)
+	mux.HandleFunc("GET /tracking/{trackingId}", s.tracking)
 	return mux
 }
 

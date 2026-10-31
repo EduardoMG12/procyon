@@ -31,6 +31,8 @@ func TestPlantedVulnerabilities(t *testing.T) {
 		{"the owner is required", "GET", "/owner-notes", TokenA, "", 400, 400},
 		{"every user sees the menu", "GET", "/menu", TokenB, "", 200, 200},
 		{"anyone sees the shop's page", "GET", "/shop", "", "", 200, 200},
+		{"PRC107: anyone tracks order 1 by its number", "GET", "/tracking/1", "", "", 200, 404},
+		{"anyone tracks order 1 by its random ID", "GET", "/tracking/trk_7Hq2mX9vLp4cW1sD", "", "", 404, 200},
 		{"owner reads own order", "GET", "/orders/1", TokenA, "", 200, 200},
 		{"PRC102: B reads A's order", "GET", "/orders/1", TokenB, "", 200, 404},
 		{"anonymous read is refused", "GET", "/notes/1", "", "", 401, 401},

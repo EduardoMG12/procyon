@@ -114,6 +114,7 @@ procyon test openapi.yaml --compose docker-compose.yml --service api --port 8080
   delete them (PRC102), that anonymous callers cannot use operations that
   require authentication (PRC101), that malformed bodies are refused
   (PRC103, PRC104), that anonymous answers hold no personal data (PRC106)
+  nor are reached by IDs anyone could guess (PRC107)
   and, on `https`, that TLS is sound (PRC105).
 - Give the tokens in the environment (bare: Procyon adds `Bearer ` when the
   spec asks for it), or declare a login in
@@ -209,6 +210,7 @@ Runtime rules, found by `procyon test` against a running copy of the API
 | [PRC104](docs/rules/PRC104.md) | low | Server accepted a request the spec forbids |
 | [PRC105](docs/rules/PRC105.md) | high | The API's TLS is weak |
 | [PRC106](docs/rules/PRC106.md) | high | Public operation returned personal data |
+| [PRC107](docs/rules/PRC107.md) | medium | Predictable ID on a public operation |
 
 ## What it can and cannot see
 

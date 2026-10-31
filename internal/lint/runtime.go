@@ -10,7 +10,7 @@ import (
 // linting the spec. Their catalog lives here, next to the lint rules, so an
 // x-procyon-ignore can name either kind and a typo in either is caught.
 // They have no check: internal/probe produces their findings.
-var runtimeRules = []report.Rule{prc101, prc102, prc103, prc104, prc105, prc106}
+var runtimeRules = []report.Rule{prc101, prc102, prc103, prc104, prc105, prc106, prc107}
 
 var prc101 = report.Rule{
 	ID:       "PRC101",
@@ -52,6 +52,13 @@ var prc106 = report.Rule{
 	Title:    "Public operation returned personal data",
 	Severity: report.High,
 	OWASP:    "API3:2023 Broken Object Property Level Authorization",
+}
+
+var prc107 = report.Rule{
+	ID:       "PRC107",
+	Title:    "Predictable ID on a public operation",
+	Severity: report.Medium,
+	OWASP:    "API1:2023 Broken Object Level Authorization",
 }
 
 // RuntimeRules returns every runtime rule, in ID order.

@@ -4,10 +4,11 @@ import "net/http"
 
 // order is a shop order. Nothing in what it shows marks whose it is.
 type order struct {
-	ID      string `json:"id"`
-	Owner   string `json:"-"`
-	Item    string `json:"item"`
-	Address string `json:"address"`
+	ID         string `json:"id"`
+	Owner      string `json:"-"`
+	Item       string `json:"item"`
+	Address    string `json:"address"`
+	TrackingID string `json:"trackingId"` // set when the order is shown: see served
 }
 
 // The shop, never changed: a page anyone sees, a menu every signed-in user
@@ -52,10 +53,38 @@ func (s *server) listOrders(w http.ResponseWriter, r *http.Request) {
 	mine := []order{}
 	for _, o := range shopOrders {
 		if o.Owner == user {
-			mine = append(mine, o)
+			mine = append(mine, s.served(o))
 		}
 	}
 	writeJSON(w, http.StatusOK, mine)
+}
+
+// randomTracking are the fixed twin's tracking IDs, by order: random, so
+// no one can guess another order's.
+var randomTracking = map[string]string{"1": "trk_7Hq2mX9vLp4cW1sD", "2": "trk_Zr8nB3wQe6TyK0aF"}
+
+// served is o as the API shows it, with its tracking ID.
+//
+// Vulnerable (PRC107): the tracking ID is the order's number, so anyone
+// can try 1, 2, 3 on GET /tracking/{trackingId}.
+func (s *server) served(o order) order {
+	o.TrackingID = o.ID
+	if s.fixed {
+		o.TrackingID = randomTracking[o.ID]
+	}
+	return o
+}
+
+// tracking tells anyone with an order's tracking ID where the order is:
+// the link the shop e-mails its customer.
+func (s *server) tracking(w http.ResponseWriter, r *http.Request) {
+	for _, o := range shopOrders {
+		if s.served(o).TrackingID == r.PathValue("trackingId") {
+			writeJSON(w, http.StatusOK, map[string]any{"item": o.Item, "delivered": false})
+			return
+		}
+	}
+	writeJSON(w, http.StatusNotFound, errorBody("no such tracking ID"))
 }
 
 // getOrder returns one order.
@@ -69,7 +98,7 @@ func (s *server) getOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, o := range shopOrders {
 		if o.ID == r.PathValue("orderId") && (!s.fixed || o.Owner == user) {
-			writeJSON(w, http.StatusOK, o)
+			writeJSON(w, http.StatusOK, s.served(o))
 			return
 		}
 	}

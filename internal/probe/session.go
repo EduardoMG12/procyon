@@ -58,7 +58,7 @@ func (s *session) testOperation(ctx context.Context, op loader.Operation) error 
 		s.res.matrix = append(s.res.matrix, skippedRow(key))
 		return nil
 	}
-	if row.Anonymous, err = s.anonymous(ctx, op, f.path); err != nil {
+	if row.Anonymous, err = s.anonymous(ctx, op, f); err != nil {
 		return err
 	}
 	s.queueMalformed(op, f.path)
@@ -74,14 +74,15 @@ func (s *session) testOperation(ctx context.Context, op loader.Operation) error 
 // anonymous calls op with no credentials. Only an operation the spec
 // protects can be reached by mistake (PRC101); one it leaves open is
 // PRC001's business. Whatever the call reached must not show personal
-// data (PRC106). Of the public operations only the reads are called:
-// being public says an operation is meant to be open, not that anything
-// it shows is.
-func (s *session) anonymous(ctx context.Context, op loader.Operation, path string) (report.Cell, error) {
+// data (PRC106) and, when no login is needed, must not be reached by an ID
+// anyone could guess (PRC107; with a login, PRC102 tests the IDs). Of the
+// public operations only the reads are called: being public says an
+// operation is meant to be open, not that anything it shows is.
+func (s *session) anonymous(ctx context.Context, op loader.Operation, f filled) (report.Cell, error) {
 	if op.Public && op.Method != http.MethodGet {
 		return report.Cell{Outcome: report.Public}, nil
 	}
-	exchange, body, err := s.sendFull(ctx, op, path, anonymous)
+	exchange, body, err := s.sendFull(ctx, op, f.path, anonymous)
 	if err != nil {
 		return report.Cell{}, err
 	}
@@ -91,8 +92,11 @@ func (s *session) anonymous(ctx context.Context, op loader.Operation, path strin
 		if len(personal) > 0 {
 			exchange = personal[0].Evidence[0] // the personal values masked, for PRC101 too
 		}
-		if op.NeedsAuth && !op.Public {
+		needsLogin := op.NeedsAuth && !op.Public
+		if needsLogin {
 			found = append(found, anonymousAccess(op, exchange))
+		} else if predictable := s.ofA.predictableID(op, f, exchange); predictable != nil {
+			found = append(found, *predictable)
 		}
 		found = append(found, personal...)
 	}
