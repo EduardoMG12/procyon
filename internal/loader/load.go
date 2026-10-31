@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/EduardoMG12/procyon/internal/report"
+
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/goccy/go-yaml"
 	"github.com/goccy/go-yaml/ast"
@@ -110,23 +112,10 @@ func jsonSwaggerVersion(data []byte) any {
 // syntax tree, or nil for JSON, and swagger its top-level swagger value, or
 // nil for OpenAPI 3.
 func loadParsed(path string, opts Options, data []byte, file *ast.File, swagger any) (*openapi3.T, *specFiles, error) {
-	var err error
-	// Swagger 2.0 is converted to OpenAPI 3 and linted like any spec;
-	// locations are mapped back to the original file (see fromSwagger).
-	toLoad := data
-	var back func(position) (position, bool)
-	if swagger != nil {
-		if v := fmt.Sprint(swagger); v != "2" && !strings.HasPrefix(v, "2.") {
-			return nil, nil, fmt.Errorf("%s: swagger %q is not a version Procyon knows; use Swagger 2.0 or OpenAPI 3", path, v)
-		}
-		if toLoad, back, err = fromSwagger(data, file); err != nil {
-			if placed, ok := errors.AsType[*positionError](err); ok && placed.at.line > 0 {
-				return nil, nil, fmt.Errorf("%s:%w", path, err) // file:line:col: message
-			}
-			return nil, nil, fmt.Errorf("%s: %w", path, err)
-		}
+	toLoad, back, err := asOpenAPI3(path, data, file, swagger)
+	if err != nil {
+		return nil, nil, err
 	}
-
 	files := newSpecFiles(path, opts.RefRoot, data) // excerpts show the original
 	files.back = back
 	defer files.close()
@@ -140,35 +129,64 @@ func loadParsed(path string, opts Options, data []byte, file *ast.File, swagger 
 	if err != nil {
 		return nil, nil, fmt.Errorf("%s: %w", path, err)
 	}
+	if err := validate(path, doc, files.asGiven); err != nil {
+		return nil, nil, err
+	}
+	if err := checkExtensions(doc, files.asGiven); err != nil {
+		return nil, nil, err
+	}
+	return doc, files, nil
+}
+
+// asOpenAPI3 returns the spec as kin-openapi is to load it. An OpenAPI 3
+// spec (swagger is nil) is data itself. A Swagger 2.0 one is converted to
+// OpenAPI 3 and linted like any spec, and back maps a position in the
+// converted text to the original file (see fromSwagger).
+func asOpenAPI3(path string, data []byte, file *ast.File, swagger any) (toLoad []byte, back func(position) (position, bool), err error) {
+	if swagger == nil {
+		return data, nil, nil
+	}
+	if v := fmt.Sprint(swagger); v != "2" && !strings.HasPrefix(v, "2.") {
+		return nil, nil, fmt.Errorf("%s: swagger %q is not a version Procyon knows; use Swagger 2.0 or OpenAPI 3", path, v)
+	}
+	if toLoad, back, err = fromSwagger(data, file); err != nil {
+		if placed, ok := errors.AsType[*positionError](err); ok && placed.at.line > 0 {
+			return nil, nil, fmt.Errorf("%s:%w", path, err) // file:line:col: message
+		}
+		return nil, nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return toLoad, back, nil
+}
+
+// validate refuses a loaded spec that breaks the rules of its OpenAPI
+// version, except for the mistakes withoutTolerated lets through.
+func validate(path string, doc *openapi3.T, asGiven func(report.Location) report.Location) error {
 	// kin-openapi validates a version it does not list (3.3.0, 4.0.0, a
 	// 3.1 patch newer than it) by 3.0's rules: refuse it by name instead.
 	if v := doc.OpenAPI; v != "" && doc.OpenAPIMajorMinor() == "" {
-		return nil, nil, fmt.Errorf("%s: openapi %q is not a version Procyon knows; use OpenAPI 3.0, 3.1 or 3.2, or Swagger 2.0", path, v)
+		return fmt.Errorf("%s: openapi %q is not a version Procyon knows; use OpenAPI 3.0, 3.1 or 3.2, or Swagger 2.0", path, v)
 	}
 	if doc.IsOpenAPI31OrLater() {
 		dropUnknownKeywords(doc)
 	}
 	// Wrong examples, defaults and patterns are documentation mistakes, not security
 	// problems, and common in real specs: they must not stop a lint.
-	err = doc.Validate(context.Background(),
+	err := doc.Validate(context.Background(),
 		openapi3.EnableMultiError(),
 		openapi3.DisableExamplesValidation(),
 		openapi3.DisableSchemaPatternValidation(), // Go's regexp lacks lookaheads (AWS specs use them)
 		openapi3.DisableSchemaDefaultsValidation())
 	// A requirement naming an undefined scheme is a security finding
 	// (PRC002), with a location and a fix, not a reason to refuse the spec.
-	if err = withoutTolerated(err); err != nil {
-		// A hint, not a diagnosis: the unknown field may also be a typo.
-		hint := ""
-		if _, unknownField := errors.AsType[*openapi3.ExtraSiblingFieldsError](err); unknownField && doc.IsOpenAPI32OrLater() {
-			hint = " (OpenAPI 3.2 is only partly supported: some fields new in 3.2, such as a tag's kind, are refused)"
-		}
-		return nil, nil, invalidSpec(path, err, hint, files.asGiven)
+	if err = withoutTolerated(err); err == nil {
+		return nil
 	}
-	if err := checkExtensions(doc, files.asGiven); err != nil {
-		return nil, nil, err
+	// A hint, not a diagnosis: the unknown field may also be a typo.
+	hint := ""
+	if _, unknownField := errors.AsType[*openapi3.ExtraSiblingFieldsError](err); unknownField && doc.IsOpenAPI32OrLater() {
+		hint = " (OpenAPI 3.2 is only partly supported: some fields new in 3.2, such as a tag's kind, are refused)"
 	}
-	return doc, files, nil
+	return invalidSpec(path, err, hint, asGiven)
 }
 
 // swaggerVersion is the value of the document's top-level swagger key (a

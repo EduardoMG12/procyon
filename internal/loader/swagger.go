@@ -54,53 +54,18 @@ func fromSwagger(data []byte, file *ast.File) (converted []byte, back func(posit
 		}
 	}
 	original := keyPositions(file)
-	// at is an error about an element of the original file, at its place.
-	at := func(pointer, format string, args ...any) error {
-		// paths > /users > $ref: a pointer reads badly once a key has a "/".
-		parts := strings.Split(pointer, "/")[1:]
-		for i := range parts {
-			parts[i] = unescapePointer(parts[i])
-		}
-		err := &positionError{message: strings.Join(parts, " > ") + ": " + fmt.Sprintf(format, args...)}
-		for p := pointer; p != ""; p = parentPointer(p) {
-			if pos, ok := original[p]; ok {
-				err.at = pos
-				break
-			}
-		}
-		return err
-	}
-	asJSON := data
-	if !isJSON {
-		// Decoding to JSON expands YAML aliases, and a few hundred bytes of
-		// nested aliases expand to gigabytes: refuse before expanding. JSON
-		// has no aliases.
-		if err := limitAliases(file); err != nil {
-			return nil, nil, err
-		}
-		if asJSON, err = yaml.YAMLToJSON(data); err != nil {
-			return nil, nil, err
-		}
-	}
-	var raw any
-	if err := json.Unmarshal(asJSON, &raw); err != nil {
-		return nil, nil, fmt.Errorf("reading Swagger 2.0: %w", err)
-	}
-	top, _ := raw.(map[string]any)
-	if _, isNumber := top["swagger"].(float64); isNumber {
-		top["swagger"] = "2.0" // swagger: 2.0 without quotes is a YAML number
+	raw, err := decodeSwagger(data, file, isJSON)
+	if err != nil {
+		return nil, nil, err
 	}
 	if pointer := nullEntry(raw, ""); pointer != "" {
-		return nil, nil, at(pointer, "empty (null); remove it or give it a value")
+		return nil, nil, errorAt(original, pointer, "empty (null); remove it or give it a value")
 	}
 	if pointer := pathItemRef(raw); pointer != "" {
-		return nil, nil, at(pointer, "a $ref on a path item is not supported in Swagger 2.0 specs "+
+		return nil, nil, errorAt(original, pointer, "a $ref on a path item is not supported in Swagger 2.0 specs "+
 			"(write the operations in place, or convert the spec to OpenAPI 3)")
 	}
 	limitMediaTypes(raw)
-	if asJSON, err = json.Marshal(raw); err != nil {
-		return nil, nil, err
-	}
 	// The converter is not hardened against every malformed document; a
 	// panic in it must be an input error, never a crash.
 	defer func() {
@@ -112,19 +77,65 @@ func fromSwagger(data []byte, file *ast.File) (converted []byte, back func(posit
 		return nil, nil, fmt.Errorf("$ref %q: Swagger 2.0 specs must be one file "+
 			"(bundle it first, or convert it to OpenAPI 3, where $refs to other files are supported)", ref)
 	}
+	doc2, doc3, err := toOpenAPI3(raw, original)
+	if err != nil {
+		return nil, nil, err
+	}
+	if converted, err = json.MarshalIndent(doc3, "", "  "); err != nil {
+		return nil, nil, err
+	}
+	if back, err = backTo(original, converted, doc2); err != nil {
+		return nil, nil, err
+	}
+	return converted, back, nil
+}
+
+// decodeSwagger decodes a Swagger 2.0 spec into plain JSON values (maps,
+// lists, strings, numbers), which the guards in swagger_guards.go check.
+func decodeSwagger(data []byte, file *ast.File, isJSON bool) (raw any, err error) {
+	asJSON := data
+	if !isJSON {
+		// Decoding to JSON expands YAML aliases, and a few hundred bytes of
+		// nested aliases expand to gigabytes: refuse before expanding. JSON
+		// has no aliases.
+		if err := limitAliases(file); err != nil {
+			return nil, err
+		}
+		if asJSON, err = yaml.YAMLToJSON(data); err != nil {
+			return nil, err
+		}
+	}
+	if err := json.Unmarshal(asJSON, &raw); err != nil {
+		return nil, fmt.Errorf("reading Swagger 2.0: %w", err)
+	}
+	top, _ := raw.(map[string]any)
+	if _, isNumber := top["swagger"].(float64); isNumber {
+		top["swagger"] = "2.0" // swagger: 2.0 without quotes is a YAML number
+	}
+	return raw, nil
+}
+
+// toOpenAPI3 converts the decoded Swagger 2.0 document with kin-openapi,
+// returning it typed as Swagger 2.0 and converted to OpenAPI 3. original
+// places its errors in the file.
+func toOpenAPI3(raw any, original map[string]position) (*openapi2.T, *openapi3.T, error) {
+	asJSON, err := json.Marshal(raw)
+	if err != nil {
+		return nil, nil, err
+	}
 	var doc2 openapi2.T
 	if err := json.Unmarshal(asJSON, &doc2); err != nil {
 		// A value of the wrong kind (a list where a schema must be) names its
 		// place as dotted, pointer-escaped keys: point at it in the file.
 		if wrong, ok := errors.AsType[*json.UnmarshalTypeError](err); ok && wrong.Field != "" {
-			return nil, nil, at("/"+strings.ReplaceAll(wrong.Field, ".", "/"),
+			return nil, nil, errorAt(original, "/"+strings.ReplaceAll(wrong.Field, ".", "/"),
 				"is %s, where Swagger 2.0 expects %s", jsonKind(wrong.Value), goKind(wrong.Type))
 		}
 		return nil, nil, fmt.Errorf("reading Swagger 2.0: %w", err)
 	}
 	doc3, err := openapi2conv.ToV3(&doc2)
 	if pointer := failedPathsRef(raw, err); pointer != "" {
-		return nil, nil, at(pointer, "this $ref into #/paths cannot be converted to OpenAPI 3 "+
+		return nil, nil, errorAt(original, pointer, "this $ref into #/paths cannot be converted to OpenAPI 3 "+
 			"(move what it points at to #/definitions, #/parameters or #/responses, and refer to it there)")
 	}
 	if err != nil {
@@ -134,20 +145,42 @@ func fromSwagger(data []byte, file *ast.File) (converted []byte, back func(posit
 	if doc3.Paths == nil {
 		doc3.Paths = openapi3.NewPaths() // the converter leaves an empty paths as null
 	}
-	converted, err = json.MarshalIndent(doc3, "", "  ")
-	if err != nil {
-		return nil, nil, err
+	return &doc2, doc3, nil
+}
+
+// errorAt is an error about the element at pointer in the original file,
+// placed at it, or at its nearest ancestor with a place in original.
+func errorAt(original map[string]position, pointer, format string, args ...any) error {
+	// paths > /users > $ref: a pointer reads badly once a key has a "/".
+	parts := strings.Split(pointer, "/")[1:]
+	for i := range parts {
+		parts[i] = unescapePointer(parts[i])
 	}
+	err := &positionError{message: strings.Join(parts, " > ") + ": " + fmt.Sprintf(format, args...)}
+	for p := pointer; p != ""; p = parentPointer(p) {
+		if pos, ok := original[p]; ok {
+			err.at = pos
+			break
+		}
+	}
+	return err
+}
+
+// backTo returns fromSwagger's back: for the position of a key in the
+// converted text, the position in the original file of the same element
+// (its pointer translated by swaggerPointer), or of its nearest ancestor
+// there, or 1:1 when neither is in the original.
+func backTo(original map[string]position, converted []byte, doc2 *openapi2.T) (func(position) (position, bool), error) {
 	pointerAt, err := keyPointers(converted)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	back = func(p position) (position, bool) {
+	return func(p position) (position, bool) {
 		pointer, ok := pointerAt[p]
 		if !ok {
 			return position{}, false
 		}
-		for v2 := swaggerPointer(pointer, &doc2); v2 != ""; v2 = parentPointer(v2) {
+		for v2 := swaggerPointer(pointer, doc2); v2 != ""; v2 = parentPointer(v2) {
 			if p, ok := original[v2]; ok {
 				return p, true
 			}
@@ -155,8 +188,7 @@ func fromSwagger(data []byte, file *ast.File) (converted []byte, back func(posit
 		// Never report a position of the converted text as if it were in
 		// the original: point at the start of the file instead.
 		return position{1, 1}, true
-	}
-	return converted, back, nil
+	}, nil
 }
 
 // swaggerSections maps a section of an OpenAPI 3 document's components to
