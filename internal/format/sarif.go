@@ -28,7 +28,7 @@ import (
 // visible like the terminal; URIs are percent-encoded already.
 func SARIF(w io.Writer, rep report.Report, base string, rules []report.Rule) error {
 	uri := artifactURI(base)
-	declared, index := sarifRules(rules)
+	declared, index := declareRules(rules)
 	driver := sarifDriver{
 		Name:           "Procyon",
 		InformationURI: "https://github.com/EduardoMG12/procyon",
@@ -62,9 +62,9 @@ func SARIF(w io.Writer, rep report.Report, base string, rules []report.Rule) err
 	})
 }
 
-// sarifRules declares rules in the log, and returns, by rule ID, where each
+// declareRules declares rules in the log, and returns, by rule ID, where each
 // one is in the list: a result points at its rule by that index.
-func sarifRules(rules []report.Rule) (declared []sarifRule, index map[string]int) {
+func declareRules(rules []report.Rule) (declared []sarifRule, index map[string]int) {
 	declared = []sarifRule{} // [] rather than null when there are none
 	index = map[string]int{}
 	for i, r := range rules {
