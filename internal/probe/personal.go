@@ -3,6 +3,7 @@ package probe
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"regexp"
 	"unicode"
 
@@ -13,12 +14,19 @@ import (
 
 // personalData lists the PRC106 findings of an answer the anonymous caller
 // got: one per place in the answer that holds personal data
-// (personalValues), however many objects of a list hold it. The evidence
-// is the anonymous call, with every personal value masked.
+// (personalValues), however many objects of a list hold it. A value the
+// caller sent in the same request (sentValues) is left out: an answer that
+// echoes the e-mail a sign-up sent shows the caller nothing it did not
+// know. The evidence is the anonymous call, with every personal value
+// masked.
 func personalData(op loader.Operation, exchange report.Exchange, body []byte) []report.Finding {
 	var places, kinds, values []string // places and kinds in the order the answer shows them
 	listed, masked := map[string]bool{}, map[string]bool{}
+	sent := sentValues(op, exchange)
 	for _, p := range personalValues(body) {
+		if sent[p.value] {
+			continue
+		}
 		if !listed[p.place] {
 			listed[p.place] = true
 			places, kinds = append(places, p.place), append(kinds, p.kind)
@@ -45,6 +53,25 @@ func personalData(op loader.Operation, exchange report.Exchange, body []byte) []
 		})
 	}
 	return findings
+}
+
+// sentValues are the values the request of exchange sent: every string
+// and number of its JSON body, and every value of its query.
+func sentValues(op loader.Operation, exchange report.Exchange) map[string]bool {
+	sent := map[string]bool{}
+	if exchange.Sent != "" { // the body went out (sendWith sends none on a GET)
+		for _, v := range valuesIn(op.Body) {
+			sent[v] = true
+		}
+	}
+	if u, err := url.Parse(exchange.URL); err == nil {
+		for _, values := range u.Query() {
+			for _, v := range values {
+				sent[v] = true
+			}
+		}
+	}
+	return sent
 }
 
 // personalValue is one value of an answer that is personal data.
