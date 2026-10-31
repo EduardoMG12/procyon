@@ -125,6 +125,12 @@ func loadParsed(path string, opts Options, data []byte, file *ast.File, swagger 
 	doc, err := loader.LoadFromDataWithPath(files.withLocations(path, toLoad), specURL(path))
 	if files.overLimit != nil {
 		err = files.overLimit // see specFiles.overLimit
+	} else if err != nil && swagger == nil {
+		// A converted Swagger 2.0 spec was written by Procyon, and holds no
+		// value of the wrong kind.
+		if placed := wrongKind(data, file); placed != nil {
+			return nil, nil, fmt.Errorf("%s:%w", path, placed) // file:line:col: message
+		}
 	}
 	if err != nil {
 		return nil, nil, fmt.Errorf("%s: %w", path, err)

@@ -123,6 +123,17 @@ func TestInvalidSpecErrorsGetALineEach(t *testing.T) {
 		{"invalid-spec-no-info.yaml", []string{
 			"invalid-spec-no-info.yaml:1:1: invalid spec: invalid info: must be an object",
 		}},
+		// A value of the wrong kind stops kin-openapi before validation, with
+		// a Go decoding error: it gets its place and plain words too.
+		{"invalid-required-not-a-list.yaml", []string{
+			"invalid-required-not-a-list.yaml:16:19: " +
+				"paths > /transfer > post > requestBody > content > application/json > schema > properties > amount > required: " +
+				"is true or false, where OpenAPI 3 expects a list " +
+				"(in OpenAPI 3 a property is required when its object lists it, as required: [amount] next to properties)",
+		}},
+		{"invalid-wrong-kind.json", []string{
+			"invalid-wrong-kind.json:7:9: paths > /accounts > get > tags: is text, where OpenAPI 3 expects a list",
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
