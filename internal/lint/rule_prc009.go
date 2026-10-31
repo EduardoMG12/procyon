@@ -37,10 +37,7 @@ var prc009 = lintRule{
 func checkPRC009(doc *openapi3.T) []report.Finding {
 	var found onePerPlace
 	loader.ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-		if op.RequestBody == nil || op.RequestBody.Value == nil {
-			return
-		}
-		roots := mediaSchemas(op.RequestBody.Value.Content)
+		roots := requestSchemas(op)
 		if tokenRequest(roots) {
 			return
 		}
@@ -135,21 +132,6 @@ func lowEnum(s *openapi3.Schema) bool {
 		}
 	}
 	return true
-}
-
-// readOnly reports whether the client cannot send a schema: readOnly on the
-// schema itself, or on one of its allOf parts, which is how OpenAPI 3.0
-// adds readOnly to a $ref.
-func readOnly(s *openapi3.Schema) bool {
-	if s.ReadOnly {
-		return true
-	}
-	for _, part := range s.AllOf {
-		if part != nil && part.Value != nil && part.Value.ReadOnly {
-			return true
-		}
-	}
-	return false
 }
 
 // tokenRequest reports whether a request body is an OAuth2 token request:

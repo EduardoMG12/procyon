@@ -3,7 +3,6 @@ package lint
 import (
 	"fmt"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/EduardoMG12/procyon/internal/loader"
@@ -39,9 +38,8 @@ func checkPRC005(doc *openapi3.T) []report.Finding {
 			if !holdsSecret(method, path, name, prop.Value) {
 				return
 			}
-			loc := propertyLocation(prop)
 			found.add(report.Finding{
-				Location:  loc,
+				Location:  propertyLocation(prop),
 				Operation: method + " " + path,
 				Why: fmt.Sprintf("The response includes %q, which holds a secret. Anyone allowed to read this response gets it, "+
 					"and responses end up in logs, caches, browser tools and client apps.", name),
@@ -103,7 +101,7 @@ func holdsValue(s *openapi3.Schema, types []string, seen map[*openapi3.Schema]bo
 		return false
 	}
 	seen[s] = true
-	if s.Type == nil || len(s.Type.Slice()) == 0 {
+	if untyped(s) {
 		if len(s.Properties) > 0 {
 			return wrapsValue(s, types, seen)
 		}
@@ -152,83 +150,6 @@ func wrapsValue(s *openapi3.Schema, types []string, seen map[*openapi3.Schema]bo
 // modifierOnly reports whether a schema only modifies another (nullable,
 // a description) without saying what the value is.
 func modifierOnly(s *openapi3.Schema) bool {
-	return (s.Type == nil || len(s.Type.Slice()) == 0) && len(s.Properties) == 0 && s.Items == nil &&
+	return untyped(s) && len(s.Properties) == 0 && s.Items == nil &&
 		len(s.AllOf)+len(s.AnyOf)+len(s.OneOf) == 0 && s.AdditionalProperties.Schema == nil && len(s.Enum) == 0
-}
-
-// propertyLocation points where a property is written. For a $ref property
-// that is the property itself, not the shared schema it refers to: two
-// properties referring to one schema are two findings, each in its place.
-func propertyLocation(prop *openapi3.SchemaRef) report.Location {
-	if prop.Ref != "" {
-		if loc := loader.Locate(prop.Origin); loc.Line > 0 {
-			return loc
-		}
-	}
-	return loader.Locate(prop.Value.Origin)
-}
-
-// forEachResponseProperty calls fn for every property of every schema an
-// operation's responses can return.
-func forEachResponseProperty(op *openapi3.Operation, fn func(name string, prop *openapi3.SchemaRef)) {
-	if op.Responses == nil {
-		return
-	}
-	var roots []*openapi3.SchemaRef
-	for _, response := range op.Responses.Map() {
-		if response != nil && response.Value != nil {
-			roots = append(roots, mediaSchemas(response.Value.Content)...)
-		}
-	}
-	walkProperties(roots, func(name string, prop *openapi3.SchemaRef) bool {
-		fn(name, prop)
-		return true
-	})
-}
-
-func mediaSchemas(content openapi3.Content) []*openapi3.SchemaRef {
-	var schemas []*openapi3.SchemaRef
-	for _, media := range content {
-		if media != nil {
-			schemas = append(schemas, media.Schema)
-		}
-	}
-	return schemas
-}
-
-// walkProperties calls fn for every property of the schemas under roots,
-// following nested objects, array items, allOf/oneOf/anyOf and
-// additionalProperties. fn returns whether to look inside the property.
-// Each schema is visited once, so recursive schemas (a User with a manager
-// User) terminate.
-func walkProperties(roots []*openapi3.SchemaRef, fn func(name string, prop *openapi3.SchemaRef) bool) {
-	visited := map[*openapi3.Schema]bool{}
-	var walk func(ref *openapi3.SchemaRef)
-	walk = func(ref *openapi3.SchemaRef) {
-		if ref == nil || ref.Value == nil || visited[ref.Value] {
-			return
-		}
-		s := ref.Value
-		visited[s] = true
-		names := make([]string, 0, len(s.Properties))
-		for name := range s.Properties {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		for _, name := range names {
-			if prop := s.Properties[name]; prop != nil && prop.Value != nil && fn(name, prop) {
-				walk(prop)
-			}
-		}
-		walk(s.Items)
-		for _, group := range []openapi3.SchemaRefs{s.AllOf, s.OneOf, s.AnyOf} {
-			for _, sub := range group {
-				walk(sub)
-			}
-		}
-		walk(s.AdditionalProperties.Schema)
-	}
-	for _, root := range roots {
-		walk(root)
-	}
 }

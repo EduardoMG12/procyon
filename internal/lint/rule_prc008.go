@@ -55,15 +55,12 @@ func checkPRC008(doc *openapi3.T) []report.Finding {
 				add(loader.Locate(p.Origin), unboundedCountWhy, unboundedCountFix)
 			}
 		}
-		if op.RequestBody == nil || op.RequestBody.Value == nil {
-			return
-		}
 		check := func(s *openapi3.Schema, loc report.Location) {
 			if why, fix := unbounded(s); why != "" {
 				add(loc, why, fix)
 			}
 		}
-		roots := mediaSchemas(op.RequestBody.Value.Content)
+		roots := requestSchemas(op)
 		for _, root := range roots {
 			if root != nil && root.Value != nil {
 				check(root.Value, loader.Locate(root.Value.Origin)) // the body itself is a list or a text
