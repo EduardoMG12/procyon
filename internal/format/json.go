@@ -2,11 +2,9 @@ package format
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"path/filepath"
 	"strings"
-	"unicode/utf16"
 
 	"github.com/EduardoMG12/procyon/internal/report"
 )
@@ -139,28 +137,6 @@ func JSON(w io.Writer, rep report.Report) error {
 	}
 	_, err := io.WriteString(w, escapeHidden(buf.String()))
 	return err
-}
-
-// escapeHidden writes the hidden characters of encoded JSON as \u escapes.
-// encoding/json escapes C0 only; DEL, C1, bidi controls and invisible
-// characters stay raw, and would act on whoever reads the file in a
-// terminal or a CI log. Unlike visible, this keeps every value: a script
-// decodes the same strings. The only raw control left in encoded JSON is
-// the newline of the indentation, outside any string, and it stays.
-func escapeHidden(encoded string) string {
-	var b strings.Builder
-	for _, r := range encoded {
-		if r == '\n' || !hidden(r) {
-			b.WriteRune(r)
-			continue
-		}
-		// A character beyond U+FFFF is written as a UTF-16 surrogate pair,
-		// as JSON requires.
-		for _, unit := range utf16.Encode([]rune{r}) {
-			fmt.Fprintf(&b, `\u%04x`, unit)
-		}
-	}
-	return b.String()
 }
 
 func toJSON(f report.Finding) jsonFinding {
