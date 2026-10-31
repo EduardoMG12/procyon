@@ -48,9 +48,12 @@ type Operation struct {
 	// spec's order. The credential parameter is not one of them: the token
 	// fills it.
 	Query []QueryParam
+	// OptionalQuery are the other query parameters, in the same order and
+	// with the same exception.
+	OptionalQuery []QueryParam
 }
 
-// QueryParam is one required query parameter.
+// QueryParam is one query parameter.
 type QueryParam struct {
 	Name string
 	// Example is the spec's example for it, as text, or "" when it gives
@@ -134,17 +137,19 @@ func (s *Spec) Ignores() []report.Ignore {
 func (s *Spec) Operations() []Operation {
 	var ops []Operation
 	ForEachOperation(s.doc, func(method, path string, op *openapi3.Operation) {
+		required, optional := queryParams(s.doc, path, op)
 		ops = append(ops, Operation{
-			Method:     method,
-			Path:       path,
-			Location:   s.files.asGiven(Locate(op.Origin)),
-			Public:     PublicReason(op) != "",
-			NeedsAuth:  !Unauthenticated(s.doc, path, op),
-			Credential: credentialOf(s.doc, path, op),
-			Body:       exampleBody(op),
-			NeedsBody:  op.RequestBody != nil && op.RequestBody.Value != nil && op.RequestBody.Value.Required,
-			Fields:     bodyFields(op),
-			Query:      requiredQuery(s.doc, path, op),
+			Method:        method,
+			Path:          path,
+			Location:      s.files.asGiven(Locate(op.Origin)),
+			Public:        PublicReason(op) != "",
+			NeedsAuth:     !Unauthenticated(s.doc, path, op),
+			Credential:    credentialOf(s.doc, path, op),
+			Body:          exampleBody(op),
+			NeedsBody:     op.RequestBody != nil && op.RequestBody.Value != nil && op.RequestBody.Value.Required,
+			Fields:        bodyFields(op),
+			Query:         required,
+			OptionalQuery: optional,
 		})
 	})
 	return ops
@@ -196,23 +201,28 @@ func schemeCredential(scheme *openapi3.SecurityScheme) *Credential {
 	return nil
 }
 
-// requiredQuery lists an operation's required query parameters, but
-// credentials: the one the token goes in, and any named like one (api_key).
-// A value Procyon made up for a credential would go out even on anonymous
-// calls.
-func requiredQuery(doc *openapi3.T, path string, op *openapi3.Operation) []QueryParam {
+// queryParams lists an operation's query parameters, the required ones and
+// the optional ones, but credentials: the one the token goes in, and any
+// named like one (api_key). A value Procyon made up for a credential would
+// go out even on anonymous calls.
+func queryParams(doc *openapi3.T, path string, op *openapi3.Operation) (required, optional []QueryParam) {
 	token := ""
 	if c := credentialOf(doc, path, op); c != nil && c.In == openapi3.ParameterInQuery {
 		token = c.Name
 	}
-	var query []QueryParam
 	for _, p := range OperationParameters(doc, path, op) {
 		credential := p.Name == token || words.Matches(p.Name, credentialParameterWords)
-		if p.In == openapi3.ParameterInQuery && p.Required && !credential {
-			query = append(query, QueryParam{Name: p.Name, Example: parameterExample(p)})
+		if p.In != openapi3.ParameterInQuery || credential {
+			continue
+		}
+		q := QueryParam{Name: p.Name, Example: parameterExample(p)}
+		if p.Required {
+			required = append(required, q)
+		} else {
+			optional = append(optional, q)
 		}
 	}
-	return query
+	return required, optional
 }
 
 // parameterExample is a parameter's example as text, or "" when the spec

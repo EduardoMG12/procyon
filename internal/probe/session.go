@@ -52,11 +52,15 @@ func (s *session) testOperation(ctx context.Context, op loader.Operation) error 
 		s.res.matrix = append(s.res.matrix, row)
 		return nil
 	}
-	f, err := s.ofA.fill(op.Path, op.Query)
+	f, err := s.ofA.fill(op.Path, op.Query, op.OptionalQuery...)
 	if err != nil {
 		s.res.note(op.Location, fmt.Sprintf("%s not tested: %v in A's responses; declare one under test.ids in .procyon.yaml", key, err))
 		s.res.matrix = append(s.res.matrix, skippedRow(key))
 		return nil
+	}
+	for _, name := range f.unfilled {
+		s.res.noteOn(op, "query parameter "+name+" not sent: it names an object and no response of A's shows one; "+
+			"declare one under test.ids in .procyon.yaml")
 	}
 	if row.Anonymous, err = s.anonymous(ctx, op, f); err != nil {
 		return err
@@ -82,6 +86,11 @@ func (s *session) testOperation(ctx context.Context, op loader.Operation) error 
 	case len(f.values) > 0: // an object in the path: one of A's to reach (PRC102)
 		if row.B, err = s.asB(ctx, op, f); err != nil {
 			return err
+		}
+	default: // nothing names an object of A's: B is not called
+		for _, name := range f.examples {
+			s.res.noteOn(op, "not tested as B: query parameter "+name+" was sent with the spec's example, which names no object of A's; "+
+				"declare one of A's under test.ids in .procyon.yaml")
 		}
 	}
 	s.res.matrix = append(s.res.matrix, row)

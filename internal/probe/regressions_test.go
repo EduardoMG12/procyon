@@ -213,3 +213,50 @@ func TestUnfilledQueryParameterIsANote(t *testing.T) {
 		t.Errorf("sent %q, notes %v, matrix %+v; want nothing sent, the note and a skipped row", sent, rep.Notes, rep.Matrix)
 	}
 }
+
+// An optional query parameter that names an object is filled the way a
+// required one is, and B is tested on A's object (PRC102): picture_id is
+// named like an ID and /pictures shows one; username is declared under
+// test.ids. One named like an ID that no response shows is a note, and so
+// is a required one only the spec's example fills. A filter that names no
+// object (status) is never sent, though a response shows one and the spec
+// gives an example.
+func TestOptionalQueryParametersThatNameAnObject(t *testing.T) {
+	var statusSent bool
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		statusSent = statusSent || q.Has("status")
+		switch {
+		case userOf(r) == "":
+			w.WriteHeader(http.StatusUnauthorized)
+		case r.URL.Path == "/pictures":
+			fmt.Fprintf(w, `[{"picture_id": "pic-%s-7f3a", "title": "%s's cat"}]`, userOf(r), userOf(r))
+		case r.URL.Path == "/picture" && q.Has("picture_id"): // anyone's picture, by ID
+			owner := strings.Split(q.Get("picture_id"), "-")[1]
+			fmt.Fprintf(w, `{"picture_id": %q, "title": "%s's cat"}`, q.Get("picture_id"), owner)
+		case r.URL.Path == "/note" && q.Has("username"): // anyone's note, by name
+			fmt.Fprintf(w, `{"username": %q, "text": "the private note of %s"}`, q.Get("username"), q.Get("username"))
+		case r.URL.Path == "/products":
+			w.Write([]byte(`[{"id": "p1", "status": "sold"}]`))
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	})
+	rep := runOn(t, "../../testdata/specs/runtime-optional-query.yaml", handler, Options{IDs: map[string][]string{"username": {"alice"}}})
+	if got, want := findingKeys(rep), []string{"PRC102 GET /picture", "PRC102 GET /note"}; !slices.Equal(got, want) {
+		t.Errorf("findings %q, want %q", got, want)
+	}
+	for _, note := range []string{
+		"GET /report: query parameter reportId not sent: it names an object and no response of A's shows one; " +
+			"declare one under test.ids in .procyon.yaml",
+		"GET /mechanic-report: not tested as B: query parameter report_id was sent with the spec's example, " +
+			"which names no object of A's; declare one of A's under test.ids in .procyon.yaml",
+	} {
+		if !slices.ContainsFunc(rep.Notes, func(n report.Note) bool { return n.Message == note }) {
+			t.Errorf("notes %v, want %q", rep.Notes, note)
+		}
+	}
+	if statusSent {
+		t.Error("the optional filter status was sent")
+	}
+}
