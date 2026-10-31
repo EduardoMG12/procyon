@@ -3,6 +3,13 @@
 // returns findings, one rule per file; Run hands them to report.New, which
 // applies ignores and the fail threshold. The runtime rules' catalog lives
 // here too (runtime.go), so an x-procyon-ignore can name any rule.
+//
+// The word lists a rule matches names against are written next to its
+// check, each entry a sequence of words as words.Split produces them, so
+// "api key" matches apiKey, api_key, api-key and APIKey. Changing a list
+// changes what Procyon reports on every spec: add a fixture that proves the
+// new word (and one that proves what it must not match), and report the
+// corpus difference in the PR.
 package lint
 
 import (
