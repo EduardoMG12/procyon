@@ -89,6 +89,9 @@ func (s *session) testOperation(ctx context.Context, op loader.Operation) error 
 		}
 	default: // nothing names an object of A's: B is not called
 		for _, name := range f.examples {
+			if pagesAList(name) {
+				continue // limit=30 names no object: no ID of A's would help
+			}
 			s.res.noteOn(op, "not tested as B: query parameter "+name+" was sent with the spec's example, which names no object of A's; "+
 				"declare one of A's under test.ids in .procyon.yaml")
 		}

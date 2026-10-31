@@ -32,6 +32,13 @@ paths:
       parameters:
         - {name: report_id, in: query, required: true, example: "1", schema: {type: string}} # only the example: B not tested
       responses: {"200": {description: One report.}}
+  /service-requests:
+    get:
+      parameters: # page through a list: no note asks for test.ids
+        - {name: limit, in: query, required: true, example: 30, schema: {type: integer}}
+        - {name: offset, in: query, required: true, example: 0, schema: {type: integer}}
+        - {name: sort_by, in: query, required: true, example: date, schema: {type: string}}
+      responses: {"200": {description: "The caller's service requests, in an object."}}
   /products:
     get:
       parameters:

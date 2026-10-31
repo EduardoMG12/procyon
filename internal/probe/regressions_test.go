@@ -220,7 +220,8 @@ func TestUnfilledQueryParameterIsANote(t *testing.T) {
 // test.ids. One named like an ID that no response shows is a note, and so
 // is a required one only the spec's example fills. A filter that names no
 // object (status) is never sent, though a response shows one and the spec
-// gives an example. A bare reply to an action on A's picture (/picture/love
+// gives an example, and a required one that pages a list (limit, offset,
+// sort_by) is sent with the example and no note. A bare reply to an action on A's picture (/picture/love
 // answers every caller the same text) holds no data of A's: it is no
 // finding. The matrix's A cell is A's call with the parameter B was tested
 // with, not discovery's call without it (400 here).
@@ -241,6 +242,8 @@ func TestOptionalQueryParametersThatNameAnObject(t *testing.T) {
 			w.Write([]byte(`"You gave this photo .05"`))
 		case r.URL.Path == "/note" && q.Has("username"): // anyone's note, by name
 			fmt.Fprintf(w, `{"username": %q, "text": "the private note of %s"}`, q.Get("username"), q.Get("username"))
+		case r.URL.Path == "/service-requests":
+			w.Write([]byte(`{"service_requests": []}`)) // one object, not a list: no PRC108 test
 		case r.URL.Path == "/products":
 			w.Write([]byte(`[{"id": "p1", "status": "sold"}]`))
 		default:
@@ -272,6 +275,11 @@ func TestOptionalQueryParametersThatNameAnObject(t *testing.T) {
 	} {
 		if !slices.ContainsFunc(rep.Notes, func(n report.Note) bool { return n.Message == note }) {
 			t.Errorf("notes %v, want %q", rep.Notes, note)
+		}
+	}
+	for _, n := range rep.Notes {
+		if strings.HasPrefix(n.Message, "GET /service-requests") {
+			t.Errorf("note %q, want none: limit, offset and sort_by name no object", n.Message)
 		}
 	}
 	if statusSent {
