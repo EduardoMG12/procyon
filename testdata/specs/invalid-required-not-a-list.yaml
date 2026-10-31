@@ -1,0 +1,19 @@
+openapi: 3.0.3
+info:
+  title: Bank
+  version: 1.0.0
+paths:
+  /transfer:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: number
+                  required: true
+      responses:
+        "200":
+          description: OK
