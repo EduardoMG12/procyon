@@ -29,9 +29,10 @@ const composeTail = 15
 // Up starts the environment with `docker compose up --wait` (the service's
 // healthcheck decides when the API is ready) under a project name of its
 // own, so it never touches a stack the user already runs. It returns the
-// API's base URL on loopback and a down function that removes everything,
-// volumes included. The caller must always call down, even when the run
-// fails or is interrupted; down ignores ctx, so it runs after a Ctrl-C.
+// API's base URL on loopback and a down function that removes everything
+// the run made: containers, volumes, and the images compose built for it.
+// The caller must always call down, even when the run fails or is
+// interrupted; down ignores ctx, so it runs after a Ctrl-C.
 func Up(ctx context.Context, c Compose) (baseURL string, down func() error, err error) {
 	project := fmt.Sprintf("procyon-test-%d", os.Getpid())
 	compose := func(ctx context.Context, args ...string) (string, error) {
@@ -46,7 +47,10 @@ func Up(ctx context.Context, c Compose) (baseURL string, down func() error, err 
 		// A fresh context: the run's may be cancelled already.
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
-		if out, err := compose(ctx, "down", "--volumes", "--remove-orphans"); err != nil {
+		// --rmi local removes only the images compose built and named after
+		// the project (procyon-test-<pid>-api): never one the compose file
+		// names with `image:`, nor one pulled from a registry.
+		if out, err := compose(ctx, "down", "--volumes", "--remove-orphans", "--rmi", "local"); err != nil {
 			return fmt.Errorf("docker compose down: %w\n%s", err, tail(out))
 		}
 		return nil
