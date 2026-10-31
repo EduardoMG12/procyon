@@ -28,26 +28,11 @@ import (
 // visible like the terminal; URIs are percent-encoded already.
 func SARIF(w io.Writer, rep report.Report, base string, rules []report.Rule) error {
 	uri := artifactURI(base)
-	index := map[string]int{}
+	declared, index := declareRules(rules)
 	driver := sarifDriver{
 		Name:           "Procyon",
 		InformationURI: "https://github.com/EduardoMG12/procyon",
-		Rules:          []sarifRule{},
-	}
-	for i, r := range rules {
-		index[r.ID] = i
-		driver.Rules = append(driver.Rules, sarifRule{
-			ID:                   r.ID,
-			Name:                 pascalCase(r.Title),
-			ShortDescription:     sarifText{r.Title},
-			HelpURI:              r.DocsURL(),
-			Help:                 sarifText{"See " + r.DocsURL()},
-			DefaultConfiguration: sarifConfig{sarifLevel(r.Severity)},
-			Properties: sarifProperties{
-				Tags:             []string{"security", r.OWASP},
-				SecuritySeverity: securitySeverity(r.Severity),
-			},
-		})
+		Rules:          declared,
 	}
 	run := sarifRun{
 		Tool:        sarifTool{driver},
@@ -75,6 +60,29 @@ func SARIF(w io.Writer, rep report.Report, base string, rules []report.Rule) err
 		Version: "2.1.0",
 		Runs:    []sarifRun{run},
 	})
+}
+
+// declareRules declares rules in the log, and returns, by rule ID, where each
+// one is in the list: a result points at its rule by that index.
+func declareRules(rules []report.Rule) (declared []sarifRule, index map[string]int) {
+	declared = []sarifRule{} // [] rather than null when there are none
+	index = map[string]int{}
+	for i, r := range rules {
+		index[r.ID] = i
+		declared = append(declared, sarifRule{
+			ID:                   r.ID,
+			Name:                 pascalCase(r.Title),
+			ShortDescription:     sarifText{r.Title},
+			HelpURI:              r.DocsURL(),
+			Help:                 sarifText{"See " + r.DocsURL()},
+			DefaultConfiguration: sarifConfig{sarifLevel(r.Severity)},
+			Properties: sarifProperties{
+				Tags:             []string{"security", r.OWASP},
+				SecuritySeverity: securitySeverity(r.Severity),
+			},
+		})
+	}
+	return declared, index
 }
 
 func sarifFinding(f report.Finding, index map[string]int, uri func(string) string) sarifResult {

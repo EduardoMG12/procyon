@@ -15,49 +15,72 @@ import (
 // nor reorder it with bidi controls.
 func Markdown(w io.Writer, rep report.Report) error {
 	var b strings.Builder
+	markdownSummary(&b, rep)
+	markdownFindings(&b, bySeverity(rep.Findings)) // most serious first, like the terminal
+	markdownMatrix(&b, rep.Matrix)
+	markdownIgnored(&b, rep.Ignored)
+	markdownNotes(&b, rep.Notes)
+	_, err := io.WriteString(w, b.String())
+	return err
+}
+
+// markdownSummary writes the verdict and how many findings each severity
+// has.
+func markdownSummary(b *strings.Builder, rep report.Report) {
 	verdict := "✅ passed"
 	if rep.Failed {
 		verdict = "❌ failed"
 	}
 	count := severityCounts(rep.Findings)
-	fmt.Fprintf(&b, "## Procyon: %s\n\n| Severity | Findings |\n|---|---|\n", verdict)
+	fmt.Fprintf(b, "## Procyon: %s\n\n| Severity | Findings |\n|---|---|\n", verdict)
 	for _, s := range []report.Severity{report.Critical, report.High, report.Medium, report.Low} {
-		fmt.Fprintf(&b, "| %s | %d |\n", s, count[s])
+		fmt.Fprintf(b, "| %s | %d |\n", s, count[s])
 	}
-	fmt.Fprintf(&b, "| ignored | %d |\n\nThe run fails at **%s** or above.\n", len(rep.Ignored), rep.FailOn)
+	fmt.Fprintf(b, "| ignored | %d |\n\nThe run fails at **%s** or above.\n", len(rep.Ignored), rep.FailOn)
+}
 
-	findings := bySeverity(rep.Findings) // most serious first, like the terminal
+// markdownFindings writes each finding under a heading of its own: where it
+// points, why it is a risk, how to fix it, and a runtime finding's proof.
+func markdownFindings(b *strings.Builder, findings []report.Finding) {
 	if len(findings) > 0 {
 		b.WriteString("\n### Findings\n")
 	}
 	for _, f := range findings {
-		fmt.Fprintf(&b, "\n#### %s · %s · %s\n\n%s", strings.ToUpper(f.Rule.Severity.String()), f.Rule.ID, escape(f.Rule.Title), code(location(f.Location)))
+		fmt.Fprintf(b, "\n#### %s · %s · %s\n\n%s", strings.ToUpper(f.Rule.Severity.String()), f.Rule.ID, escape(f.Rule.Title), code(location(f.Location)))
 		if f.Operation != "" {
 			b.WriteString(" · " + code(f.Operation))
 		}
-		fmt.Fprintf(&b, "\n\n**Why:** %s\n\n**Fix:** %s [More about %s](%s)\n", escape(f.Why), escape(f.Fix), f.Rule.ID, f.Rule.DocsURL())
-		if len(f.Evidence) > 0 {
-			b.WriteString("\n**Proof:**\n\n")
-		}
-		for _, e := range f.Evidence {
-			fmt.Fprintf(&b, "- %s", code(exchangeLine(e)))
-			if sent := flatten(e.Sent); sent != "" {
-				b.WriteString(" sent " + code(sent))
-			}
-			if body := flatten(e.Body); body != "" {
-				b.WriteString(" " + code(body))
-			}
-			b.WriteString("\n")
-		}
+		fmt.Fprintf(b, "\n\n**Why:** %s\n\n**Fix:** %s [More about %s](%s)\n", escape(f.Why), escape(f.Fix), f.Rule.ID, f.Rule.DocsURL())
+		markdownEvidence(b, f.Evidence)
 	}
+}
 
-	matrix(&b, rep.Matrix)
+// markdownEvidence lists the requests that prove a runtime finding: who
+// sent what, the status, and the start of the body.
+func markdownEvidence(b *strings.Builder, exchanges []report.Exchange) {
+	if len(exchanges) > 0 {
+		b.WriteString("\n**Proof:**\n\n")
+	}
+	for _, e := range exchanges {
+		fmt.Fprintf(b, "- %s", code(exchangeLine(e)))
+		if sent := flatten(e.Sent); sent != "" {
+			b.WriteString(" sent " + code(sent))
+		}
+		if body := flatten(e.Body); body != "" {
+			b.WriteString(" " + code(body))
+		}
+		b.WriteString("\n")
+	}
+}
 
-	if len(rep.Ignored) > 0 {
+// markdownIgnored lists the findings an x-procyon-ignore matched, each with
+// its reason.
+func markdownIgnored(b *strings.Builder, ignored []report.IgnoredFinding) {
+	if len(ignored) > 0 {
 		b.WriteString("\n### Ignored\n\n")
 	}
-	for _, i := range rep.Ignored {
-		fmt.Fprintf(&b, "- **%s** %s", i.Finding.Rule.ID, code(location(i.Finding.Location)))
+	for _, i := range ignored {
+		fmt.Fprintf(b, "- **%s** %s", i.Finding.Rule.ID, code(location(i.Finding.Location)))
 		if i.Finding.Operation != "" {
 			b.WriteString(" " + code(i.Finding.Operation))
 		}
@@ -66,20 +89,21 @@ func Markdown(w io.Writer, rep report.Report) error {
 		}
 		b.WriteString(": " + escape(i.Reason) + "\n")
 	}
-
-	if len(rep.Notes) > 0 {
-		b.WriteString("\n### Notes\n\n")
-	}
-	for _, n := range rep.Notes {
-		fmt.Fprintf(&b, "- %s: %s\n", code(location(n.Location)), escape(n.Message))
-	}
-	_, err := io.WriteString(w, b.String())
-	return err
 }
 
-// matrix writes a runtime test's authorization matrix: who got what from
-// each operation.
-func matrix(b *strings.Builder, rows []report.MatrixRow) {
+// markdownNotes lists what the reader should know that is not a finding.
+func markdownNotes(b *strings.Builder, notes []report.Note) {
+	if len(notes) > 0 {
+		b.WriteString("\n### Notes\n\n")
+	}
+	for _, n := range notes {
+		fmt.Fprintf(b, "- %s: %s\n", code(location(n.Location)), escape(n.Message))
+	}
+}
+
+// markdownMatrix writes a runtime test's authorization matrix: who got
+// what from each operation.
+func markdownMatrix(b *strings.Builder, rows []report.MatrixRow) {
 	if len(rows) == 0 {
 		return
 	}
@@ -88,7 +112,7 @@ func matrix(b *strings.Builder, rows []report.MatrixRow) {
 		"| Operation | A | B (A's objects) | Anonymous |\n|---|---|---|---|\n")
 	for _, row := range rows {
 		// A | splits a table cell even inside a code span: escape it.
-		fmt.Fprintf(b, "| %s | %s | %s | %s |\n", strings.ReplaceAll(code(row.Operation), "|", `\|`), cell(row.A), cell(row.B), cell(row.Anonymous))
+		fmt.Fprintf(b, "| %s | %s | %s | %s |\n", strings.ReplaceAll(code(row.Operation), "|", `\|`), markdownCell(row.A), markdownCell(row.B), markdownCell(row.Anonymous))
 	}
 }
 
@@ -97,7 +121,7 @@ var icons = map[report.Outcome]string{
 	report.Allowed: "✅", report.Denied: "🚫", report.Failed: "💥", report.Reached: "❌", report.Public: "🌐", report.Skipped: "⏭️", report.Unchanged: "💤",
 }
 
-func cell(c report.Cell) string {
+func markdownCell(c report.Cell) string {
 	icon := icons[c.Outcome]
 	if icon == "" {
 		return "–"
