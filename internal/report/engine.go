@@ -23,19 +23,27 @@ type Ignore struct {
 	Operation string
 	Elements  []any
 	Where     string
+
+	// Field, on an operation, narrows the ignore to the findings about one
+	// field of its response ("reviews.email"); "" covers them all.
+	Field string
 }
 
 // on names where the ignore lives, for notes.
 func (ig Ignore) on() string {
-	if ig.Operation != "" {
+	switch {
+	case ig.Field != "":
+		return ig.Operation + " (field " + ig.Field + ")"
+	case ig.Operation != "":
 		return ig.Operation
 	}
 	return ig.Where
 }
 
-// covers reports whether the ignore is written on the element f is about.
+// covers reports whether the ignore is written on the element f is about
+// and, when it names a field, whether f is about that field.
 func (ig Ignore) covers(f Finding) bool {
-	if ig.Rule != f.Rule.ID {
+	if ig.Rule != f.Rule.ID || (ig.Field != "" && ig.Field != f.Field) {
 		return false
 	}
 	if ig.Operation != "" {

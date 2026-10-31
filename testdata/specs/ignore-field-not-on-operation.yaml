@@ -1,0 +1,9 @@
+openapi: 3.0.3
+info:
+  title: An ignore naming a field, on the spec's root
+  version: "1"
+x-procyon-ignore:
+  - rule: PRC106
+    field: phone
+    reason: "Not about one operation's response"
+paths: {}

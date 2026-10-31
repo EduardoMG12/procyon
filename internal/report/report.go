@@ -78,6 +78,11 @@ type Finding struct {
 	// applies to; Operation is the first one.
 	Also []string
 
+	// Field is the response field a runtime finding is about, written the
+	// way an x-procyon-ignore names it ("reviews.email"), or "" when the
+	// finding is about no single field.
+	Field string
+
 	// Evidence is what a runtime test sent and got that proves the finding;
 	// empty for lint findings.
 	Evidence []Exchange

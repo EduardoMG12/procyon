@@ -16,8 +16,13 @@ import (
 // operation's findings; on a security scheme, a server or an OAuth2 flow,
 // that element's findings; at the spec's root, findings about the spec as a
 // whole (its default security requirement). An ignore never reaches beyond
-// the element it is written on.
+// the element it is written on, and one on an operation that names a field
+// covers only the findings about that field of its response.
 const ignoreKey = "x-procyon-ignore"
+
+// maxFieldDepth is how many names an ignore's field may join: far more than
+// any answer nests.
+const maxFieldDepth = 32
 
 // parseIgnores reads every x-procyon-ignore in the spec. A malformed entry
 // is an error: a typo must never silently ignore something. They are read
@@ -31,11 +36,11 @@ func parseIgnores(doc *openapi3.T, asGiven func(report.Location) report.Location
 	var ignores []report.Ignore
 	var firstErr error
 	// add parses the ignores written on one element.
-	add := func(ext map[string]any, origin *openapi3.Origin, operation string, where string, about ...any) {
+	add := func(ext map[string]any, origin *openapi3.Origin, operation string, hasField func(string) bool, where string, about ...any) {
 		if firstErr != nil {
 			return
 		}
-		more, err := parseIgnoreList(ext[ignoreKey], operation, asGiven(LocateField(origin, ignoreKey)), known)
+		more, err := parseIgnoreList(ext[ignoreKey], operation, hasField, asGiven(LocateField(origin, ignoreKey)), known)
 		for i := range more {
 			more[i].Elements, more[i].Where = about, where
 		}
@@ -49,10 +54,10 @@ func parseIgnores(doc *openapi3.T, asGiven func(report.Location) report.Location
 	}
 	addServers := func(servers openapi3.Servers) {
 		for _, server := range servers {
-			add(server.Extensions, server.Origin, "", "server "+server.URL, server)
+			add(server.Extensions, server.Origin, "", nil, "server "+server.URL, server)
 		}
 	}
-	add(doc.Extensions, doc.Origin, "", "the spec", root...)
+	add(doc.Extensions, doc.Origin, "", nil, "the spec", root...)
 	addServers(doc.Servers)
 	if doc.Paths != nil {
 		paths := doc.Paths.Map()
@@ -61,7 +66,7 @@ func parseIgnores(doc *openapi3.T, asGiven func(report.Location) report.Location
 		}
 	}
 	ForEachOperation(doc, func(method, path string, op *openapi3.Operation) {
-		add(op.Extensions, op.Origin, method+" "+path, "")
+		add(op.Extensions, op.Origin, method+" "+path, func(field string) bool { return inResponse(op, field) }, "")
 		if op.Servers != nil {
 			addServers(*op.Servers)
 		}
@@ -77,18 +82,18 @@ func parseIgnores(doc *openapi3.T, asGiven func(report.Location) report.Location
 				covered = append(covered, flow)
 			}
 		}
-		add(scheme.Extensions, scheme.Origin, "", "security scheme "+name, covered...)
+		add(scheme.Extensions, scheme.Origin, "", nil, "security scheme "+name, covered...)
 		names := []string{"implicit", "password", "clientCredentials", "authorizationCode"}
 		for i, flow := range flows {
 			if flow != nil {
-				add(flow.Extensions, flow.Origin, "", "the "+names[i]+" flow of "+name, flow)
+				add(flow.Extensions, flow.Origin, "", nil, "the "+names[i]+" flow of "+name, flow)
 			}
 		}
 	})
 	return ignores, firstErr
 }
 
-func parseIgnoreList(value any, operation string, loc report.Location, known func(string) bool) ([]report.Ignore, error) {
+func parseIgnoreList(value any, operation string, hasField func(string) bool, loc report.Location, known func(string) bool) ([]report.Ignore, error) {
 	// Errors name the operation when there is one; otherwise the location
 	// says where.
 	if value == nil {
@@ -103,7 +108,7 @@ func parseIgnoreList(value any, operation string, loc report.Location, known fun
 	}
 	entries, ok := value.([]any)
 	if !ok {
-		return nil, fail("must be a list of {rule, reason, expires}")
+		return nil, fail("must be a list of {rule, reason, expires, field}")
 	}
 	var ignores []report.Ignore
 	for i, entry := range entries {
@@ -112,8 +117,8 @@ func parseIgnoreList(value any, operation string, loc report.Location, known fun
 			return nil, fail("entry %d must be an object with rule and reason", i+1)
 		}
 		for key := range fields {
-			if !slices.Contains([]string{"rule", "reason", "expires"}, key) {
-				return nil, fail("entry %d has an unknown key %q (use rule, reason, expires)", i+1, key)
+			if !slices.Contains([]string{"rule", "reason", "expires", "field"}, key) {
+				return nil, fail("entry %d has an unknown key %q (use rule, reason, expires, field)", i+1, key)
 			}
 		}
 		ig := report.Ignore{Operation: operation, Location: loc}
@@ -133,7 +138,81 @@ func parseIgnoreList(value any, operation string, loc report.Location, known fun
 			}
 			ig.Until = until
 		}
+		if raw, set := fields["field"]; set {
+			ig.Field, _ = raw.(string)
+			switch {
+			case hasField == nil:
+				return nil, fail("entry %d (%s): field names a field of an operation's response, so it is only for an ignore on an operation", i+1, ig.Rule)
+			case ig.Field == "" || !hasField(ig.Field):
+				return nil, fail("entry %d (%s): field %q is no field of the operation's response schema "+
+					"(a nested field is written reviews.email)", i+1, ig.Rule, fmt.Sprint(raw))
+			}
+		}
 		ignores = append(ignores, ig)
 	}
 	return ignores, nil
+}
+
+// inResponse reports whether a response schema of op has the field at
+// path: property names joined by dots, lists left out, so "reviews.email"
+// is the email of every review in {"reviews": [{"email": ...}]}. An ignore
+// may only name a field the spec describes: a typo must stop the run, and
+// the field it excuses is then written down for reviewers.
+//
+// Each name walks every schema the level before can reach, so a hostile
+// spec's "a.a.a…" over a recursive schema could cost names × schemas; a
+// path deeper than maxFieldDepth names no field.
+func inResponse(op *openapi3.Operation, path string) bool {
+	if strings.Count(path, ".") >= maxFieldDepth {
+		return false
+	}
+	var level []*openapi3.SchemaRef
+	if op.Responses != nil {
+		for _, response := range op.Responses.Map() {
+			if response == nil || response.Value == nil {
+				continue
+			}
+			for _, media := range response.Value.Content {
+				if media != nil {
+					level = append(level, media.Schema)
+				}
+			}
+		}
+	}
+	for _, name := range strings.Split(path, ".") {
+		var next []*openapi3.SchemaRef
+		for _, s := range holders(level) {
+			if prop := s.Properties[name]; prop != nil {
+				next = append(next, prop)
+			}
+		}
+		if len(next) == 0 {
+			return false
+		}
+		level = next
+	}
+	return true
+}
+
+// holders lists the schemas whose properties a value of one of refs can
+// have: each schema, its list items, and its allOf, oneOf and anyOf parts,
+// at any depth. Each schema is listed once, so a recursive one ends.
+func holders(refs []*openapi3.SchemaRef) []*openapi3.Schema {
+	var found []*openapi3.Schema
+	seen := map[*openapi3.Schema]bool{}
+	for len(refs) > 0 {
+		ref := refs[0]
+		refs = refs[1:]
+		if ref == nil || ref.Value == nil || seen[ref.Value] {
+			continue
+		}
+		s := ref.Value
+		seen[s] = true
+		found = append(found, s)
+		refs = append(refs, s.Items)
+		refs = append(refs, s.AllOf...)
+		refs = append(refs, s.OneOf...)
+		refs = append(refs, s.AnyOf...)
+	}
+	return found
 }

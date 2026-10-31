@@ -1,0 +1,26 @@
+openapi: 3.0.3
+info:
+  title: An ignore naming a field the response does not have
+  version: "1"
+paths:
+  /shop:
+    get:
+      x-procyon-ignore:
+        - rule: PRC106
+          field: reviews.emial
+          reason: "A typo of reviews.email"
+      responses:
+        "200":
+          description: The shop.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reviews:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        email:
+                          type: string

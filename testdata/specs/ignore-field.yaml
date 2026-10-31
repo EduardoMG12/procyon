@@ -1,0 +1,42 @@
+openapi: 3.0.3
+info:
+  title: A shop's public page, with its own phone ignored by field
+  version: "1"
+paths:
+  /shop:
+    get:
+      x-procyon-public: "The shop's page, shown to every visitor"
+      x-procyon-ignore:
+        - rule: PRC106
+          field: phone
+          reason: "The shop's own phone, published on purpose"
+        - rule: PRC106
+          field: reviews.author.email
+          reason: "Reviewers agree to show their e-mail"
+          expires: 2027-01-31
+      responses:
+        "200":
+          description: The shop.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Contact"
+                  - type: object
+                    properties:
+                      reviews:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            author:
+                              $ref: "#/components/schemas/Contact"
+components:
+  schemas:
+    Contact:
+      type: object
+      properties:
+        phone:
+          type: string
+        email:
+          type: string
