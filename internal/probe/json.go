@@ -37,6 +37,17 @@ func valuesIn(body []byte) []string {
 	return values
 }
 
+// bareValue reports whether a JSON body is one string, number, boolean or
+// null: not an object or a list, so no field of anything.
+func bareValue(body []byte) bool {
+	v, ok := decode(body)
+	switch v.(type) {
+	case map[string]any, []any:
+		return false
+	}
+	return ok
+}
+
 // mentionsAny reports whether a JSON body holds one of values in any field.
 func mentionsAny(body []byte, values []string) bool {
 	wanted := setOf(values)

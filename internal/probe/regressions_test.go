@@ -220,7 +220,9 @@ func TestUnfilledQueryParameterIsANote(t *testing.T) {
 // test.ids. One named like an ID that no response shows is a note, and so
 // is a required one only the spec's example fills. A filter that names no
 // object (status) is never sent, though a response shows one and the spec
-// gives an example.
+// gives an example. A bare reply to an action on A's picture (/picture/love
+// answers every caller the same text) holds no data of A's: it is no
+// finding.
 func TestOptionalQueryParametersThatNameAnObject(t *testing.T) {
 	var statusSent bool
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -234,6 +236,8 @@ func TestOptionalQueryParametersThatNameAnObject(t *testing.T) {
 		case r.URL.Path == "/picture" && q.Has("picture_id"): // anyone's picture, by ID
 			owner := strings.Split(q.Get("picture_id"), "-")[1]
 			fmt.Fprintf(w, `{"picture_id": %q, "title": "%s's cat"}`, q.Get("picture_id"), owner)
+		case r.URL.Path == "/picture/love" && q.Has("picture_id"):
+			w.Write([]byte(`"You gave this photo .05"`))
 		case r.URL.Path == "/note" && q.Has("username"): // anyone's note, by name
 			fmt.Fprintf(w, `{"username": %q, "text": "the private note of %s"}`, q.Get("username"), q.Get("username"))
 		case r.URL.Path == "/products":
@@ -245,6 +249,11 @@ func TestOptionalQueryParametersThatNameAnObject(t *testing.T) {
 	rep := runOn(t, "../../testdata/specs/runtime-optional-query.yaml", handler, Options{IDs: map[string][]string{"username": {"alice"}}})
 	if got, want := findingKeys(rep), []string{"PRC102 GET /picture", "PRC102 GET /note"}; !slices.Equal(got, want) {
 		t.Errorf("findings %q, want %q", got, want)
+	}
+	for _, f := range findingsOf(rep, "PRC102") {
+		if !strings.Contains(f.Why, "by changing the query parameter") {
+			t.Errorf("%s: why %q, want it to say the ID was a query parameter", f.Operation, f.Why)
+		}
 	}
 	for _, note := range []string{
 		"GET /report: query parameter reportId not sent: it names an object and no response of A's shows one; " +

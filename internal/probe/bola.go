@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/EduardoMG12/procyon/internal/lint"
 	"github.com/EduardoMG12/procyon/internal/loader"
@@ -32,11 +33,11 @@ func notReached(exchange report.Exchange) verdict {
 	return verdict{cell: cellOf(exchange, false)}
 }
 
-// reached is the verdict of a call of B's that reached A's object: a
+// reached is the verdict of a call of B's that reached A's object (f): a
 // PRC102 finding. evidence starts with B's call, then what proves it
 // worked (A's read after B's write).
-func reached(op loader.Operation, evidence ...report.Exchange) verdict {
-	return verdict{finding: bolaFinding(op, evidence), cell: cellOf(evidence[0], true)}
+func reached(op loader.Operation, f filled, evidence ...report.Exchange) verdict {
+	return verdict{finding: bolaFinding(op, f, evidence), cell: cellOf(evidence[0], true)}
 }
 
 // otherAccount calls op as B with A's object in the path (f) and tells
@@ -70,7 +71,7 @@ func (s *session) readAsB(ctx context.Context, op loader.Operation, f filled) (v
 	if len(shared) == 0 {
 		return notReached(exchange), nil
 	}
-	return reached(op, exchange), nil
+	return reached(op, f, exchange), nil
 }
 
 // answerToA is A's answer to op at path, the read B's answer is compared
@@ -149,7 +150,7 @@ func (s *session) writeAsB(ctx context.Context, op loader.Operation, f filled) (
 	}
 	switch {
 	case op.Method == http.MethodDelete && (after.Status == http.StatusNotFound || after.Status == http.StatusGone):
-		return reached(op, exchange, after), nil // gone
+		return reached(op, f, exchange, after), nil // gone
 	case op.Method == http.MethodDelete && !success(after):
 		// A 429 or a 503 says nothing about the object.
 		return cannotTell(fmt.Sprintf("not confirmed: after B's delete, A's read got %d", after.Status)), nil
@@ -159,7 +160,7 @@ func (s *session) writeAsB(ctx context.Context, op loader.Operation, f filled) (
 		// Only the fields B sent count: a timestamp or a view counter
 		// changes on every read. readBefore made sure they were not
 		// there yet.
-		return reached(op, exchange, after), nil
+		return reached(op, f, exchange, after), nil
 	}
 	return notReached(exchange), nil
 }
@@ -191,7 +192,7 @@ func (s *session) unreadableWrite(ctx context.Context, op loader.Operation, f fi
 		return notReached(exchange), err
 	}
 	if mentionsAny(body, unseen(f.values, s.ofB.harvest)) {
-		return reached(op, exchange), nil
+		return reached(op, f, exchange), nil
 	}
 	return verdict{
 		note: fmt.Sprintf("not confirmed: B got %d, and without a GET on the same path Procyon cannot tell whether "+
@@ -200,9 +201,9 @@ func (s *session) unreadableWrite(ctx context.Context, op loader.Operation, f fi
 	}, nil
 }
 
-// bolaFinding is a PRC102 finding: what B did to A's object, and the
+// bolaFinding is a PRC102 finding: what B did to A's object (f), and the
 // requests that prove it, B's call first.
-func bolaFinding(op loader.Operation, evidence []report.Exchange) *report.Finding {
+func bolaFinding(op loader.Operation, f filled, evidence []report.Exchange) *report.Finding {
 	var what string
 	switch op.Method {
 	case http.MethodGet:
@@ -217,18 +218,42 @@ func bolaFinding(op loader.Operation, evidence []report.Exchange) *report.Findin
 		Location:  op.Location,
 		Operation: op.Key(),
 		Why: fmt.Sprintf("Test account B called this operation on an object of test account A and got %d: "+
-			"any user can %s other users' objects by changing the ID in the path.", evidence[0].Status, what),
+			"any user can %s other users' objects by changing %s.", evidence[0].Status, what, whereTheID(op.Path, f)),
 		Fix: "On the server, check that the object belongs to the caller (or that the caller may " + what +
 			" it) before acting, and answer 404 otherwise.",
 		Evidence: evidence,
 	}
 }
 
+// whereTheID says what B changed to reach A's object: the ID in the path,
+// the query parameters that named it (GET /picture?picture_id=), or both.
+func whereTheID(path string, f filled) string {
+	var where, query []string
+	for _, param := range f.params {
+		if _, inPath := parentOf(path, param); !inPath {
+			query = append(query, param)
+		}
+	}
+	if len(query) < len(f.params) {
+		where = append(where, "the ID in the path")
+	}
+	if len(query) > 0 {
+		where = append(where, "the query parameter "+strings.Join(query, ", "))
+	}
+	return strings.Join(where, " and ")
+}
+
 // sharedUnseen lists the values B's answer and A's answer both hold that
 // B's own reads never showed: A's data. Values that prove nothing are left
 // out: the path's own values (an API may echo the ID it was asked for), and
-// those that are not telling.
+// those that are not telling. An answer that is one bare value holds none.
 func sharedUnseen(toB, toA []byte, ofB *harvest, pathValues []string) []string {
+	if bareValue(toB) {
+		// A reply that the call worked ("You gave this photo .05" to
+		// whoever loves a picture), not a field of any object: whatever
+		// A got, it is no data of A's.
+		return nil
+	}
 	inA := setOf(valuesIn(toA))
 	added := map[string]bool{}
 	var shared []string // in the order B's answer shows them

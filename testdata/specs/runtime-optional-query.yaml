@@ -12,6 +12,11 @@ paths:
       parameters:
         - {name: picture_id, in: query, schema: {type: string}} # named like an ID: filled from /pictures
       responses: {"200": {description: One picture.}}
+  /picture/love:
+    get:
+      parameters:
+        - {name: picture_id, in: query, schema: {type: string}} # an action on anyone's picture: a bare reply, no data
+      responses: {"200": {description: A thank-you text.}}
   /note:
     get:
       parameters:
