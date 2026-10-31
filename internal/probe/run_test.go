@@ -55,6 +55,11 @@ func TestRunFindsThePlantedVulnerabilities(t *testing.T) {
 		strings.Contains(bola[0].URL+bola[0].Body, vulnapi.TokenB) {
 		t.Errorf("PRC102 evidence = %+v, want B's GET /notes/1, with no token", bola)
 	}
+	for key, where := range map[string]string{"PRC102 GET /notes/{id}": "the ID in the path", "PRC102 GET /owner-notes": "the query parameter owner"} {
+		if why := rep.Findings[slices.Index(got, key)].Why; !strings.Contains(why, "by changing "+where+".") {
+			t.Errorf("%s: why %q, want it to say %q", key, why, where)
+		}
+	}
 	trace := rep.Findings[slices.Index(got, "PRC109 POST /reviews")].Evidence
 	if len(trace) != 1 || trace[0].Caller != "A" || trace[0].Status != 400 || trace[0].Body != "Traceback (most recent call last):" {
 		t.Errorf("PRC109 evidence = %+v, want A's 400 and the trace's first line", trace)
