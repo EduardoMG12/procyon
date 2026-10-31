@@ -97,12 +97,17 @@ lazily. See `docs/agents/domain.md`.
 
 ## Current state
 
-Updated 2026-10-30. v0.1 is done and released as v0.1.0 (#21). v0.2
+Updated 2026-10-31. v0.1 is done and released as v0.1.0 (#21). v0.2
 (runtime tests, `procyon test`, [PRD 0002](docs/prds/0002-v0.2-runtime-tests.md))
 is built (spec #69, slices #70–#86, PRs #91–#113), then refactored and
 hardened (#114–#136) and released as v0.2.1. An audit after the release
 fixed a crash and a denial of service, and removed duplicated code
-(#137–#150), released as v0.2.2: packages `report` (model + engine),
+(#137–#150), released as v0.2.2. Then local runs against 85 public specs,
+7 deliberately vulnerable APIs and the owner's APIs found 12 bugs
+(#153–#164), fixed in #165–#176, and the code was refactored again
+(#178–#192); v0.2.3 is not tagged yet. A pushed `v*` tag builds, and
+publishing waits for the owner's approval in the `release` environment
+(#152). Packages: `report` (model + engine),
 `loader` (specs, and the tests of what a spec may read), `lint` (rules),
 `probe` (runtime tests), `words`, `format`, `cmd/procyon`;
 `internal/arch` tests the import directions. It runs against vulnapi
