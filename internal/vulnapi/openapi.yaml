@@ -190,6 +190,29 @@ paths:
               schema: {type: object, properties: {id: {type: string, maxLength: 20}, title: {type: string, maxLength: 100}, start: {type: string, maxLength: 20}}}
         "404":
           description: No such note, or not the caller's.
+  /notes-search:
+    get:
+      operationId: searchNotes
+      parameters:
+        - name: owner
+          in: query
+          required: true
+          description: Whose notes to search for, by name.
+          schema:
+            type: string
+            maxLength: 50
+      responses:
+        "200":
+          description: The matching notes.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 100
+                items:
+                  $ref: "#/components/schemas/Note"
+        "400":
+          description: No owner given.
   /owner-notes:
     get:
       operationId: listNotesOfOwner
