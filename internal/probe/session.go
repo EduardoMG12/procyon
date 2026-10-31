@@ -63,12 +63,23 @@ func (s *session) testOperation(ctx context.Context, op loader.Operation) error 
 	}
 	s.queueMalformed(op, f.path)
 	switch {
-	case len(f.values) == 0: // no object in the path: none of A's to reach
-	case op.Method == http.MethodGet && row.Anonymous.Status >= 200 && row.Anonymous.Status < 300:
-		// The anonymous caller read A's object: anyone may, so B reading
-		// it is no PRC102. B is not called, and its cell says why.
+	case op.Method == http.MethodGet && row.Anonymous.Status >= 200 && row.Anonymous.Status < 300 && (len(f.values) > 0 || s.isList(op)):
+		// The anonymous caller read this already: anyone may, so neither B
+		// reaching A's object (PRC102) nor A's objects in B's list (PRC108)
+		// is a finding. B is not called, and its cell says why.
 		row.B = report.Cell{Outcome: report.Public}
-	default:
+	case s.isList(op): // a list or search: A's objects in B's own list (PRC108)
+		if row.B, err = s.listLeak(ctx, op); err != nil {
+			return err
+		}
+		if row.B.Outcome != report.Reached && len(f.values) > 0 {
+			// Not a bulk leak, but it names an object (a filter B can set to
+			// A's value): test it as a PRC102 too.
+			if row.B, err = s.asB(ctx, op, f); err != nil {
+				return err
+			}
+		}
+	case len(f.values) > 0: // an object in the path: one of A's to reach (PRC102)
 		if row.B, err = s.asB(ctx, op, f); err != nil {
 			return err
 		}

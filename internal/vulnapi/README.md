@@ -28,6 +28,7 @@ Two seeded test accounts, by bearer token:
 | PRC102 | `DELETE /notes/{id}` | B deletes A's note | `404` |
 | PRC102 | `GET /orders/{orderId}` | B reads A's order `1`, though B sees `1` as a menu item's ID | `404` |
 | PRC101 | `GET /notes/{id}/preview` | an anonymous caller gets any note's preview; B gets it too, and that is no PRC102 | `401`, and `404` to B |
+| PRC108 | `GET /notes-search?owner=` | the owner filter is ignored; B searching by its own name still gets A's notes | B gets only its own |
 | PRC102 | `GET /owner-notes?owner=` | B lists A's notes by naming A in the query | `404` |
 | PRC103 | `POST`, `PUT /notes…` | a body that is not a note (`{"title": 42}`) gives a `500` | `400` |
 | PRC104 | `POST`, `PUT /notes…` | a missing `title`, or a `title` or `body` past its `maxLength`, is accepted | `400` |
@@ -36,8 +37,8 @@ Not vulnerable in either: `GET /health` and `POST /login` (public on purpose), `
 `GET /menu` (the same for every user), `GET /orders` (the caller's own), and
 anonymous calls to every other operation (`401`).
 
-`procyon lint openapi.yaml` reports four low findings (PRC008: `GET /notes`,
-`GET /menu`, `GET /orders` and `GET /owner-notes` have no paging), and nothing about the vulnerabilities above. That is the
+`procyon lint openapi.yaml` reports five low findings (PRC008: `GET /notes`,
+`GET /notes-search`, `GET /menu`, `GET /orders` and `GET /owner-notes` have no paging), and nothing about the vulnerabilities above. That is the
 point: none of them shows in the spec.
 
 ## Running it

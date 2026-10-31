@@ -134,6 +134,65 @@ func TestBudgetGrowsWithTheSpec(t *testing.T) {
 	runOn(t, writeSpec(t, b.String()), handler, Options{}) // runOn fails the test on an error
 }
 
+// PRC108: B searches a list with its own filter value, never A's. A search
+// that ignores the filter and returns every account's objects is reported;
+// one that scopes the list to the caller is not.
+func TestPRC108SearchesWithBsOwnFilter(t *testing.T) {
+	spec := writeSpec(t, bearerSpec+`  /me:
+    get:
+      responses: {"200": {description: ok}}
+  /customers:
+    get:
+      parameters: [{name: username, in: query, required: true, schema: {type: string}}]
+      responses: {"200": {description: ok}}
+`)
+	for _, tt := range []struct {
+		name    string
+		ignores bool // the server ignores the owner filter
+		finding bool
+	}{
+		{"ignores the filter", true, true},
+		{"scopes to the caller", false, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var mu sync.Mutex
+			var ownersB []string // the owner value B searched by
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				defer mu.Unlock()
+				who := userOf(r)
+				if who == "" {
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+				switch {
+				case r.URL.Path == "/me":
+					fmt.Fprintf(w, `{"username": %q}`, who)
+				case r.URL.Path == "/customers":
+					if who == "bob" {
+						ownersB = append(ownersB, r.URL.Query().Get("username"))
+					}
+					if tt.ignores { // every customer, whatever the filter asked
+						w.Write([]byte(`[{"id": "c1", "username": "alice"}, {"id": "c2", "username": "bob"}]`))
+						return
+					}
+					fmt.Fprintf(w, `[{"id": "c-%s", "username": %q}]`, who, who) // only the caller's
+				}
+			})
+			rep := runOn(t, spec, handler, Options{})
+			found := slices.Contains(findingKeys(rep), "PRC108 GET /customers")
+			if found != tt.finding {
+				t.Errorf("PRC108 on GET /customers = %v, want %v (findings %q)", found, tt.finding, findingKeys(rep))
+			}
+			// PRC108 runs first and always with B's own value; a later
+			// PRC102 search (the scoped case) may use A's.
+			if len(ownersB) == 0 || ownersB[0] != "bob" {
+				t.Errorf("B first searched by %q, want its own [bob] for PRC108", ownersB)
+			}
+		})
+	}
+}
+
 // A required query parameter no response shows and the spec gives no
 // example for is never sent missing: the operation is a note, and a
 // skipped row.

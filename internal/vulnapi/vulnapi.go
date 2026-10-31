@@ -60,6 +60,7 @@ func New(fixed bool) http.Handler {
 	mux.HandleFunc("PUT /notes/{id}", s.update)
 	mux.HandleFunc("DELETE /notes/{id}", s.delete)
 	mux.HandleFunc("GET /notes/{id}/preview", s.preview)
+	mux.HandleFunc("GET /notes-search", s.search)
 	mux.HandleFunc("GET /owner-notes", s.ofOwner)
 	mux.HandleFunc("GET /menu", s.menu)
 	mux.HandleFunc("GET /orders", s.listOrders)
@@ -124,6 +125,31 @@ func (s *server) ofOwner(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	writeJSON(w, http.StatusOK, s.notesOf(owner))
+}
+
+// search returns the notes whose owner the required owner query parameter
+// names.
+//
+// Vulnerable (PRC108): the owner filter is ignored and every note is
+// returned, so B searching by its own name still gets A's notes.
+func (s *server) search(w http.ResponseWriter, r *http.Request) {
+	user, ok := authenticated(w, r)
+	if !ok {
+		return
+	}
+	if r.URL.Query().Get("owner") == "" {
+		writeJSON(w, http.StatusBadRequest, errorBody("the owner query parameter is required"))
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// The fixed API scopes the list to the caller; the vulnerable one
+	// returns every note whatever the owner asked for.
+	scope := ""
+	if s.fixed {
+		scope = user
+	}
+	writeJSON(w, http.StatusOK, s.notesOf(scope))
 }
 
 // create stores a note for the caller.

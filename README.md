@@ -111,7 +111,8 @@ procyon test openapi.yaml --compose docker-compose.yml --service api --port 8080
 
 - **A and B** are two users your environment seeds. Procyon collects A's
   object IDs from A's responses and checks that B cannot read, change or
-  delete them (PRC102), that anonymous callers cannot use operations that
+  delete them (PRC102), that a list or search does not hand B A's objects in
+  bulk (PRC108), that anonymous callers cannot use operations that
   require authentication (PRC101), that malformed bodies are refused
   (PRC103, PRC104) and, on `https`, that TLS is sound (PRC105).
 - Give the tokens in the environment (bare: Procyon adds `Bearer ` when the
@@ -207,6 +208,7 @@ Runtime rules, found by `procyon test` against a running copy of the API
 | [PRC103](docs/rules/PRC103.md) | medium | Malformed request made the server fail |
 | [PRC104](docs/rules/PRC104.md) | low | Server accepted a request the spec forbids |
 | [PRC105](docs/rules/PRC105.md) | high | The API's TLS is weak |
+| [PRC108](docs/rules/PRC108.md) | critical | Another account's list shows A's objects |
 
 ## What it can and cannot see
 
