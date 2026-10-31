@@ -29,7 +29,7 @@ steps:
   - uses: actions/setup-go@v6
     with:
       go-version: stable
-  - run: go install github.com/EduardoMG12/procyon/cmd/procyon@v0.3.0
+  - run: go install github.com/EduardoMG12/procyon/cmd/procyon@v0.3.2
   - run: procyon lint openapi.yaml --output sarif=procyon.sarif --output markdown=$GITHUB_STEP_SUMMARY
   - uses: github/codeql-action/upload-sarif@v4
     if: always()
@@ -75,7 +75,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: stable
-      - run: go install github.com/EduardoMG12/procyon/cmd/procyon@v0.3.0
+      - run: go install github.com/EduardoMG12/procyon/cmd/procyon@v0.3.2
       - name: Test the operations this PR changes
         run: |
           base=()

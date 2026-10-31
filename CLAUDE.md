@@ -114,6 +114,9 @@ publishing waits for the owner's approval in the `release` environment
 (ours, every PR) and weekly against VAmPI and crAPI
 (`.github/workflows/benchmark.yml`). v0.3 ([PRD 0003](docs/prds/0003-v0.3-more-runtime-checks.md)) is released
 as v0.3.0: PRC106–PRC109 and the PRC102 fix for public reads (#202–#210).
+Then a README rewrite (#215), a refactor (#214–#234) and the fixes from an
+end-to-end run against real and vulnerable APIs (#228–#248) shipped as
+v0.3.2 (the v0.3.1 tag points at an older commit and has no release).
 The automatic `/code-review` skips paths containing "test" or "spec": give
 a separate review agent the file list for test files.
 Before every push, run the tests on a clean `git archive` of the commit:

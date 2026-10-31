@@ -80,7 +80,7 @@ Its fixed twin (`-fixed`) passes with no findings.
 With Go 1.27.1 or later:
 
 ```sh
-go install github.com/EduardoMG12/procyon/cmd/procyon@v0.3.0
+go install github.com/EduardoMG12/procyon/cmd/procyon@v0.3.2
 ```
 
 Or download the binary for Linux, macOS or Windows (amd64, arm64) from the
@@ -212,7 +212,7 @@ steps:
   - uses: actions/setup-go@v6
     with:
       go-version: stable
-  - run: go install github.com/EduardoMG12/procyon/cmd/procyon@v0.3.0
+  - run: go install github.com/EduardoMG12/procyon/cmd/procyon@v0.3.2
   - run: procyon lint openapi.yaml --output sarif=procyon.sarif --output markdown=$GITHUB_STEP_SUMMARY
   - uses: github/codeql-action/upload-sarif@v4
     if: always()
