@@ -79,18 +79,51 @@ var (
 	}
 )
 
-// piiWords name personal data. Words are compared after words.Split, which
-// lowercases and drops accents.
-var piiWords = [][]string{
-	{"email"}, {"e", "mail"}, {"phone"}, {"telephone"}, {"cellphone"},
-	{"mobile", "number"}, {"telefone"}, {"celular"},
-	{"cpf"}, {"rg"}, {"ssn"}, {"social", "security", "number"},
-	{"passport"}, {"passaporte"}, {"national", "id"}, {"national", "identifier"}, {"tax", "id"},
+// The personal data whose values have a shape PRC106 can check, by kind.
+var (
+	emailWords      = [][]string{{"email"}, {"e", "mail"}}
+	phoneWords      = [][]string{{"phone"}, {"telephone"}, {"cellphone"}, {"mobile", "number"}, {"telefone"}, {"celular"}}
+	nationalIDWords = [][]string{
+		{"cpf"}, {"rg"}, {"ssn"}, {"social", "security", "number"},
+		{"passport"}, {"passaporte"}, {"national", "id"}, {"national", "identifier"}, {"tax", "id"},
+	}
+)
+
+// piiWords name personal data: the kinds above, and the ones with no shape
+// to check (an address, a birth date, a name). Words are compared after
+// words.Split, which lowercases and drops accents.
+var piiWords = slices.Concat(emailWords, phoneWords, nationalIDWords, [][]string{
 	{"address"}, {"endereco"},
 	{"birth", "date"}, {"birthdate"}, {"birthday"}, {"date", "of", "birth"}, {"dob"},
 	{"data", "nascimento"}, {"nascimento"},
 	{"first", "name"}, {"last", "name"}, {"full", "name"}, {"surname"},
 	{"nome", "completo"}, {"sobrenome"},
+})
+
+// The kinds of personal data PersonalDataKind tells, as a finding names
+// them.
+const (
+	Email      = "an e-mail address"
+	Phone      = "a phone number"
+	NationalID = "a national ID"
+)
+
+// PersonalDataKind is the kind of personal data a field's name says it
+// holds, by PRC006's lists and exceptions (supportEmail is the company's):
+// Email, Phone or NationalID. It is "" for any other name, and for
+// personal data with no shape a value could be checked against (an
+// address, a birth date), so PRC106 reports a value only when both its
+// name and its shape say what it is.
+func PersonalDataKind(name string) string {
+	for _, kind := range []struct {
+		words [][]string
+		name  string
+	}{{emailWords, Email}, {phoneWords, Phone}, {nationalIDWords, NationalID}} {
+		if words.Match(name, kind.words, piiDescribingWords, piiReferenceWords) {
+			return kind.name
+		}
+	}
+	return ""
 }
 
 // piiDescribingWords, right after a personal-data word, mean the field is
