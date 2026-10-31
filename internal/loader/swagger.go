@@ -123,6 +123,10 @@ func fromSwagger(data []byte, file *ast.File) (converted []byte, back func(posit
 		return nil, nil, fmt.Errorf("reading Swagger 2.0: %w", err)
 	}
 	doc3, err := openapi2conv.ToV3(&doc2)
+	if pointer := failedPathsRef(raw, err); pointer != "" {
+		return nil, nil, at(pointer, "this $ref into #/paths cannot be converted to OpenAPI 3 "+
+			"(move what it points at to #/definitions, #/parameters or #/responses, and refer to it there)")
+	}
 	if err != nil {
 		return nil, nil, fmt.Errorf("converting Swagger 2.0 to OpenAPI 3: %s", swaggerNames.Replace(err.Error()))
 	}

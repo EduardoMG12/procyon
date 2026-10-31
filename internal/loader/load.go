@@ -124,6 +124,14 @@ func loadParsed(path string, opts Options, data []byte, file *ast.File, swagger 
 	if err != nil {
 		return nil, nil, fmt.Errorf("%s: %w", path, err)
 	}
+	// kin-openapi validates a version it does not list (3.3.0, 4.0.0, a
+	// 3.1 patch newer than it) by 3.0's rules: refuse it by name instead.
+	if v := doc.OpenAPI; v != "" && doc.OpenAPIMajorMinor() == "" {
+		return nil, nil, fmt.Errorf("%s: openapi %q is not a version Procyon knows; use OpenAPI 3.0, 3.1 or 3.2, or Swagger 2.0", path, v)
+	}
+	if doc.IsOpenAPI31OrLater() {
+		dropUnknownKeywords(doc)
+	}
 	// Wrong examples, defaults and patterns are documentation mistakes, not security
 	// problems, and common in real specs: they must not stop a lint.
 	err = doc.Validate(context.Background(),
@@ -137,7 +145,12 @@ func loadParsed(path string, opts Options, data []byte, file *ast.File, swagger 
 		// Some validation errors append the schema and value on extra lines;
 		// the first line says what is wrong.
 		msg, _, _ := strings.Cut(err.Error(), "\n")
-		return nil, nil, fmt.Errorf("%s: invalid spec: %s", path, msg)
+		invalid := "invalid spec"
+		// A hint, not a diagnosis: the unknown field may also be a typo.
+		if _, unknownField := errors.AsType[*openapi3.ExtraSiblingFieldsError](err); unknownField && doc.IsOpenAPI32OrLater() {
+			invalid += " (OpenAPI 3.2 is only partly supported: some fields new in 3.2, such as a tag's kind, are refused)"
+		}
+		return nil, nil, fmt.Errorf("%s: %s: %s", path, invalid, msg)
 	}
 	if err := checkExtensions(doc, files.asGiven); err != nil {
 		return nil, nil, err

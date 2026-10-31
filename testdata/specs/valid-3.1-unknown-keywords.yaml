@@ -1,0 +1,70 @@
+openapi: 3.1.0
+info:
+  title: Shop
+  version: 1.0.0
+# JSON Schema 2020-12 allows keywords it does not know: every schema below
+# has one (regex, optional, name), wherever a schema can sit.
+webhooks:
+  orderShipped:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object, regex: "^o"}
+      responses:
+        "200":
+          description: OK
+paths:
+  /orders/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, regex: "^[0-9]+$"}}
+    get:
+      parameters:
+        - name: filter
+          in: query
+          content:
+            application/json:
+              schema: {type: string, optional: true}
+      responses:
+        "200":
+          description: An order
+          headers:
+            X-Rate-Limit:
+              schema: {type: integer, optional: true}
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+      callbacks:
+        onChange:
+          $ref: "#/components/callbacks/OnChange"
+components:
+  # kin-openapi validates a callback where it is defined in components,
+  # not one written in an operation.
+  callbacks:
+    OnChange:
+      "{$request.query.url}":
+        post:
+          requestBody:
+            content:
+              application/json:
+                schema: {type: string, name: change}
+          responses:
+            "200":
+              description: OK
+  schemas:
+    Order:
+      type: object
+      x-note: an extension stays
+      optional: false
+      properties:
+        id: {type: string, regex: "^[0-9]+$"}
+        lines:
+          type: array
+          items: {type: string, regex: "^[a-z]+$"}
+        total:
+          anyOf:
+            - {type: number, name: amount}
+            - {type: "null"}
+      $defs:
+        Line: {type: object, name: line}
