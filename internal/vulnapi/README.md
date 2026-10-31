@@ -1,6 +1,6 @@
 # vulnapi: a notes API that is vulnerable on purpose
 
-The acceptance test of `procyon test` (v0.2, [PRD 0002](../../docs/prds/0002-v0.2-runtime-tests.md)).
+The acceptance test of `procyon test` ([PRD 0002](../../docs/prds/0002-v0.2-runtime-tests.md) and [PRD 0003](../../docs/prds/0003-v0.3-more-runtime-checks.md)).
 Run against the vulnerable API, Procyon must report exactly the findings
 below; run against the fixed twin (`-fixed`), none.
 

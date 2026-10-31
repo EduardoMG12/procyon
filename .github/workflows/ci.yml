@@ -30,9 +30,10 @@ jobs:
       - name: go test
         run: go test -race ./...
 
-  # Runs the README's GitHub Actions example so it cannot rot. Two lines
-  # differ on purpose: Procyon is installed from the checkout (a PR tests its
-  # own code, not the last release), and the spec is a fixture.
+  # Runs the GitHub Actions example of the README and docs/ci.md so it
+  # cannot rot. Two lines differ on purpose: Procyon is installed from the
+  # checkout (a PR tests its own code, not the last release), and the spec
+  # is a fixture.
   readme-example:
     runs-on: ubuntu-latest
     permissions:
@@ -56,7 +57,7 @@ jobs:
 
   # procyon test --compose against the vulnerable notes API and its fixed
   # twin: startup, port discovery and teardown with a real Docker. The last
-  # steps run the README's PR comment example, with two lines changed on
+  # steps run the PR comment example in docs/ci.md, with two lines changed on
   # purpose: Procyon is built from the checkout, and the Markdown goes to
   # the job summary instead of a PR comment.
   compose:
@@ -85,7 +86,7 @@ jobs:
           jq -e '.findings | any(.rule.id == "PRC109" and .operation == "POST /reviews")' vulnerable.json > /dev/null
       - name: The fixed twin passes
         run: FIXED=true ./procyon test internal/vulnapi/openapi.yaml --compose internal/vulnapi/docker-compose.yml --service api --port 8080
-      - name: README example, the operations this change touches
+      - name: docs/ci.md example, the operations this change touches
         env:
           FIXED: "true"
         run: |

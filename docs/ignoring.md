@@ -15,9 +15,11 @@ check, the login operation itself) is marked once:
     x-procyon-public: "Load balancer health check, returns no data"
 ```
 
-This silences **PRC001 only**. Rules about what a public operation exposes
-(personal data, PRC006; objects by ID, PRC007) still apply: being public is
-exactly what makes those dangerous.
+This silences **PRC001**, and at runtime **PRC101**: an anonymous caller
+reaching it is expected. Rules about what a public operation exposes still
+apply, being public is exactly what makes those dangerous: personal data
+(PRC006 in the spec, PRC106 in its answers) and objects by ID (PRC007 in
+the spec, PRC107 when its IDs can be guessed).
 
 ## x-procyon-ignore
 
