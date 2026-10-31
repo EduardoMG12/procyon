@@ -73,20 +73,29 @@ func (s *session) testOperation(ctx context.Context, op loader.Operation) error 
 
 // anonymous calls op with no credentials. Only an operation the spec
 // protects can be reached by mistake (PRC101); one it leaves open is
-// PRC001's business. Public operations are not called.
+// PRC001's business. Whatever the call reached must not show personal
+// data (PRC106). Public operations are not called.
 func (s *session) anonymous(ctx context.Context, op loader.Operation, path string) (report.Cell, error) {
 	if op.Public {
 		return report.Cell{Outcome: report.Public}, nil
 	}
-	exchange, err := s.send(ctx, op, path, anonymous)
+	exchange, body, err := s.sendFull(ctx, op, path, anonymous)
 	if err != nil {
 		return report.Cell{}, err
 	}
-	reached := success(exchange) && op.NeedsAuth
-	if reached {
-		s.res.findings = append(s.res.findings, anonymousAccess(op, exchange))
+	var found []report.Finding
+	if success(exchange) {
+		personal := personalData(op, exchange, body)
+		if len(personal) > 0 {
+			exchange = personal[0].Evidence[0] // the personal values masked, for PRC101 too
+		}
+		if op.NeedsAuth {
+			found = append(found, anonymousAccess(op, exchange))
+		}
+		found = append(found, personal...)
 	}
-	return cellOf(exchange, reached), nil
+	s.res.findings = append(s.res.findings, found...)
+	return cellOf(exchange, len(found) > 0), nil
 }
 
 // asB tests B on A's object in the path (PRC102).

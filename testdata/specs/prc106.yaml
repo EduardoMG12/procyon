@@ -1,0 +1,22 @@
+openapi: 3.0.3
+info:
+  title: A shop's page anyone can read, with its own phone published on purpose
+  version: "1"
+paths:
+  /shop:
+    get:
+      security: []
+      x-procyon-ignore:
+        - rule: PRC106
+          field: phone
+          reason: "The shop's own phone, published on purpose"
+      responses:
+        "200":
+          description: The shop.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  phone:
+                    type: string

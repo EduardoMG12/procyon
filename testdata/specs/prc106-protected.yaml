@@ -1,0 +1,17 @@
+openapi: 3.0.3
+info:
+  title: A list of customers that needs a token, and answers without one
+  version: "1"
+security:
+  - bearer: []
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+paths:
+  /customers:
+    get:
+      responses:
+        "200":
+          description: The caller's customers.

@@ -2,11 +2,71 @@ package probe
 
 import (
 	"encoding/json"
+	"fmt"
 	"regexp"
+	"strings"
 	"unicode"
 
 	"github.com/EduardoMG12/procyon/internal/lint"
+	"github.com/EduardoMG12/procyon/internal/loader"
+	"github.com/EduardoMG12/procyon/internal/report"
 )
+
+// personalData lists the PRC106 findings of an answer the anonymous caller
+// got: one per place in the answer that holds personal data
+// (personalValues), however many objects of a list hold it. The evidence
+// is the anonymous call, with every personal value masked.
+func personalData(op loader.Operation, exchange report.Exchange, body []byte) []report.Finding {
+	var places, kinds, values []string // places and kinds in the order the answer shows them
+	listed, masked := map[string]bool{}, map[string]bool{}
+	for _, p := range personalValues(body) {
+		if !listed[p.place] {
+			listed[p.place] = true
+			places, kinds = append(places, p.place), append(kinds, p.kind)
+		}
+		if !masked[p.value] {
+			masked[p.value] = true
+			values = append(values, p.value)
+		}
+	}
+	exchange.Body = maskCut(exchange.Body, values)
+	exchange.URL = mask(exchange.URL, values...)
+	var findings []report.Finding
+	for i, place := range places {
+		findings = append(findings, report.Finding{
+			Rule:      lint.RuntimeRule("PRC106"),
+			Location:  op.Location,
+			Operation: op.Key(),
+			Field:     place,
+			Why: fmt.Sprintf("A request with no credentials got %d, and its field %s holds %s: anyone can collect it, "+
+				"for every record they can reach, which breaks privacy laws such as the GDPR and LGPD.", exchange.Status, place, kinds[i]),
+			Fix: "Leave the field out of what callers without credentials get, or require authentication for the operation. " +
+				"If it is public on purpose (a business's own contact), ignore this field with x-procyon-ignore and field: " + place + ".",
+			Evidence: []report.Exchange{exchange},
+		})
+	}
+	return findings
+}
+
+// maskCut masks values in excerpt, the start of an answer already cut for
+// evidence. A token is masked before the cut (runner.excerpt), but a list
+// of a thousand customers would then be searched a thousand times; values
+// are masked in the excerpt only, and the start of a value the cut split
+// in two is dropped from its end.
+func maskCut(excerpt string, values []string) string {
+	excerpt = mask(excerpt, values...)
+	for _, v := range values {
+		for _, form := range forms(v) {
+			for n := len(form) - 1; n > 0; n-- { // a whole form is masked already
+				if strings.HasSuffix(excerpt, form[:n]) {
+					excerpt = excerpt[:len(excerpt)-n]
+					break
+				}
+			}
+		}
+	}
+	return excerpt
+}
 
 // personalValue is one value of an answer that is personal data.
 type personalValue struct {
