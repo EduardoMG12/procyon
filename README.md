@@ -230,7 +230,8 @@ reason](docs/ignoring.md).
 |---|---|
 | **v0.1 — Lint** | Reads the spec and reports security problems in the API's design. |
 | **v0.2 — Runtime tests** | Starts a disposable copy of your API with test accounts, checks that one user can't reach another's data, then tears it down. Never touches production. |
-| **v0.3 — Security QA environment** | Runs continuously against a permanent security-QA environment, with history. |
+| **v0.3 — More runtime checks** | Finds personal data in public answers, predictable IDs on public links, lists that show another account's data, and internal errors in responses, with no extra configuration. |
+| **v0.4 — Security QA environment** | Runs continuously against a permanent security-QA environment, with history. |
 
 ## Use it responsibly
 
