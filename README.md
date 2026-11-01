@@ -4,6 +4,8 @@
 [![Release](https://img.shields.io/github/v/release/EduardoMG12/procyon)](https://github.com/EduardoMG12/procyon/releases)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
+<img src="docs/assets/procyon.png" alt="Procyon's mascot, a raccoon (Procyon is the raccoon's genus)" width="140" align="right">
+
 **Automatic security QA for APIs, from their OpenAPI spec.** No test cases to
 write: Procyon checks the rules every API must keep, such as who may call
 what and who may read whose data.
